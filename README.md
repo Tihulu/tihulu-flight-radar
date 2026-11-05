@@ -20,6 +20,20 @@ The build workflow produces preview artifacts on Ubuntu Linux x64, Debian 12
 x64, Windows x64 and macOS ARM64 runners. A successful build **does not** prove direct USB reception
 on every device. No drivers, decoder binaries, or permission policies are bundled.
 
+## Debian .deb preview
+
+The Debian 12 workflow produces an unsigned Debian package as well as a
+portable application folder. Install with:
+
+    sudo apt install ./tihulu-flight-radar_0.3.0_amd64.deb
+
+The new package does not overwrite the earlier tihulu-adsb-radar v0.2.0.
+It adds a documented restricted sudoers rule for sudo-group administrators
+allowing *only* start/stop/enable/disable of readsb and tar1090. This avoids
+password prompts after the one-time package installation. Review
+packaging/linux/sudoers.conf before installation. The app does not install
+a decoder or RTL-SDR driver by itself.
+
 ## Development run
 
 Requires Python 3.11+ (3.12 recommended).
