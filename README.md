@@ -2,7 +2,7 @@
 
 English-language, local-first ADS-B / Mode S receiver desktop software.
 
-**Version 0.3.0 (development preview).** Uses real receiver data only. It never
+**Version 0.3.1 (development preview).** Uses real receiver data only. It never
 creates simulated aircraft or positions. ADS-B broadcasts may contain locations;
 Mode S does not guarantee location. MLAT positioning requires synchronized
 multiple receivers and is **not** calculated by this app.
@@ -25,7 +25,7 @@ on every device. No drivers, decoder binaries, or permission policies are bundle
 The Debian 12 workflow produces an unsigned Debian package as well as a
 portable application folder. Install with:
 
-    sudo apt install ./tihulu-flight-radar_0.3.0_amd64.deb
+    sudo apt install ./tihulu-flight-radar_0.3.1_amd64.deb
 
 The new package does not overwrite the earlier tihulu-adsb-radar v0.2.0.
 It adds a documented restricted sudoers rule for sudo-group administrators
