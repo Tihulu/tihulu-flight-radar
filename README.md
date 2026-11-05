@@ -90,8 +90,15 @@ and WinUSB RTL-SDR driver are available.
 
 ## Local map
 
-Map startup now waits for the first real, fresh aircraft coordinates instead
-of displaying a fixed world location. If the viewer can obtain browser
+Map startup never uses arbitrary world coordinates. If the receiver
+location has been manually saved or browser geolocation has been permitted,
+the OpenStreetMap or coordinate-grid map now opens at that **real reference
+location even when no aircraft positions are currently available**.
+As soon as a real, fresh aircraft position becomes available, the view
+automatically focuses on that aircraft unless the user has manually moved
+the camera. Without a known receiver/device location and without any
+received positional aircraft data, the map continues to show an explicit
+waiting screen and asks the user to set receiver position. If the viewer can obtain browser
 geolocation (with explicit browser permission) or if receiver coordinates
 were saved under **Set receiver position**, it centers on the closest actual
 aircraft according to geographic distance. Otherwise, it selects a
@@ -99,8 +106,8 @@ representative aircraft in the largest live cluster (not necessarily the
 closest to the user, because the receiver location is unknown). The
 **Focus nearest** button recenters on demand. Manual panning and zooming
 disable automatic camera jumps. Saved receiver coordinates stay in browser
-localStorage; geolocation is not sent to the receiver server. The map
-requires one real position before fetching any online OSM tiles.
+localStorage; geolocation is not sent to the receiver server. Online OSM tiles now load after a valid reference location **or** aircraft
+position is known. The coordinate grid remains visible if tiles are offline.
 
 Open Map launches an integrated local HTTP viewer bound to 127.0.0.1 on a random
 port. It plots **only genuine, recent positions** and keeps a short in-session

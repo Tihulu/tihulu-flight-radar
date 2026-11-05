@@ -23,7 +23,7 @@ a{color:#b1cfed}label{font-size:12px}
 <button id="refocus" title="Center on the nearest live aircraft">Focus nearest</button>
 <button id="locate" title="Use browser location (requires permission)">Use my location</button>
 <button id="manualLocation" title="Save receiver coordinates in this browser">Set receiver position</button>
-<label><input type="checkbox" id="tiles"> Online OpenStreetMap tiles</label>
+<label><input type="checkbox" id="tiles" checked> Online OpenStreetMap tiles</label>
 <small id="updated">Waiting for receiver…</small>
 <small id="focusState">Waiting for live aircraft positions</small></header>
 <main><section><canvas id="canvas"></canvas><div id="legend">Offline coordinate grid · Tracks are session-only · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a></div></section>
@@ -35,22 +35,40 @@ const cv=document.getElementById("canvas"),ctx=cv.getContext("2d");
 const rows=document.getElementById("rows"),status=document.getElementById("status");
 const tileSwitch=document.getElementById("tiles"),cache=new Map(),tracks=new Map();
 const focusState=document.getElementById("focusState"), focusMath=window.TihuluMapFocus;
-let lat=null,lon=null,zoom=10,items=[],centered=false,drag=null,userMoved=false;
+let lat=null,lon=null,zoom=10,items=[],centered=false,aircraftFocused=false,drag=null,userMoved=false;
+let emptyMessage="Waiting for real aircraft positions";
 let reference=null, referenceSource="", locationRequest=0;
 function setReference(value, source) {
  const p=focusMath.point(value);
  if (!p) return false;
  reference=p;referenceSource=source;return true;
 }
+// Display the receiver/user's actual, explicitly provided location while
+// waiting for positional ADS-B data. This does NOT create an aircraft marker.
+function centerOnReference(force=false) {
+ if (!reference || (userMoved&&!force)) return false;
+ lat=reference.lat;lon=reference.lon;centered=true;
+ if(force)userMoved=false;
+ focusState.textContent="Showing "+referenceSource+" — no fresh aircraft position yet";
+ paint();
+ return true;
+}
 try {
  const stored=JSON.parse(localStorage.getItem("tihulu-flight-receiver-location")||"null");
  if (stored) setReference(stored,"saved receiver position");
 } catch (_) { /* Malformed saved preference; use live data only. */ }
+if(reference)centerOnReference();
 function focusNearest(force=false) {
  if (userMoved&&!force) return;
  const selection=focusMath.chooseFocus(items, reference);
- if (!selection) {if(!centered)focusState.textContent="Waiting for valid aircraft positions";return;}
- lat=selection.aircraft.lat;lon=selection.aircraft.lon;centered=true;
+ if (!selection) {
+   // An empty sky should not hide the real geographic map if a receiver
+   // position or permitted device position is available.
+   if(reference)centerOnReference(force);
+   else if(!centered)focusState.textContent="Waiting for fresh positions — set receiver location to view the map";
+   return;
+ }
+ lat=selection.aircraft.lat;lon=selection.aircraft.lon;centered=true;aircraftFocused=true;
  if (force) userMoved=false;
  const callsign=String(selection.aircraft.flight||selection.aircraft.hex||"aircraft").trim();
  focusState.textContent=selection.method==="nearest"
@@ -74,7 +92,7 @@ function requestBrowserLocation() {
  },()=>{
    if(id!==locationRequest)return;
    if(!centered)focusNearest();
-   if(!reference)focusState.textContent="Location unavailable — centered on received aircraft";
+   if(!reference)focusState.textContent="Location unavailable — waiting for received aircraft positions";
  },{enableHighAccuracy:false,maximumAge:600000,timeout:6000});
 }
 document.getElementById("refocus").onclick=()=>focusNearest(true);
@@ -98,10 +116,22 @@ function worldY(x){return mercY(x)*Math.pow(2,zoom)*256}
 function pt(a,b){const s=devicePixelRatio;return [cv.width/2+(worldX(b)-worldX(lon))*s,cv.height/2+(worldY(a)-worldY(lat))*s]}
 function resize(){cv.width=cv.clientWidth*devicePixelRatio;cv.height=cv.clientHeight*devicePixelRatio;paint()}
 window.addEventListener("resize",resize);
-function tile(z,x,y){const key=z+"/"+x+"/"+y;if(cache.has(key))return cache.get(key);
+function tile(z,x,y){
+ const key=z+"/"+x+"/"+y;
+ if(cache.has(key)){
+   const existing=cache.get(key);
+   // An unavailable tile must not be fetched again every 3 seconds while offline.
+   if(!existing.failedAt || Date.now()-existing.failedAt<60000)return existing;
+   cache.delete(key);
+ }
  if(cache.size>120)cache.clear();
- const im=new Image();im.crossOrigin="anonymous";im.onload=paint;im.onerror=()=>{cache.delete(key)};
- im.src="https://tile.openstreetmap.org/"+key+".png";cache.set(key,im);return im;
+ const im=new Image();
+ im.crossOrigin="anonymous";
+ im.onload=paint;
+ im.onerror=()=>{cache.set(key,{failedAt:Date.now()});paint()};
+ im.src="https://tile.openstreetmap.org/"+key+".png";
+ cache.set(key,im);
+ return im;
 }
 function grid(){ctx.strokeStyle="#304559";ctx.fillStyle="#91a5b9";ctx.lineWidth=1*devicePixelRatio;
  ctx.font=(11*devicePixelRatio)+"px sans-serif";
@@ -118,12 +148,16 @@ function paint(){
  if(!centered){
    ctx.fillStyle="#abc2d6";ctx.textAlign="center";
    ctx.font=(16*devicePixelRatio)+"px sans-serif";
-   ctx.fillText("Waiting for nearby aircraft positions",cv.width/2,cv.height/2);
+   ctx.fillText(emptyMessage,cv.width/2,cv.height/2);
+   ctx.font=(12*devicePixelRatio)+"px sans-serif";
+   ctx.fillText("Set receiver position to display the map while waiting",cv.width/2,cv.height/2+26*devicePixelRatio);
    ctx.textAlign="left";
    return;
  }
+ // The coordinate grid remains visible if online tiles are slow or offline.
+ grid();
  if(tileSwitch.checked){
-   const tileSize=256*devicePixelRatio,scale=devicePixelRatio;
+   const tileSize=256*devicePixelRatio;
    const x0=worldX(lon)/256-cv.width/(2*tileSize),y0=worldY(lat)/256-cv.height/(2*tileSize);
    const n=Math.pow(2,zoom);
    for(let x=Math.floor(x0);x<x0+cv.width/tileSize+2;x++){
@@ -133,7 +167,7 @@ function paint(){
        if(im.complete&&im.naturalWidth)ctx.drawImage(im,(x-x0)*tileSize,(y-y0)*tileSize,tileSize,tileSize);
      }
    }
- }else grid();
+ }
  ctx.lineWidth=2*devicePixelRatio;
  for(const route of tracks.values()){if(route.length<2)continue;
    ctx.strokeStyle="rgba(72,205,178,.65)";ctx.beginPath();
@@ -144,6 +178,13 @@ function paint(){
    ctx.fillStyle="#5be2b3";ctx.beginPath();ctx.moveTo(0,-12*devicePixelRatio);ctx.lineTo(7*devicePixelRatio,8*devicePixelRatio);
    ctx.lineTo(0,4*devicePixelRatio);ctx.lineTo(-7*devicePixelRatio,8*devicePixelRatio);ctx.closePath();ctx.fill();ctx.restore();
    ctx.font=(12*devicePixelRatio)+"px sans-serif";ctx.fillStyle="#f4f7fa";ctx.fillText((a.flight||a.hex||"Unknown").trim(),x+12*devicePixelRatio,y-9*devicePixelRatio);
+ }
+ if(!items.some(focusMath.validAircraft)) {
+   ctx.fillStyle="rgba(12,19,29,.85)";
+   ctx.fillRect(10*devicePixelRatio,10*devicePixelRatio,
+     Math.min(cv.width-20*devicePixelRatio,380*devicePixelRatio),36*devicePixelRatio);
+   ctx.fillStyle="#f2f6fb";ctx.font=(13*devicePixelRatio)+"px sans-serif";
+   ctx.fillText("No fresh aircraft position — showing "+referenceSource,20*devicePixelRatio,32*devicePixelRatio);
  }
 }
 cv.addEventListener("pointerdown",e=>{if(!centered)return;userMoved=true;drag=[e.clientX,e.clientY,lon,lat];cv.setPointerCapture(e.pointerId)});
@@ -163,7 +204,10 @@ async function refresh(){
  const list=Array.isArray(data.aircraft)?data.aircraft.filter(a=>a&&typeof a==="object"&&typeof a.seen==="number"&&a.seen>=0&&a.seen<=60):[];
  items=list;
  const positioned=list.filter(focusMath.validAircraft);
- if(!centered&&positioned.length)focusNearest();
+ emptyMessage=list.length
+    ? "Aircraft detected, but no fresh position received yet"
+    : "No aircraft received yet — check receiver status";
+ if(!aircraftFocused&&positioned.length&&!userMoved)focusNearest();
  for(const a of positioned){if(!a.hex)continue;const t=tracks.get(a.hex)||[];const last=t[t.length-1];if(!last||last[0]!==a.lat||last[1]!==a.lon){t.push([a.lat,a.lon]);if(t.length>100)t.shift();tracks.set(a.hex,t)}}
  rows.replaceChildren();
  for(const a of list.slice(0,200)){
@@ -174,7 +218,13 @@ async function refresh(){
  }
  status.textContent=list.length+" received · "+positioned.length+" with fresh coordinates";
  document.getElementById("updated").textContent="Last poll: "+new Date().toLocaleTimeString();paint();
- }catch(e){items=[];rows.replaceChildren();status.textContent="No fresh receiver data: "+e.message;paint()}
+ }catch(e){
+  items=[];rows.replaceChildren();
+  emptyMessage="Receiver data unavailable — start or reconnect the receiver";
+  status.textContent="No fresh receiver data: "+e.message;
+  if(!centered)focusState.textContent="Receiver unavailable";
+  paint();
+ }
 }
 resize();refresh();setInterval(refresh,3000);
 // Ask only when no saved receiver position is available. Browser decides permission.
