@@ -88,12 +88,31 @@ client at the same time. No app admin password is required for this mode.
 Windows: use Remote JSON unless a separately tested native readsb executable
 and WinUSB RTL-SDR driver are available.
 
+## Receiver health and restart
+
+Start / Stop / Restart operations are serialized and the readsb systemd state
+is verified after each transition. An active decoder is **not** proof of
+actual RF reception. The UI now distinguishes a running decoder from
+receiving ADS-B messages and offers **Receiver diagnostics** on Linux
+(read-only systemd / journal output). A newly started readsb service may
+have zero messages for a while, especially with antenna, interference
+or exclusive USB ownership problems.
+
+When start fails or message counts remain zero, check receiver ownership,
+antenna orientation and the last readsb logs. Do not assume an active service
+implies aircraft data. See
+[Survival Kit handoff notes](docs/SURVIVAL_KIT_FLIGHT_RADAR_HANDOFF_2026-11-05.md)
+for integration acceptance criteria.
+
 ## Local map
 
-Map startup never uses arbitrary world coordinates. If the receiver
-location has been manually saved or browser geolocation has been permitted,
-the OpenStreetMap or coordinate-grid map now opens at that **real reference
-location even when no aircraft positions are currently available**.
+The map defaults to a clearly labeled **Germany** viewport (approximately
+51.1657°N, 10.4515°E), never to a claimed receiver position. If the receiver
+position is saved or the browser's geolocation permission was already
+granted, the real reference location takes priority, even when no aircraft
+positions are available. The user can explicitly choose **Show Germany**,
+**Center receiver**, **Focus nearest aircraft**, **Use my location**, and
+**Set receiver position**.
 As soon as a real, fresh aircraft position becomes available, the view
 automatically focuses on that aircraft unless the user has manually moved
 the camera. Without a known receiver/device location and without any
