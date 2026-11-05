@@ -47,7 +47,13 @@ class LocalMapServer:
             def log_message(self, _format, *_args):
                 pass
 
-        self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        # Prefer a stable loopback origin so per-browser receiver coordinates
+        # stored in localStorage persist between app launches. If another
+        # instance owns the port, fall back safely to a random local port.
+        try:
+            self.httpd = ThreadingHTTPServer(("127.0.0.1", 8505), Handler)
+        except OSError:
+            self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
 
     @property
