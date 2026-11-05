@@ -112,6 +112,68 @@ def read_remote(url: str) -> dict:
         raise DataError(f"Cannot reach remote receiver: {exc}") from exc
 
 
+# Kept from the original GTK dashboard: optional local tar1090 URL discovery
+# and read-only SDR conflict information. Neither helper changes the receiver.
+TAR1090_URLS = (
+    "http://127.0.0.1/tar1090/",
+    "http://127.0.0.1:8504/",
+    "http://127.0.0.1:8504/tar1090/",
+)
+CONFLICT_PROCESSES = frozenset({
+    "gqrx", "welle-io", "welle.io", "rtl_test", "rtl_433",
+    "rtl_fm", "rtl_tcp", "rtl_adsb", "sdrpp", "sdr++", "cubicsdr",
+})
+
+
+def detect_sdr_processes() -> list[str]:
+    """Advisory check only; do not terminate competing SDR processes."""
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["ps", "-eo", "comm="], capture_output=True, text=True,
+            timeout=4, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    return sorted({name.strip() for name in result.stdout.splitlines()
+                   if name.strip().lower() in CONFLICT_PROCESSES})
+
+
+def find_tar1090_url() -> str | None:
+    """Find a working local tar1090 frontend, without trusting proxies."""
+    from urllib.error import HTTPError, URLError
+    from urllib.request import ProxyHandler, build_opener
+
+    opener = build_opener(ProxyHandler({}))
+    for url in TAR1090_URLS:
+        try:
+            with opener.open(url, timeout=1.6) as response:
+                if (response.status == 200 and
+                        "text/html" in response.headers.get("Content-Type", "")):
+                    return url
+        except (URLError, HTTPError, OSError, TimeoutError):
+            continue
+    return None
+
+
+def lan_ip() -> str | None:
+    """Find the LAN IP for the legacy local tar1090 route."""
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["hostname", "-I"], capture_output=True, text=True,
+            timeout=2, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    addresses = [ip for ip in result.stdout.split()
+                 if ip.count(".") == 3 and not ip.startswith("127.")]
+    preferred = [ip for ip in addresses if ip.startswith("192.168.")]
+    return (preferred or addresses or [None])[0]
+
+
 def export_json(data: dict, destination: Path) -> None:
     validate_snapshot(data)
     # Explicit export; do not change or add aircraft measurements.
