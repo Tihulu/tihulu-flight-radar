@@ -16,8 +16,8 @@ multiple receivers and is **not** calculated by this app.
 | Windows x64 | Qt / PySide6 | Only with a separately supplied working readsb binary and USB driver; not packaged or validated | Yes |
 | Raspberry Pi Linux ARM64 | Python source | Existing readsb daemon or separately installed readsb | Yes |
 
-The build workflow produces preview artifacts on Linux x64, Windows x64 and
-macOS ARM64 runners. A successful build **does not** prove direct USB reception
+The build workflow produces preview artifacts on Ubuntu Linux x64, Debian 12
+x64, Windows x64 and macOS ARM64 runners. A successful build **does not** prove direct USB reception
 on every device. No drivers, decoder binaries, or permission policies are bundled.
 
 ## Development run
