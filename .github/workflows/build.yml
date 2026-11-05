@@ -35,6 +35,11 @@ jobs:
         run: test "$(uname -m)" = arm64
       - name: Run unit tests
         run: python -m pytest -q
+      - name: Smoke-test Qt desktop window
+        if: matrix.label == 'linux-x64'
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -c "from PySide6.QtWidgets import QApplication; from tihulu_flight_radar.app import RadarWindow; a=QApplication([]); w=RadarWindow(); w.close(); print('Qt UI OK')"
       - name: Compile Python
         run: python -m compileall -q tihulu_flight_radar
       - name: Build desktop executable
@@ -66,6 +71,10 @@ jobs:
           /opt/tihulu-venv/bin/pip install -e ".[test,build]"
       - name: Run unit tests
         run: /opt/tihulu-venv/bin/python -m pytest -q
+      - name: Smoke-test Qt desktop window
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: /opt/tihulu-venv/bin/python -c "from PySide6.QtWidgets import QApplication; from tihulu_flight_radar.app import RadarWindow; a=QApplication([]); w=RadarWindow(); w.close(); print('Qt UI OK')"
       - name: Compile Python
         run: /opt/tihulu-venv/bin/python -m compileall -q tihulu_flight_radar
       - name: Build Debian-compatible preview
