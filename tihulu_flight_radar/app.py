@@ -118,6 +118,10 @@ class RadarWindow(QMainWindow):
         control_row.addWidget(self.stop_button)
         control.addLayout(control_row)
         control.addWidget(self.restart_button)
+        self.diagnostics_button = QPushButton("Receiver diagnostics")
+        self.diagnostics_button.setVisible(platform.system() == "Linux")
+        self.diagnostics_button.clicked.connect(self._show_diagnostics)
+        control.addWidget(self.diagnostics_button)
         self.info = label("Select an input mode below. One SDR can serve only one decoder at a time.", "muted", True)
         control.addWidget(self.info)
         metrics = panel(self.layout, "Live reception")
@@ -189,6 +193,11 @@ class RadarWindow(QMainWindow):
             self._boot_updating = False
 
     def _apply_config(self, quiet=False):
+        if self.action_future is not None:
+            if not quiet:
+                QMessageBox.information(self, "Receiver busy",
+                                        "Wait for the current receiver operation to complete.")
+            return
         try:
             self.controller.configure(self.mode_select.currentText(),
                                       self.remote_field.text(),
@@ -258,6 +267,8 @@ class RadarWindow(QMainWindow):
         self.stop_button.setEnabled(not busy and active and mode != "Remote JSON")
         self.restart_button.setEnabled(not busy and active and mode != "Remote JSON")
         self.boot_checkbox.setEnabled(not busy and mode == "Linux services")
+        self.mode_select.setEnabled(not busy)
+        self.diagnostics_button.setEnabled(not busy)
 
         if busy:
             return  # Do not read receiver JSON while stop/start is changing hardware.
@@ -306,6 +317,26 @@ class RadarWindow(QMainWindow):
                     self.detail_label.setText(str(exc)[:180])
             finally:
                 self.snapshot_future = None
+
+    def _show_diagnostics(self):
+        """Read-only systemd diagnostic output, without sudo or changing settings."""
+        if platform.system() != "Linux":
+            return
+        lines = []
+        for label_, command in (
+            ("readsb service", ["/usr/bin/systemctl", "status", "readsb.service",
+                                "--no-pager", "--lines=10"]),
+            ("Recent readsb log", ["journalctl", "-u", "readsb.service",
+                                  "-n", "15", "--no-pager"]),
+        ):
+            try:
+                result = subprocess.run(command, capture_output=True, text=True,
+                                        check=False, timeout=4)
+                output = (result.stdout or result.stderr or "No information available.")[-2000:]
+                lines.append(f"{label_}:\n{output}")
+            except (OSError, subprocess.TimeoutExpired) as exc:
+                lines.append(f"{label_}: {exc}")
+        QMessageBox.information(self, "Receiver diagnostics", "\n\n".join(lines))
 
     def _export(self):
         if self.last_data is None:
