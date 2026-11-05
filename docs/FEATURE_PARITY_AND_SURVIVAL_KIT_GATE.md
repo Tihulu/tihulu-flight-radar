@@ -67,3 +67,10 @@ The main Survival Kit Flight Radar Center must retain all of these capabilities 
 - Visual/manual: compare new Qt dashboard against v0.2 screenshots on COSMIC; verify no content overlap and proper resizing.
 
 **Automated CI cannot alone certify actual radio reception or the final human visual quality.**
+
+## 2026-11-06 addition: full tar1090 experience is mandatory in Survival Kit
+
+The full tar1090 map, aircraft list, filters, layers and actual configured
+track/history capabilities must be available from the Survival Kit local URL
+on desktop, phone and tablet. The simplified built-in radar is only a fallback.
+See the [binding mobile/desktop tar1090 parity handoff](docs/SURVIVAL_KIT_TAR1090_FULL_MAP_PARITY_2026-11-06.md).
