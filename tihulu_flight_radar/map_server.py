@@ -17,6 +17,9 @@ class LocalMapServer:
                 if self.path.split("?", 1)[0] == "/":
                     data = files("tihulu_flight_radar").joinpath("map.html").read_bytes()
                     kind = "text/html; charset=utf-8"
+                elif self.path.split("?", 1)[0] == "/map_focus.js":
+                    data = files("tihulu_flight_radar").joinpath("map_focus.js").read_bytes()
+                    kind = "application/javascript; charset=utf-8"
                 elif self.path.split("?", 1)[0] == "/api/aircraft":
                     snapshot = owner.getter()
                     data = json.dumps(snapshot if snapshot is not None else {
