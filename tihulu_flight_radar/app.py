@@ -6,6 +6,7 @@ All visible interface text is English; only observed aircraft data is shown.
 from __future__ import annotations
 
 import json
+from datetime import datetime
 import platform
 import subprocess
 import sys
@@ -239,9 +240,14 @@ class RadarWindow(QMainWindow):
         map_row.addWidget(self.map_button)
         map_row.addWidget(self.full_map_button)
         map_section.addLayout(map_row)
-        self.export_button = QPushButton("↓  Export live JSON snapshot")
+        export_row = QHBoxLayout()
+        self.export_button = QPushButton("↓  Export JSON as…")
         self.export_button.clicked.connect(self._export)
-        map_section.addWidget(self.export_button)
+        self.quick_export_button = QPushButton("↓  Quick export (timestamped)")
+        self.quick_export_button.clicked.connect(self._quick_export)
+        export_row.addWidget(self.export_button)
+        export_row.addWidget(self.quick_export_button)
+        map_section.addLayout(export_row)
         map_section.addWidget(text(
             "Built-in map opens even without aircraft (Germany default). "
             "Full tar1090 map preserves the earlier detailed aircraft view when installed.",
@@ -344,13 +350,19 @@ class RadarWindow(QMainWindow):
             )
             self._boot_updating = True
             try:
-                result = subprocess.run(
-                    ["/usr/bin/systemctl", "is-enabled", "readsb.service"],
-                    capture_output=True, text=True, timeout=3, check=False
-                )
-                self.boot_checkbox.setChecked(
-                    result.returncode == 0 and result.stdout.strip() == "enabled"
-                )
+                states = []
+                for unit in ("readsb.service", "tar1090.service"):
+                    result = subprocess.run(
+                        ["/usr/bin/systemctl", "is-enabled", unit],
+                        capture_output=True, text=True, timeout=3, check=False
+                    )
+                    states.append(result.returncode == 0 and result.stdout.strip() == "enabled")
+                self.boot_checkbox.setChecked(all(states))
+                if any(states) and not all(states):
+                    self.info.setText(
+                        "Startup configuration is mixed: readsb and tar1090 "
+                        "have different boot settings. Toggle to synchronize."
+                    )
             except (OSError, subprocess.TimeoutExpired):
                 pass
             finally:
@@ -638,6 +650,27 @@ class RadarWindow(QMainWindow):
         dialog.setTextFormat(Qt.TextFormat.PlainText)
         dialog.setText("\n\n".join(reports))
         dialog.exec()
+
+    def _quick_export(self):
+        if self.last_data is None:
+            QMessageBox.information(
+                self, "No live data", "No fresh aircraft.json snapshot is available."
+            )
+            return
+        directory = Path.home() / "Downloads"
+        if not directory.is_dir():
+            directory = Path.home()
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        path = directory / f"tihulu-adsb-{stamp}.json"
+        counter = 1
+        while path.exists():
+            path = directory / f"tihulu-adsb-{stamp}-{counter}.json"
+            counter += 1
+        try:
+            export_json(self.last_data, path)
+            self.info.setText(f"Saved received aircraft data: {path}")
+        except (OSError, DataError) as exc:
+            QMessageBox.warning(self, "Export failed", str(exc))
 
     def _export(self):
         if self.last_data is None:
