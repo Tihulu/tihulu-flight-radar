@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
 from . import __version__
 from .control import MODES, ReceiverController, service_action
 from .core import (DataError, detect_sdr_processes, export_json, find_tar1090_url,
-                   lan_ip, summarize, recently_seen)
+                   lan_ip, summarize, recently_seen, position_is_fresh)
 from .map_server import LocalMapServer
 
 
@@ -622,6 +622,14 @@ class RadarWindow(QMainWindow):
     def _focus_selected_map(self):
         aircraft = self._selected_aircraft()
         if aircraft is None:
+            return
+        if not position_is_fresh(aircraft):
+            QMessageBox.information(
+                self, "Aircraft position unavailable",
+                "This aircraft has no fresh ADS-B coordinates. "
+                "Its identity and other received information remain in the list, "
+                "but it cannot be positioned on the map."
+            )
             return
         icao = str(aircraft.get("hex") or "")
         if not icao:
