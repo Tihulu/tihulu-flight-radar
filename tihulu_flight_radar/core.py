@@ -1,0 +1,118 @@
+"""Safe ADS-B JSON input, derived statistics, and export.
+
+No simulated aircraft are produced. Aircraft without a valid, fresh position
+are counted but must not be drawn as positioned aircraft.
+"""
+from __future__ import annotations
+
+import json
+import math
+import time
+from pathlib import Path
+from urllib.parse import urlsplit
+from urllib.request import Request, urlopen
+
+MAX_JSON_BYTES = 4 * 1024 * 1024
+FRESH_SECONDS = 60
+DATA_TIMEOUT_SECONDS = 15
+
+
+class DataError(RuntimeError):
+    pass
+
+
+def position_is_fresh(aircraft: dict) -> bool:
+    lat, lon = aircraft.get("lat"), aircraft.get("lon")
+    age = aircraft.get("seen_pos")
+    return (
+        all(isinstance(v, (int, float)) and not isinstance(v, bool)
+            and math.isfinite(v) for v in (lat, lon, age))
+        and -90 <= lat <= 90 and -180 <= lon <= 180
+        and 0 <= age <= FRESH_SECONDS
+    )
+
+
+def recently_seen(aircraft: dict) -> bool:
+    age = aircraft.get("seen")
+    return (isinstance(age, (int, float)) and not isinstance(age, bool)
+            and math.isfinite(age) and 0 <= age <= FRESH_SECONDS)
+
+
+def validate_snapshot(data: object, received_at: float | None = None) -> dict:
+    if not isinstance(data, dict) or not isinstance(data.get("aircraft"), list):
+        raise DataError("Invalid aircraft.json payload.")
+    now = data.get("now")
+    if isinstance(now, (int, float)) and not isinstance(now, bool):
+        if not math.isfinite(now) or abs((received_at or time.time()) - now) > DATA_TIMEOUT_SECONDS:
+            raise DataError("Receiver data is stale (timestamp exceeds 15 seconds).")
+    if len(data["aircraft"]) > 100000:
+        raise DataError("Aircraft list is unexpectedly large.")
+    return data
+
+
+def summarize(data: dict) -> dict:
+    aircraft = [a for a in data.get("aircraft", [])
+                if isinstance(a, dict) and recently_seen(a)]
+    positions = [a for a in aircraft if position_is_fresh(a)]
+    signals = [a["rssi"] for a in aircraft
+               if isinstance(a.get("rssi"), (int, float))
+               and not isinstance(a["rssi"], bool) and math.isfinite(a["rssi"])]
+    total = data.get("messages", 0)
+    if not isinstance(total, int) or isinstance(total, bool) or total < 0:
+        total = 0
+    return {
+        "aircraft": len(aircraft),
+        "positioned": len(positions),
+        "messages": total,
+        "mean_rssi": round(sum(signals) / len(signals), 1) if signals else None,
+    }
+
+
+def visible_aircraft(data: dict) -> list[dict]:
+    """Retain actual received fields, but never invent a missing position."""
+    return [a for a in data.get("aircraft", [])
+            if isinstance(a, dict) and recently_seen(a)]
+
+
+def read_local(path: Path) -> dict:
+    try:
+        if not path.is_file():
+            raise DataError("Receiver data file not found.")
+        if time.time() - path.stat().st_mtime > DATA_TIMEOUT_SECONDS:
+            raise DataError("Receiver data file has not updated recently.")
+        if path.stat().st_size > MAX_JSON_BYTES:
+            raise DataError("Receiver data file is too large.")
+        return validate_snapshot(json.loads(path.read_text(encoding="utf-8")))
+    except (OSError, ValueError, UnicodeError) as exc:
+        raise DataError(f"Cannot read local receiver data: {exc}") from exc
+
+
+def validate_remote_url(url: str) -> str:
+    url = url.strip()
+    parsed = urlsplit(url)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        raise DataError("Enter a full http:// or https:// aircraft.json URL.")
+    if parsed.username or parsed.password or parsed.fragment:
+        raise DataError("Credentials and fragments are not allowed in receiver URLs.")
+    return url
+
+
+def read_remote(url: str) -> dict:
+    url = validate_remote_url(url)
+    request = Request(url, headers={"Accept": "application/json", "User-Agent": "TihuluFlightRadar/0.3"})
+    try:
+        with urlopen(request, timeout=4) as response:
+            length = response.read(MAX_JSON_BYTES + 1)
+        if len(length) > MAX_JSON_BYTES:
+            raise DataError("Remote receiver JSON exceeds size limit.")
+        return validate_snapshot(json.loads(length.decode("utf-8")))
+    except DataError:
+        raise
+    except (OSError, ValueError, UnicodeError) as exc:
+        raise DataError(f"Cannot reach remote receiver: {exc}") from exc
+
+
+def export_json(data: dict, destination: Path) -> None:
+    validate_snapshot(data)
+    # Explicit export; do not change or add aircraft measurements.
+    destination.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")

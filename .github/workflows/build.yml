@@ -1,0 +1,51 @@
+name: Cross-platform CI and preview builds
+
+on:
+  push:
+    branches: ["feature/**", "main"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            label: linux-x64
+          - os: windows-2025
+            label: windows-x64
+          - os: macos-15
+            label: macos-apple-silicon
+    runs-on: \${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install app and build tools
+        run: python -m pip install -e ".[test,build]"
+      - name: Verify runner architecture
+        if: matrix.label == 'macos-apple-silicon'
+        shell: bash
+        run: test "$(uname -m)" = arm64
+      - name: Run unit tests
+        run: python -m pytest -q
+      - name: Compile Python
+        run: python -m compileall -q tihulu_flight_radar
+      - name: Build desktop executable
+        shell: bash
+        run: python -m PyInstaller --noconfirm --clean --windowed --onedir --name TihuluFlightRadar --collect-data tihulu_flight_radar --paths . tihulu_flight_radar/launcher.py
+      - name: Upload preview build
+        uses: actions/upload-artifact@v4
+        with:
+          name: tihulu-flight-radar-\${{ matrix.label }}
+          path: |
+            dist/TihuluFlightRadar/
+            dist/TihuluFlightRadar.app/
+          if-no-files-found: error
+          retention-days: 14
