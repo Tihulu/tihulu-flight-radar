@@ -39,22 +39,31 @@ def linux_service_state() -> tuple[bool, str]:
 
 
 def _verify_transition(action: str, timeout_seconds: float = 8.0) -> None:
-    """Prevent a false 'success' when systemd accepted but did not keep readsb up."""
+    """Require a stable decoder state, not just a transient systemd 'active'."""
     expected = action == "start"
     deadline = time.monotonic() + timeout_seconds
-    current = not expected
+    matched_since = None
     last_state = "unknown"
     while True:
-        current, last_state = _unit_active("readsb.service")
-        if current == expected:
-            return
-        if time.monotonic() >= deadline:
+        active, last_state = _unit_active("readsb.service")
+        now = time.monotonic()
+        if active == expected:
+            if matched_since is None:
+                matched_since = now
+            # Catch the common USB-busy problem where readsb crashes just
+            # after systemd first reports it as active.
+            if not expected or now - matched_since >= 1.5:
+                return
+        else:
+            matched_since = None
+        if now >= deadline:
             break
-        time.sleep(0.25)
+        time.sleep(0.3)
     target = "active" if expected else "stopped"
     raise DataError(
-        f"Receiver did not become {target} after {action}. "
-        f"readsb state: {last_state}. Check journalctl -u readsb -n 30."
+        f"readsb failed to stay {target} after {action}. Current state: {last_state}. "
+        "The SDR may still be in use by another application. "
+        "Inspect: journalctl -u readsb -n 30 --no-pager"
     )
 
 
@@ -125,6 +134,11 @@ class ReceiverController:
             return service_action("start")
         if self.process is not None and self.process.poll() is None:
             return "Direct receiver is already running."
+        if platform.system() == "Linux" and _unit_active("readsb.service")[0]:
+            raise DataError(
+                "The readsb system service already owns the SDR. "
+                "Stop Linux services before selecting Direct readsb mode."
+            )
         binary = self.decoder_path or shutil.which("readsb")
         if not binary and platform.system() == "Darwin":
             for candidate in ("/opt/homebrew/bin/readsb", "/usr/local/bin/readsb"):
@@ -150,6 +164,13 @@ class ReceiverController:
             self._directory = None
             raise DataError(f"Cannot launch readsb: {exc}") from exc
         return "Starting local readsb. Waiting for real aircraft messages."
+
+    def restart(self) -> str:
+        """Stop and start the selected receiver, surfacing start failures."""
+        if self.mode == "Remote JSON":
+            raise DataError("Remote receiver restart must happen on its own computer.")
+        self.stop()
+        return self.start()
 
     def stop(self) -> str:
         if self.mode == "Remote JSON":
