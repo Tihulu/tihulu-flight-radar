@@ -1,2 +1,2 @@
 """Tihulu Flight Radar — local-first, real ADS-B data only."""
-__version__ = "0.3.0"
+__version__ = "0.3.1"
