@@ -37,6 +37,9 @@ const cv=document.getElementById("canvas"),ctx=cv.getContext("2d");
 const rows=document.getElementById("rows"),status=document.getElementById("status");
 const tileSwitch=document.getElementById("tiles"),cache=new Map(),tracks=new Map();
 const focusState=document.getElementById("focusState"), focusMath=window.TihuluMapFocus;
+// Explicit desktop aircraft selection takes priority when that real aircraft
+// has a fresh position; otherwise continue the normal aircraft/GPS/Germany flow.
+const requestedIcao=(new URLSearchParams(window.location.search).get("aircraft")||"").toLowerCase().trim();
 // Germany is a VIEWPORT fallback, not a claimed receiver or aircraft location.
 const GERMANY_DEFAULT={lat:51.1657,lon:10.4515};
 let lat=GERMANY_DEFAULT.lat,lon=GERMANY_DEFAULT.lon,zoom=6;
@@ -75,9 +78,15 @@ if(reference)centerOnReference();
 else centerOnGermany();
 function focusNearest(force=false) {
  if (userMoved&&!force) return;
- // With no known receiver/browser coordinates, rank real aircraft by
- // their proximity to Germany's *default map center*, not to the user.
- const selection=focusMath.chooseFocus(items, reference||GERMANY_DEFAULT);
+ const requested = requestedIcao
+   ? items.find(a=>String(a.hex||"").toLowerCase()===requestedIcao&&focusMath.validAircraft(a))
+   : null;
+ // Initial map priority: explicitly selected real aircraft, then the
+ // closest real positioned aircraft, then permitted GPS / receiver location,
+ // then Germany as a labeled default viewport.
+ const selection=requested
+   ? {aircraft:requested,method:"selected",distanceKm:null}
+   : focusMath.chooseFocus(items, reference||GERMANY_DEFAULT);
  if (!selection) {
    if(reference)centerOnReference(force);
    else centerOnGermany(force);
@@ -88,8 +97,10 @@ function focusNearest(force=false) {
  if (force) userMoved=false;
  const callsign=String(selection.aircraft.flight||selection.aircraft.hex||"aircraft").trim();
  const place=reference?referenceSource:"Germany default map center";
- focusState.textContent="Nearest aircraft to "+place+": "+callsign+
-   " ("+Math.round(selection.distanceKm)+" km)";
+ focusState.textContent=selection.method==="selected"
+   ? "Selected aircraft: "+callsign
+   : "Nearest aircraft to "+place+": "+callsign+
+     " ("+Math.round(selection.distanceKm)+" km)";
  paint();
 }
 function requestBrowserLocation() {

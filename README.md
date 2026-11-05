@@ -2,7 +2,7 @@
 
 English-language, local-first ADS-B / Mode S receiver desktop software.
 
-**Version 0.3.0 (development preview).** Uses real receiver data only. It never
+**Version 0.3.1 (development preview).** Uses real receiver data only. It never
 creates simulated aircraft or positions. ADS-B broadcasts may contain locations;
 Mode S does not guarantee location. MLAT positioning requires synchronized
 multiple receivers and is **not** calculated by this app.
@@ -25,7 +25,7 @@ on every device. No drivers, decoder binaries, or permission policies are bundle
 The Debian 12 workflow produces an unsigned Debian package as well as a
 portable application folder. Install with:
 
-    sudo apt install ./tihulu-flight-radar_0.3.0_amd64.deb
+    sudo apt install ./tihulu-flight-radar_0.3.1_amd64.deb
 
 The new package does not overwrite the earlier tihulu-adsb-radar v0.2.0.
 It adds a documented restricted sudoers rule for sudo-group administrators
@@ -104,37 +104,21 @@ implies aircraft data. See
 [Survival Kit handoff notes](docs/SURVIVAL_KIT_FLIGHT_RADAR_HANDOFF_2026-11-05.md)
 for integration acceptance criteria.
 
-## Local map
+## Interface, flight data and map
 
-The map defaults to a clearly labeled **Germany** viewport (approximately
-51.1657°N, 10.4515°E), never to a claimed receiver position. If the receiver
-position is saved or the browser's geolocation permission was already
-granted, the real reference location takes priority, even when no aircraft
-positions are available. The user can explicitly choose **Show Germany**,
-**Center receiver**, **Focus nearest aircraft**, **Use my location**, and
-**Set receiver position**.
-As soon as a real, fresh aircraft position becomes available, the view
-automatically focuses on that aircraft unless the user has manually moved
-the camera. Without a known receiver/device location and without any
-received positional aircraft data, the map continues to show an explicit
-waiting screen and asks the user to set receiver position. If the viewer can obtain browser
-geolocation (with explicit browser permission) or if receiver coordinates
-were saved under **Set receiver position**, it centers on the closest actual
-aircraft according to geographic distance. Otherwise, it selects a
-representative aircraft in the largest live cluster (not necessarily the
-closest to the user, because the receiver location is unknown). The
-**Focus nearest** button recenters on demand. Manual panning and zooming
-disable automatic camera jumps. Saved receiver coordinates stay in browser
-localStorage; geolocation is not sent to the receiver server. Online OSM tiles now load after a valid reference location **or** aircraft
-position is known. The coordinate grid remains visible if tiles are offline.
+Version 0.3.1 restores the earlier GTK4 v0.2 dashboard capabilities **without replacing or removing the full tar1090 aircraft viewer**. The English-language Qt UI shows the four original live statistics (aircraft, positioned aircraft, messages/second, total messages), mean RSSI, Start/Stop/Restart, boot settings, local LAN tar1090 URL, a full tar1090 map button, automatic timestamped quick JSON export and Save As export. It additionally has a live aircraft list and full readsb observation details including raw received JSON.
 
-Open Map launches an integrated local HTTP viewer bound to 127.0.0.1 on a random
-port. It plots **only genuine, recent positions** and keeps a short in-session
-track. Aircraft lacking valid coordinates are listed without map markers.
-Offline, the viewer shows a geographic coordinate grid; online OpenStreetMap
-tiles are optional, with attribution. We do not bundle offline OSM tiles.
-The map server is loopback-only. Existing tar1090 remains available for
-LAN devices, depending on its local network/firewall configuration.
+The **built-in map** complements, rather than replaces, the full tar1090 viewer. It opens even when there is no active decoder, no aircraft or no valid coordinates. Initial camera priority:
+
+1. Real fresh aircraft positions: focus the nearest valid aircraft relative to receiver/GPS coordinates, or to the labeled Germany map center if no real reference location exists.
+2. No fresh aircraft position: center on real explicitly saved receiver coordinates or permitted browser GPS location.
+3. Neither aircraft positions nor an authorized reference: show Germany (51.1657°N, 10.4515°E) as a **default map view**, not as a claimed receiver position.
+
+The map buttons include Focus nearest aircraft, Show Germany, Center receiver, Use my location and Set receiver position. Selecting a positioned aircraft in the desktop table can open the built-in map focused on it. Manual zoom/pan is respected until the user requests recentering.
+
+The embedded HTTP map stays on loopback only (prefers 127.0.0.1:8505 for stable browser settings; uses an ephemeral port if occupied). It shows only genuine fresh aircraft position markers and short session tracks. OpenStreetMap tiles are optional and require internet; without tiles, a geographic coordinate grid remains available. The installed full tar1090 viewer retains its own detailed interface and LAN exposure according to the receiver installation.
+
+See the [feature preservation and Survival Kit checklist](docs/FEATURE_PARITY_AND_SURVIVAL_KIT_GATE.md). This document is a non-regression requirement for the integrated Survival Kit responsive Flight Radar Center.
 
 ## Data and security
 
@@ -142,8 +126,8 @@ LAN devices, depending on its local network/firewall configuration.
 - Remote JSON is a user-provided HTTP(S) URL; avoid using untrusted endpoints.
 - Exports only a raw received JSON snapshot chosen by the user.
 - Stale data is rejected. Missing aircraft positions are never inferred.
-- No cloud account, feed uploads, background polling when the UI is closed,
-  or auto-start on boot is added by this application.
+- No cloud account or feed uploads. The UI stops polling when closed; systemd receiver
+  background service startup remains a user-controlled opt-in.
 - Two applications cannot claim the same physical RTL-SDR simultaneously.
 
 ## Roadmap

@@ -47,7 +47,7 @@ jobs:
         if: matrix.label == 'linux-x64'
         env:
           QT_QPA_PLATFORM: offscreen
-        run: python -c "from PySide6.QtWidgets import QApplication; from tihulu_flight_radar.app import RadarWindow; a=QApplication([]); w=RadarWindow(); w.close(); print('Qt UI OK')"
+        run: python scripts/qt_smoke.py
       - name: Compile Python
         run: python -m compileall -q tihulu_flight_radar
       - name: Build desktop executable
@@ -84,7 +84,7 @@ jobs:
       - name: Smoke-test Qt desktop window
         env:
           QT_QPA_PLATFORM: offscreen
-        run: /opt/tihulu-venv/bin/python -c "from PySide6.QtWidgets import QApplication; from tihulu_flight_radar.app import RadarWindow; a=QApplication([]); w=RadarWindow(); w.close(); print('Qt UI OK')"
+        run: /opt/tihulu-venv/bin/python scripts/qt_smoke.py
       - name: Compile Python
         run: /opt/tihulu-venv/bin/python -m compileall -q tihulu_flight_radar
       - name: Build Debian-compatible preview
@@ -97,6 +97,6 @@ jobs:
           name: tihulu-flight-radar-debian12-x64
           path: |
             dist/TihuluFlightRadar/
-            dist/tihulu-flight-radar_0.3.0_amd64.deb
+            dist/tihulu-flight-radar_0.3.1_amd64.deb
           if-no-files-found: error
           retention-days: 14

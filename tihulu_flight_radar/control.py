@@ -8,7 +8,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from .core import DataError, read_local, read_remote
+from .core import DataError, detect_sdr_processes, read_local, read_remote
 
 LINUX_JSON = Path("/run/readsb/aircraft.json")
 UNITS = ("readsb.service", "tar1090.service")
@@ -72,6 +72,13 @@ def service_action(action: str) -> str:
         raise DataError("Unsupported service action.")
     if platform.system() != "Linux":
         raise DataError("Systemd service management is Linux-only.")
+    if action == "start" and not _unit_active("readsb.service")[0]:
+        conflicts = detect_sdr_processes()
+        if conflicts:
+            raise DataError(
+                "The RTL-SDR may be in use by: " + ", ".join(conflicts) +
+                ". Close the competing application before starting readsb."
+            )
     # The exact argument list matches the narrowly scoped sudoers policy.
     # Never pass arbitrary strings or request blanket root permissions.
     cmd = ["/usr/bin/sudo", "-n", SYSTEMCTL, action, *UNITS]
