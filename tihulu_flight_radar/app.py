@@ -1,6 +1,11 @@
-"""Portable Qt desktop UI. All user-facing text is English."""
+"""Tihulu Flight Radar: accessible, cross-platform Qt desktop dashboard.
+
+Retains every legacy v0.2 controller feature, adds live aircraft details.
+All visible interface text is English; only observed aircraft data is shown.
+"""
 from __future__ import annotations
 
+import json
 import platform
 import subprocess
 import sys
@@ -8,64 +13,133 @@ import time
 import webbrowser
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from urllib.parse import quote
 
 from PySide6.QtCore import QSettings, Qt, QTimer
+from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import (
-    QApplication, QCheckBox, QComboBox, QFileDialog, QFrame, QGridLayout,
-    QHBoxLayout, QLabel, QLineEdit, QMainWindow, QMessageBox, QPushButton,
-    QScrollArea, QVBoxLayout, QWidget,
+    QApplication, QAbstractItemView, QCheckBox, QComboBox, QFileDialog,
+    QFrame, QGridLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
+    QMainWindow, QMessageBox, QPushButton, QScrollArea, QTableWidget,
+    QTableWidgetItem, QToolButton, QVBoxLayout, QWidget,
 )
 
 from . import __version__
 from .control import MODES, ReceiverController, service_action
-from .core import DataError, export_json, summarize
+from .core import DataError, export_json, summarize, recently_seen
 from .map_server import LocalMapServer
 
 
-STYLES = """
-QWidget { background: #10131a; color: #f2f4f8; font-size: 13px; }
-QLabel { background: transparent; }
-QFrame#panel { background: #191f29; border: 1px solid #303845; border-radius: 12px; }
-QLabel#title { font-size: 25px; font-weight: 700; }
-QLabel#heading { color: #96aec0; font-size: 12px; font-weight: 700; }
-QLabel#metric { font-size: 28px; font-weight: 700; }
-QLabel#muted { color: #a8b1bf; }
-QPushButton { background: #2b3442; border: 1px solid #3d495b; border-radius: 8px;
-              padding: 10px 14px; font-weight: 600; }
-QPushButton:hover { background: #364253; }
-QPushButton:disabled { color: #687483; background: #202632; }
-QPushButton#start { background: #247e69; color: white; }
-QPushButton#stop { background: #8c424c; color: white; }
-QLineEdit, QComboBox { background: #202837; border: 1px solid #3d485b;
-                     padding: 8px; border-radius: 8px; }
-QScrollArea { border: none; }
+STYLE = """
+QMainWindow { background: #11161e; }
+QWidget#root { background: #11161e; color: #e9eef5; }
+QScrollArea { border: none; background: #11161e; }
+QFrame#card {
+    background: #1c242f;
+    border: 1px solid #344251;
+    border-radius: 14px;
+}
+QFrame#metric {
+    background: #202b37;
+    border: 1px solid #3b4858;
+    border-radius: 12px;
+}
+QLabel { background: transparent; color: #e9eef5; }
+QLabel#eyebrow { color: #84a9bd; font-size: 11px; font-weight: 700; }
+QLabel#pageTitle { color: #f4f7fa; font-size: 26px; font-weight: 750; }
+QLabel#sectionTitle { color: #c6d2df; font-size: 12px; font-weight: 700; }
+QLabel#muted { color: #9caec0; font-size: 12px; }
+QLabel#statValue { color: #f5f8fa; font-size: 27px; font-weight: 750; }
+QLabel#statLabel { color: #b8c6d3; font-size: 12px; }
+QLabel#statusGood { color: #55d9aa; font-size: 14px; font-weight: 700; }
+QLabel#statusWaiting { color: #f0c584; font-size: 14px; font-weight: 700; }
+QLabel#statusOff { color: #b5c2d0; font-size: 14px; font-weight: 700; }
+QLabel#statusError { color: #ff9b9b; font-size: 14px; font-weight: 700; }
+QPushButton, QToolButton {
+    background: #2b394a; color: #f4f7fa;
+    border: 1px solid #445468; border-radius: 9px;
+    padding: 9px 12px; font-weight: 600;
+    min-height: 20px;
+}
+QPushButton:hover, QToolButton:hover { background: #3a4e63; }
+QPushButton:disabled { color: #8192a3; background: #222d38; }
+QPushButton#start { background: #227d67; border-color: #318c78; }
+QPushButton#start:hover { background: #29977e; }
+QPushButton#stop { background: #844451; border-color: #9c5563; }
+QPushButton#stop:hover { background: #a05261; }
+QPushButton#map { background: #315c75; border-color: #437994; }
+QPushButton#map:hover { background: #3e7895; }
+QComboBox, QLineEdit {
+    background: #243140; color: #f2f6fa;
+    border: 1px solid #4a5c6e; border-radius: 8px;
+    padding: 8px; selection-background-color: #387f99;
+}
+QTableWidget {
+    background: #1c242f; color: #e4ebf2;
+    alternate-background-color: #222d39; gridline-color: #344251;
+    border: 1px solid #3b4858; border-radius: 8px;
+    selection-background-color: #285c74;
+}
+QHeaderView::section {
+    background: #273442; color: #d6e3ed;
+    padding: 9px 6px; border: none;
+    border-bottom: 1px solid #465669; font-weight: 700;
+}
+QTableCornerButton::section { background: #273442; }
+QCheckBox { color: #e0e8f0; spacing: 9px; }
 """
 
 
-def label(message: str, kind: str = "", wrap: bool = False) -> QLabel:
-    item = QLabel(message)
+def text(value: str, kind: str = "", wrap: bool = False) -> QLabel:
+    widget = QLabel(value)
     if kind:
-        item.setObjectName(kind)
-    item.setWordWrap(wrap)
-    return item
+        widget.setObjectName(kind)
+    widget.setWordWrap(wrap)
+    return widget
 
 
-def panel(parent: QVBoxLayout, title: str) -> QVBoxLayout:
+def add_card(parent: QVBoxLayout, title: str) -> QVBoxLayout:
     frame = QFrame()
-    frame.setObjectName("panel")
+    frame.setObjectName("card")
     layout = QVBoxLayout(frame)
-    layout.setContentsMargins(17, 15, 17, 15)
-    layout.setSpacing(10)
-    layout.addWidget(label(title.upper(), "heading"))
+    layout.setContentsMargins(16, 15, 16, 15)
+    layout.setSpacing(11)
+    layout.addWidget(text(title.upper(), "sectionTitle"))
     parent.addWidget(frame)
     return layout
+
+
+def display(value, suffix="") -> str:
+    """Format only the actual supplied field, without fabricating a value."""
+    if value is None or value == "":
+        return "—"
+    if isinstance(value, float):
+        return f"{value:,.1f}{suffix}"
+    return f"{value}{suffix}"
+
+
+def flight_label(aircraft: dict) -> str:
+    return str(aircraft.get("flight") or "").strip() or "—"
+
+
+def aircraft_fields(aircraft: dict) -> list[str]:
+    return [
+        flight_label(aircraft),
+        str(aircraft.get("hex") or "—"),
+        str(aircraft.get("r") or "—"),
+        str(aircraft.get("t") or "—"),
+        display(aircraft.get("alt_baro", aircraft.get("alt_geom"))),
+        display(aircraft.get("gs")),
+        display(aircraft.get("track")),
+        display(aircraft.get("seen"), "s"),
+    ]
 
 
 class RadarWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.controller = ReceiverController()
-        self.pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="radar")
+        self.pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="tihulu-radar")
         self.snapshot_future = None
         self.action_future = None
         self._snapshot_generation = 0
@@ -73,135 +147,218 @@ class RadarWindow(QMainWindow):
         self.last_data = None
         self.last_messages = None
         self.last_time = None
+        self.aircraft_rows = []
         self._boot_updating = False
         self.map_server = LocalMapServer(lambda: self.last_data)
         self.map_server.start()
         self.settings = QSettings("Tihulu", "FlightRadar")
         self.setWindowTitle(f"Tihulu Flight Radar {__version__}")
-        self.resize(850, 750)
-        self.setMinimumSize(480, 560)
-        self._make_ui()
+        self.resize(900, 790)
+        self.setMinimumSize(510, 550)
+        self._build()
         self._load_config()
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._tick)
         self.timer.start(2000)
         self._tick()
 
-    def _make_ui(self):
+    def _build(self):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         root = QWidget()
-        self.layout = QVBoxLayout(root)
-        self.layout.setContentsMargins(22, 22, 22, 22)
-        self.layout.setSpacing(15)
+        root.setObjectName("root")
+        body = QVBoxLayout(root)
+        body.setContentsMargins(21, 20, 21, 20)
+        body.setSpacing(14)
         scroll.setWidget(root)
         self.setCentralWidget(scroll)
-        self.layout.addWidget(label("TIHULU  /  FLIGHT RADAR", "heading"))
-        self.layout.addWidget(label("Live ADS-B & Mode S", "title"))
-        self.layout.addWidget(label("1090 MHz  ·  Local-first  ·  Real receiver data only", "muted"))
-        state = panel(self.layout, "Receiver status")
-        self.state_label = label("Checking receiver…")
-        state.addWidget(self.state_label)
-        self.detail_label = label("Waiting for aircraft.json", "muted", True)
-        state.addWidget(self.detail_label)
-        control = panel(self.layout, "Receiver controls")
-        control_row = QHBoxLayout()
-        self.start_button = QPushButton("▶  Start receiver")
+
+        body.addWidget(text("TIHULU   /   1090 MHz ADS-B + MODE S", "eyebrow"))
+        body.addWidget(text("Flight Radar", "pageTitle"))
+        body.addWidget(text("Live aircraft receiver  ·  Local-first  ·  Real observations only", "muted"))
+
+        status = add_card(body, "Receiver status")
+        self.state_label = text("Checking receiver…", "statusWaiting")
+        status.addWidget(self.state_label)
+        self.detail_label = text("Checking receiver source and decoder", "muted", True)
+        status.addWidget(self.detail_label)
+
+        controls = add_card(body, "Receiver control")
+        row = QHBoxLayout()
+        row.setSpacing(9)
+        self.start_button = QPushButton("▶  Start")
         self.start_button.setObjectName("start")
         self.start_button.clicked.connect(lambda: self._action("start"))
-        self.stop_button = QPushButton("■  Stop receiver")
+        self.stop_button = QPushButton("■  Stop")
         self.stop_button.setObjectName("stop")
         self.stop_button.clicked.connect(lambda: self._action("stop"))
-        self.restart_button = QPushButton("↻  Restart receiver")
+        self.restart_button = QPushButton("↻  Restart")
         self.restart_button.clicked.connect(lambda: self._action("restart"))
-        control_row.addWidget(self.start_button)
-        control_row.addWidget(self.stop_button)
-        control.addLayout(control_row)
-        control.addWidget(self.restart_button)
-        self.diagnostics_button = QPushButton("Receiver diagnostics")
-        self.diagnostics_button.setVisible(platform.system() == "Linux")
-        self.diagnostics_button.clicked.connect(self._show_diagnostics)
-        control.addWidget(self.diagnostics_button)
-        self.info = label("Select an input mode below. One SDR can serve only one decoder at a time.", "muted", True)
-        control.addWidget(self.info)
-        metrics = panel(self.layout, "Live reception")
-        metric_grid = QGridLayout()
+        for button in (self.start_button, self.stop_button, self.restart_button):
+            row.addWidget(button)
+        controls.addLayout(row)
+        self.info = text(
+            "Stopping releases the SDR for other applications (FM, DAB+ or RTL-433).",
+            "muted", True
+        )
+        controls.addWidget(self.info)
+
+        metrics = QGridLayout()
+        metrics.setSpacing(10)
         self.metric_widgets = {}
-        for index, (key, title) in enumerate([
+        for index, (key, caption) in enumerate([
             ("aircraft", "Aircraft seen"),
             ("positioned", "With position"),
             ("rate", "Messages / second"),
             ("messages", "Total messages"),
         ]):
-            tile = QFrame()
-            tile.setObjectName("panel")
-            tile_layout = QVBoxLayout(tile)
-            value = label("—", "metric")
-            tile_layout.addWidget(value)
-            tile_layout.addWidget(label(title, "muted"))
-            metric_grid.addWidget(tile, index // 2, index % 2)
+            frame = QFrame()
+            frame.setObjectName("metric")
+            tile = QVBoxLayout(frame)
+            tile.setContentsMargins(14, 12, 14, 12)
+            tile.setSpacing(3)
+            value = text("—", "statValue")
+            tile.addWidget(value)
+            tile.addWidget(text(caption, "statLabel"))
+            metrics.addWidget(frame, index // 2, index % 2)
             self.metric_widgets[key] = value
-        metrics.addLayout(metric_grid)
-        self.rssi = label("Average aircraft RSSI: —", "muted")
-        metrics.addWidget(self.rssi)
-        map_section = panel(self.layout, "Map & data")
-        actions = QHBoxLayout()
-        self.map_button = QPushButton("Open live map")
-        self.map_button.clicked.connect(lambda: webbrowser.open(self.map_server.url))
-        self.export_button = QPushButton("Export JSON")
+        stats_section = add_card(body, "Live reception")
+        stats_section.addLayout(metrics)
+        self.rssi = text("Average aircraft RSSI: —", "muted")
+        stats_section.addWidget(self.rssi)
+
+        map_section = add_card(body, "Map & exports")
+        map_row = QHBoxLayout()
+        self.map_button = QPushButton("↗  Open live aircraft map")
+        self.map_button.setObjectName("map")
+        self.map_button.clicked.connect(self._open_map)
+        self.export_button = QPushButton("↓  Export JSON")
         self.export_button.clicked.connect(self._export)
-        actions.addWidget(self.map_button)
-        actions.addWidget(self.export_button)
-        map_section.addLayout(actions)
-        map_section.addWidget(label("Offline coordinate map; optional OpenStreetMap tiles when online.", "muted", True))
-        sources = panel(self.layout, "Receiver configuration")
-        sources.addWidget(label("Input mode", "muted"))
+        map_row.addWidget(self.map_button, 2)
+        map_row.addWidget(self.export_button, 1)
+        map_section.addLayout(map_row)
+        map_section.addWidget(text(
+            "Map opens even without aircraft. Uses real flight positions, permitted "
+            "location, or Germany as the default viewport.",
+            "muted", True
+        ))
+
+        planes = add_card(body, "Aircraft currently received")
+        self.aircraft_hint = text("Waiting for recent ADS-B / Mode S aircraft…", "muted", True)
+        planes.addWidget(self.aircraft_hint)
+        self.aircraft_table = QTableWidget(0, 8)
+        self.aircraft_table.setHorizontalHeaderLabels([
+            "Flight", "ICAO", "Reg.", "Type", "Altitude (ft)",
+            "Speed (kt)", "Track (°)", "Seen",
+        ])
+        self.aircraft_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.aircraft_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.aircraft_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.aircraft_table.setAlternatingRowColors(True)
+        self.aircraft_table.verticalHeader().setVisible(False)
+        self.aircraft_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        self.aircraft_table.horizontalHeader().setStretchLastSection(True)
+        self.aircraft_table.setMinimumHeight(170)
+        self.aircraft_table.setMaximumHeight(260)
+        self.aircraft_table.itemDoubleClicked.connect(self._show_aircraft_details)
+        planes.addWidget(self.aircraft_table)
+        aircraft_actions = QHBoxLayout()
+        self.details_button = QPushButton("Aircraft details")
+        self.details_button.clicked.connect(self._show_aircraft_details)
+        self.follow_button = QPushButton("Show selected on map")
+        self.follow_button.clicked.connect(self._focus_selected_map)
+        aircraft_actions.addWidget(self.details_button)
+        aircraft_actions.addWidget(self.follow_button)
+        planes.addLayout(aircraft_actions)
+
+        self.settings_toggle = QToolButton()
+        self.settings_toggle.setText("▸  Receiver settings and startup options")
+        self.settings_toggle.setCheckable(True)
+        self.settings_toggle.toggled.connect(self._toggle_settings)
+        body.addWidget(self.settings_toggle)
+        self.settings_frame = QFrame()
+        self.settings_frame.setObjectName("card")
+        settings = QVBoxLayout(self.settings_frame)
+        settings.setContentsMargins(16, 16, 16, 16)
+        settings.addWidget(text("INPUT SOURCE", "sectionTitle"))
         self.mode_select = QComboBox()
         self.mode_select.addItems(MODES)
-        sources.addWidget(self.mode_select)
-        sources.addWidget(label("Remote aircraft.json URL (for Remote JSON mode)", "muted"))
+        settings.addWidget(self.mode_select)
+        settings.addWidget(text("Remote aircraft.json URL (remote mode only)", "muted"))
         self.remote_field = QLineEdit()
-        self.remote_field.setPlaceholderText("http://192.168.1.10/tar1090/data/aircraft.json")
-        sources.addWidget(self.remote_field)
-        sources.addWidget(label("readsb executable (optional, for Direct readsb mode)", "muted"))
+        self.remote_field.setPlaceholderText("http://receiver.lan/data/aircraft.json")
+        settings.addWidget(self.remote_field)
+        settings.addWidget(text("readsb executable (direct receiver mode only)", "muted"))
         self.decoder_field = QLineEdit()
         self.decoder_field.setPlaceholderText("Auto-detect from PATH")
-        sources.addWidget(self.decoder_field)
-        save_button = QPushButton("Apply receiver configuration")
-        save_button.clicked.connect(self._apply_config)
-        sources.addWidget(save_button)
-        self.boot_checkbox = QCheckBox("Start Linux services at system boot")
+        settings.addWidget(self.decoder_field)
+        apply_button = QPushButton("Apply receiver configuration")
+        apply_button.clicked.connect(self._apply_config)
+        settings.addWidget(apply_button)
+        self.boot_checkbox = QCheckBox("Start readsb / tar1090 at system boot")
         self.boot_checkbox.setVisible(platform.system() == "Linux")
         self.boot_checkbox.toggled.connect(self._toggle_boot)
-        sources.addWidget(self.boot_checkbox)
-        self.layout.addWidget(label("Closing the app stops only a directly launched decoder. Existing system services continue until stopped.", "muted", True))
+        settings.addWidget(self.boot_checkbox)
+        self.diagnostics_button = QPushButton("View receiver diagnostics")
+        self.diagnostics_button.setVisible(platform.system() == "Linux")
+        self.diagnostics_button.clicked.connect(self._show_diagnostics)
+        settings.addWidget(self.diagnostics_button)
+        settings.addWidget(text(
+            "Existing systemd services remain active when this window closes. "
+            "A decoder launched in Direct readsb mode stops with the application.",
+            "muted", True
+        ))
+        body.addWidget(self.settings_frame)
+        self.settings_frame.setVisible(False)
+
+    def _toggle_settings(self, visible: bool):
+        self.settings_frame.setVisible(visible)
+        self.settings_toggle.setText(
+            "▾  Receiver settings and startup options" if visible
+            else "▸  Receiver settings and startup options"
+        )
 
     def _load_config(self):
         mode = str(self.settings.value("mode", self.controller.mode))
+        remote = str(self.settings.value("remote", ""))
+        # Previous versions allowed persisting Remote JSON with no URL.
+        # Recover a useful default on Linux without losing valid saved setups.
+        if mode == "Remote JSON" and not remote.strip():
+            mode = "Linux services" if platform.system() == "Linux" else "Direct readsb"
         self.mode_select.setCurrentText(mode if mode in MODES else self.controller.mode)
-        self.remote_field.setText(str(self.settings.value("remote", "")))
+        self.remote_field.setText(remote)
         self.decoder_field.setText(str(self.settings.value("decoder", "")))
         self._apply_config(quiet=True)
         if platform.system() == "Linux":
             self._boot_updating = True
             try:
-                r = subprocess.run(["/usr/bin/systemctl", "is-enabled", "readsb.service"],
-                                   capture_output=True, text=True, timeout=3, check=False)
-                self.boot_checkbox.setChecked(r.returncode == 0 and r.stdout.strip() == "enabled")
+                result = subprocess.run(
+                    ["/usr/bin/systemctl", "is-enabled", "readsb.service"],
+                    capture_output=True, text=True, timeout=3, check=False
+                )
+                self.boot_checkbox.setChecked(
+                    result.returncode == 0 and result.stdout.strip() == "enabled"
+                )
             except (OSError, subprocess.TimeoutExpired):
                 pass
-            self._boot_updating = False
+            finally:
+                self._boot_updating = False
 
     def _apply_config(self, quiet=False):
         if self.action_future is not None:
             if not quiet:
                 QMessageBox.information(self, "Receiver busy",
-                                        "Wait for the current receiver operation to complete.")
+                                        "Wait for the current operation to finish.")
+            return
+        mode = self.mode_select.currentText()
+        remote = self.remote_field.text().strip()
+        if mode == "Remote JSON" and not remote:
+            if not quiet:
+                QMessageBox.warning(self, "Missing receiver URL",
+                                    "Enter a valid http:// or https:// aircraft.json URL.")
             return
         try:
-            self.controller.configure(self.mode_select.currentText(),
-                                      self.remote_field.text(),
-                                      self.decoder_field.text())
+            self.controller.configure(mode, remote, self.decoder_field.text())
             self.settings.setValue("mode", self.controller.mode)
             self.settings.setValue("remote", self.controller.remote_url)
             self.settings.setValue("decoder", self.controller.decoder_path)
@@ -213,11 +370,13 @@ class RadarWindow(QMainWindow):
                 QMessageBox.warning(self, "Receiver configuration", str(exc))
 
     def _invalidate_snapshot(self):
-        """Reject old async reads after any lifecycle or configuration change."""
         self._snapshot_generation += 1
         self.last_data = None
         self.last_messages = None
         self.last_time = None
+        self.aircraft_rows = []
+        self.aircraft_table.setRowCount(0)
+        self.aircraft_hint.setText("Waiting for current receiver data…")
         for field in self.metric_widgets.values():
             field.setText("—")
         self.rssi.setText("Average aircraft RSSI: —")
@@ -238,9 +397,14 @@ class RadarWindow(QMainWindow):
         if self._boot_updating or platform.system() != "Linux":
             return
         if self.action_future is not None:
+            self._boot_updating = True
+            self.boot_checkbox.setChecked(not enabled)
+            self._boot_updating = False
             return
-        self.action_future = self.pool.submit(service_action, "enable" if enabled else "disable")
-        self.info.setText("Updating system boot preference…")
+        self.action_future = self.pool.submit(
+            service_action, "enable" if enabled else "disable"
+        )
+        self.info.setText("Updating system startup preference…")
 
     def _tick(self):
         if self.action_future is not None and self.action_future.done():
@@ -256,12 +420,20 @@ class RadarWindow(QMainWindow):
         busy = self.action_future is not None
         mode = self.controller.mode
         active, detail = self.controller.status()
-        self.state_label.setText(
-            "●  REMOTE DATA SOURCE" if mode == "Remote JSON" else
-            "●  DECODER STARTING / STOPPING" if busy else
-            "●  DECODER ACTIVE — WAITING FOR RF DATA" if active else
-            "●  DECODER STOPPED"
-        )
+        if mode == "Remote JSON":
+            self.state_label.setText("●  REMOTE RECEIVER")
+            self.state_label.setObjectName("statusWaiting")
+        elif busy:
+            self.state_label.setText("●  RECEIVER OPERATION IN PROGRESS")
+            self.state_label.setObjectName("statusWaiting")
+        elif active:
+            self.state_label.setText("●  DECODER ACTIVE — WAITING FOR MESSAGES")
+            self.state_label.setObjectName("statusWaiting")
+        else:
+            self.state_label.setText("●  RECEIVER STOPPED")
+            self.state_label.setObjectName("statusOff")
+        self.state_label.style().unpolish(self.state_label)
+        self.state_label.style().polish(self.state_label)
         self.detail_label.setText(detail)
         self.start_button.setEnabled(not busy and not active and mode != "Remote JSON")
         self.stop_button.setEnabled(not busy and active and mode != "Remote JSON")
@@ -270,51 +442,57 @@ class RadarWindow(QMainWindow):
         self.mode_select.setEnabled(not busy)
         self.diagnostics_button.setEnabled(not busy)
 
-        if busy:
-            return  # Do not read receiver JSON while stop/start is changing hardware.
-        if mode != "Remote JSON" and not active:
-            # A stopped decoder may leave a recent but OLD aircraft.json file.
-            # Never show that snapshot as live traffic after Stop receiver.
+        if busy or (mode != "Remote JSON" and not active):
             return
         if self.snapshot_future is None:
             self._future_generation = self._snapshot_generation
             self.snapshot_future = self.pool.submit(self.controller.snapshot)
         elif self.snapshot_future.done():
             try:
-                data = self.snapshot_future.result()
+                result = self.snapshot_future.result()
                 if self._future_generation != self._snapshot_generation:
-                    return  # Discard pre-restart data read by the old decoder.
-                self.last_data = data
-                summary = summarize(data)
+                    return
+                self.last_data = result
+                summary = summarize(result)
                 now = time.monotonic()
                 total = summary["messages"]
                 rate = 0.0
-                if self.last_time is not None and self.last_messages is not None and total >= self.last_messages:
-                    rate = (total - self.last_messages) / max(now - self.last_time, 0.01)
-                self.last_time, self.last_messages = now, total
+                if (self.last_time is not None and self.last_messages is not None
+                        and total >= self.last_messages):
+                    rate = (total - self.last_messages) / max(now - self.last_time, .01)
+                self.last_messages, self.last_time = total, now
                 for key in ("aircraft", "positioned", "messages"):
                     self.metric_widgets[key].setText(f"{summary[key]:,}")
                 self.metric_widgets["rate"].setText(f"{rate:.1f}")
                 signal = summary["mean_rssi"]
-                self.rssi.setText("Average aircraft RSSI: —" if signal is None
-                                  else f"Average aircraft RSSI: {signal:.1f} dBFS")
-                if mode == "Remote JSON":
-                    self.state_label.setText("●  RECEIVING REMOTE AIRCRAFT DATA")
-                elif active and rate > 0:
-                    self.state_label.setText("●  RECEIVING ADS-B MESSAGES")
-                elif active:
-                    self.state_label.setText("●  DECODER ACTIVE — NO RECENT RF MESSAGES")
-                if active and total == 0:
-                    self.detail_label.setText(
-                        detail + " · No messages yet. Verify antenna, SDR exclusivity and readsb logs."
-                    )
-                elif active:
-                    self.detail_label.setText(detail + " · Aircraft JSON updating.")
+                self.rssi.setText(
+                    "Average aircraft RSSI: —" if signal is None
+                    else f"Average aircraft RSSI: {signal:.1f} dBFS"
+                )
+                self._update_aircraft(result.get("aircraft", []))
+                if total > 0 and rate > 0:
+                    self.state_label.setText("●  RECEIVING ADS-B / MODE S")
+                    self.state_label.setObjectName("statusGood")
+                elif mode == "Remote JSON":
+                    self.state_label.setText("●  REMOTE DATA CONNECTED")
+                    self.state_label.setObjectName("statusGood")
+                else:
+                    self.state_label.setText("●  DECODER ACTIVE — NO RECENT MESSAGES")
+                    self.state_label.setObjectName("statusWaiting")
+                self.state_label.style().unpolish(self.state_label)
+                self.state_label.style().polish(self.state_label)
+                self.detail_label.setText(
+                    detail + (" · Aircraft data updating." if total > 0
+                              else " · No RF messages yet. Check antenna/SDR ownership.")
+                )
             except Exception as exc:
                 if self._future_generation == self._snapshot_generation:
                     self.last_data = None
-                    self.last_time = None
                     self.last_messages = None
+                    self.last_time = None
+                    self.aircraft_rows = []
+                    self.aircraft_table.setRowCount(0)
+                    self.aircraft_hint.setText("No fresh receiver data. " + str(exc)[:100])
                     for field in self.metric_widgets.values():
                         field.setText("—")
                     self.rssi.setText("Average aircraft RSSI: —")
@@ -322,38 +500,125 @@ class RadarWindow(QMainWindow):
             finally:
                 self.snapshot_future = None
 
+    def _update_aircraft(self, records):
+        recent = [
+            aircraft for aircraft in records
+            if isinstance(aircraft, dict) and recently_seen(aircraft)
+        ]
+        recent.sort(key=lambda a: a.get("seen", 999))
+        self.aircraft_rows = recent[:200]
+        # Preserve selection when subsequent snapshots update rows.
+        old_index = self.aircraft_table.currentRow()
+        selected_icao = None
+        if 0 <= old_index < self.aircraft_table.rowCount():
+            cell = self.aircraft_table.item(old_index, 1)
+            selected_icao = cell.text() if cell else None
+        self.aircraft_table.setRowCount(len(self.aircraft_rows))
+        reselect = -1
+        for i, aircraft in enumerate(self.aircraft_rows):
+            for j, value in enumerate(aircraft_fields(aircraft)):
+                self.aircraft_table.setItem(i, j, QTableWidgetItem(value))
+            if aircraft.get("hex") and str(aircraft["hex"]) == selected_icao:
+                reselect = i
+        if reselect >= 0:
+            self.aircraft_table.selectRow(reselect)
+        self.aircraft_hint.setText(
+            f"{len(recent)} aircraft received in the last 60 seconds · "
+            f"{sum(isinstance(a.get('lat'), (int, float)) and isinstance(a.get('lon'), (int, float)) and isinstance(a.get('seen_pos'), (int, float)) and a['seen_pos'] <= 60 for a in recent)} with recent coordinates"
+        )
+
+    def _selected_aircraft(self) -> dict | None:
+        index = self.aircraft_table.currentRow()
+        if index < 0 or index >= len(self.aircraft_rows):
+            QMessageBox.information(self, "Select an aircraft",
+                                    "Choose a received aircraft from the list first.")
+            return None
+        return self.aircraft_rows[index]
+
+    def _show_aircraft_details(self, *_):
+        aircraft = self._selected_aircraft()
+        if aircraft is None:
+            return
+        position = (
+            f"{aircraft['lat']:.5f}, {aircraft['lon']:.5f}"
+            if isinstance(aircraft.get("lat"), (int, float))
+            and isinstance(aircraft.get("lon"), (int, float))
+            else "Not broadcast / unavailable"
+        )
+        fields = [
+            ("Callsign", flight_label(aircraft)),
+            ("ICAO / aircraft address", aircraft.get("hex")),
+            ("Registration", aircraft.get("r")),
+            ("Aircraft type", aircraft.get("t")),
+            ("Position", position),
+            ("Position age", display(aircraft.get("seen_pos"), "s")),
+            ("Barometric altitude", display(aircraft.get("alt_baro"), " ft")),
+            ("Geometric altitude", display(aircraft.get("alt_geom"), " ft")),
+            ("Ground speed", display(aircraft.get("gs"), " kt")),
+            ("Track", display(aircraft.get("track"), "°")),
+            ("Vertical speed", display(aircraft.get("baro_rate"), " ft/min")),
+            ("RSSI", display(aircraft.get("rssi"), " dBFS")),
+            ("Last seen", display(aircraft.get("seen"), "s")),
+            ("Message count", display(aircraft.get("messages"))),
+            ("Data type", aircraft.get("type")),
+        ]
+        body = "\n".join(f"{key}: {display(value)}" for key, value in fields)
+        dialog = QMessageBox(self)
+        dialog.setWindowTitle("Aircraft information")
+        dialog.setTextFormat(Qt.TextFormat.PlainText)
+        dialog.setText(body)
+        dialog.setDetailedText(json.dumps(aircraft, indent=2, ensure_ascii=False))
+        dialog.exec()
+
+    def _open_map(self):
+        webbrowser.open(self.map_server.url)
+
+    def _focus_selected_map(self):
+        aircraft = self._selected_aircraft()
+        if aircraft is None:
+            return
+        icao = str(aircraft.get("hex") or "")
+        if not icao:
+            self._open_map()
+            return
+        webbrowser.open(self.map_server.url + "?aircraft=" + quote(icao, safe=""))
+
     def _show_diagnostics(self):
-        """Read-only systemd diagnostic output, without sudo or changing settings."""
         if platform.system() != "Linux":
             return
-        lines = []
-        for label_, command in (
-            ("readsb service", ["/usr/bin/systemctl", "status", "readsb.service",
-                                "--no-pager", "--lines=10"]),
-            ("Recent readsb log", ["journalctl", "-u", "readsb.service",
-                                  "-n", "15", "--no-pager"]),
+        reports = []
+        for heading, command in (
+            ("readsb status", ["/usr/bin/systemctl", "status", "readsb.service",
+                              "--no-pager", "--lines=10"]),
+            ("readsb logs", ["journalctl", "-u", "readsb.service",
+                             "-n", "15", "--no-pager"]),
         ):
             try:
-                result = subprocess.run(command, capture_output=True, text=True,
-                                        check=False, timeout=4)
-                output = (result.stdout or result.stderr or "No information available.")[-2000:]
-                lines.append(f"{label_}:\n{output}")
+                r = subprocess.run(command, capture_output=True, text=True,
+                                   check=False, timeout=4)
+                reports.append(f"{heading}:\n{(r.stdout or r.stderr or 'No information')[-1800:]}")
             except (OSError, subprocess.TimeoutExpired) as exc:
-                lines.append(f"{label_}: {exc}")
-        QMessageBox.information(self, "Receiver diagnostics", "\n\n".join(lines))
+                reports.append(f"{heading}: {exc}")
+        dialog = QMessageBox(self)
+        dialog.setWindowTitle("Receiver diagnostics")
+        dialog.setTextFormat(Qt.TextFormat.PlainText)
+        dialog.setText("\n\n".join(reports))
+        dialog.exec()
 
     def _export(self):
         if self.last_data is None:
-            QMessageBox.information(self, "No live data", "No fresh aircraft.json data is available to export.")
+            QMessageBox.information(self, "No live data",
+                                    "No fresh aircraft.json snapshot is available.")
             return
-        filename, _ = QFileDialog.getSaveFileName(
-            self, "Export real ADS-B snapshot",
+        name, _ = QFileDialog.getSaveFileName(
+            self, "Export aircraft JSON",
             str(Path.home() / "Downloads" / "tihulu-aircraft.json"),
-            "JSON Files (*.json)")
-        if filename:
+            "JSON Files (*.json)"
+        )
+        if name:
             try:
-                export_json(self.last_data, Path(filename))
-                self.info.setText(f"Exported received data: {filename}")
+                export_json(self.last_data, Path(name))
+                self.info.setText("Saved real aircraft snapshot: " + name)
             except (OSError, DataError) as exc:
                 QMessageBox.warning(self, "Export failed", str(exc))
 
@@ -368,7 +633,18 @@ class RadarWindow(QMainWindow):
 def main() -> int:
     application = QApplication(sys.argv)
     application.setApplicationName("Tihulu Flight Radar")
-    application.setStyleSheet(STYLES)
+    application.setStyle("Fusion")
+    palette = QPalette()
+    palette.setColor(QPalette.ColorRole.Window, QColor("#11161e"))
+    palette.setColor(QPalette.ColorRole.WindowText, QColor("#e9eef5"))
+    palette.setColor(QPalette.ColorRole.Base, QColor("#1c242f"))
+    palette.setColor(QPalette.ColorRole.AlternateBase, QColor("#222d39"))
+    palette.setColor(QPalette.ColorRole.Text, QColor("#e9eef5"))
+    palette.setColor(QPalette.ColorRole.Button, QColor("#2b394a"))
+    palette.setColor(QPalette.ColorRole.ButtonText, QColor("#f4f7fa"))
+    palette.setColor(QPalette.ColorRole.Highlight, QColor("#2b7290"))
+    application.setPalette(palette)
+    application.setStyleSheet(STYLE)
     window = RadarWindow()
     window.show()
     return application.exec()
