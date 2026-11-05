@@ -20,7 +20,10 @@ def main():
         assert window.map_button.text()
         assert window.full_map_button.text()
         assert window.export_button.text()
+        assert window.quick_export_button.text()
         assert window.boot_checkbox.text()
+        assert window.lan_label is not None
+        assert window.diagnostics_button is not None
         assert window.mode_select.count() == 3
         assert window.remote_field is not None
         assert window.decoder_field is not None
