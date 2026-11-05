@@ -20,7 +20,9 @@ a{color:#b1cfed}label{font-size:12px}
 <body>
 <header><strong>✈ Tihulu Flight Radar</strong><small>LIVE RECEIVER DATA ONLY</small>
 <button id="zoomIn">Zoom +</button><button id="zoomOut">Zoom −</button>
-<button id="refocus" title="Center on the nearest live aircraft">Focus nearest</button>
+<button id="refocus" title="Focus on the closest real aircraft to the selected position">Focus nearest aircraft</button>
+<button id="germany" title="Show Germany even when no aircraft are available">Show Germany</button>
+<button id="receiver" title="Center map on saved receiver coordinates">Center receiver</button>
 <button id="locate" title="Use browser location (requires permission)">Use my location</button>
 <button id="manualLocation" title="Save receiver coordinates in this browser">Set receiver position</button>
 <label><input type="checkbox" id="tiles" checked> Online OpenStreetMap tiles</label>
@@ -35,8 +37,11 @@ const cv=document.getElementById("canvas"),ctx=cv.getContext("2d");
 const rows=document.getElementById("rows"),status=document.getElementById("status");
 const tileSwitch=document.getElementById("tiles"),cache=new Map(),tracks=new Map();
 const focusState=document.getElementById("focusState"), focusMath=window.TihuluMapFocus;
-let lat=null,lon=null,zoom=10,items=[],centered=false,aircraftFocused=false,drag=null,userMoved=false;
-let emptyMessage="Waiting for real aircraft positions";
+// Germany is a VIEWPORT fallback, not a claimed receiver or aircraft location.
+const GERMANY_DEFAULT={lat:51.1657,lon:10.4515};
+let lat=GERMANY_DEFAULT.lat,lon=GERMANY_DEFAULT.lon,zoom=6;
+let items=[],centered=true,aircraftFocused=false,drag=null,userMoved=false;
+let emptyMessage="No aircraft positions received yet";
 let reference=null, referenceSource="", locationRequest=0;
 function setReference(value, source) {
  const p=focusMath.point(value);
@@ -45,9 +50,18 @@ function setReference(value, source) {
 }
 // Display the receiver/user's actual, explicitly provided location while
 // waiting for positional ADS-B data. This does NOT create an aircraft marker.
+function centerOnGermany(force=false) {
+ if (userMoved&&!force)return false;
+ lat=GERMANY_DEFAULT.lat;lon=GERMANY_DEFAULT.lon;zoom=6;
+ centered=true;aircraftFocused=false;
+ if(force)userMoved=false;
+ focusState.textContent="Showing Germany (default map, not receiver location)";
+ paint();
+ return true;
+}
 function centerOnReference(force=false) {
  if (!reference || (userMoved&&!force)) return false;
- lat=reference.lat;lon=reference.lon;centered=true;
+ lat=reference.lat;lon=reference.lon;zoom=10;centered=true;
  if(force)userMoved=false;
  focusState.textContent="Showing "+referenceSource+" — no fresh aircraft position yet";
  paint();
@@ -58,27 +72,29 @@ try {
  if (stored) setReference(stored,"saved receiver position");
 } catch (_) { /* Malformed saved preference; use live data only. */ }
 if(reference)centerOnReference();
+else centerOnGermany();
 function focusNearest(force=false) {
  if (userMoved&&!force) return;
- const selection=focusMath.chooseFocus(items, reference);
+ // With no known receiver/browser coordinates, rank real aircraft by
+ // their proximity to Germany's *default map center*, not to the user.
+ const selection=focusMath.chooseFocus(items, reference||GERMANY_DEFAULT);
  if (!selection) {
-   // An empty sky should not hide the real geographic map if a receiver
-   // position or permitted device position is available.
    if(reference)centerOnReference(force);
-   else if(!centered)focusState.textContent="Waiting for fresh positions — set receiver location to view the map";
+   else centerOnGermany(force);
    return;
  }
- lat=selection.aircraft.lat;lon=selection.aircraft.lon;centered=true;aircraftFocused=true;
+ lat=selection.aircraft.lat;lon=selection.aircraft.lon;zoom=10;
+ centered=true;aircraftFocused=true;
  if (force) userMoved=false;
  const callsign=String(selection.aircraft.flight||selection.aircraft.hex||"aircraft").trim();
- focusState.textContent=selection.method==="nearest"
-   ? "Nearest to "+referenceSource+": "+callsign+" ("+Math.round(selection.distanceKm)+" km)"
-   : "Centered on received aircraft cluster: "+callsign+" (location unavailable)";
+ const place=reference?referenceSource:"Germany default map center";
+ focusState.textContent="Nearest aircraft to "+place+": "+callsign+
+   " ("+Math.round(selection.distanceKm)+" km)";
  paint();
 }
 function requestBrowserLocation() {
  if (!navigator.geolocation) {
-   focusState.textContent="Browser geolocation unavailable; using received aircraft";
+   focusState.textContent="Browser geolocation unavailable — showing Germany or saved receiver position";
    return;
  }
  const id=++locationRequest;
@@ -92,10 +108,18 @@ function requestBrowserLocation() {
  },()=>{
    if(id!==locationRequest)return;
    if(!centered)focusNearest();
-   if(!reference)focusState.textContent="Location unavailable — waiting for received aircraft positions";
+   if(!reference)focusState.textContent="Location unavailable — showing Germany (default map)";
  },{enableHighAccuracy:false,maximumAge:600000,timeout:6000});
 }
 document.getElementById("refocus").onclick=()=>focusNearest(true);
+document.getElementById("germany").onclick=()=>{
+ centerOnGermany(true);
+ userMoved=true;  // Keep user-selected Germany view until they refocus.
+};
+document.getElementById("receiver").onclick=()=>{
+ if(!reference){focusState.textContent="No receiver coordinates set — use Set receiver position";return;}
+ centerOnReference(true);userMoved=true;
+};
 document.getElementById("locate").onclick=requestBrowserLocation;
 document.getElementById("manualLocation").onclick=()=>{
  const a=prompt("Receiver latitude (-90 to 90):",reference?String(reference.lat):"");
@@ -227,7 +251,12 @@ async function refresh(){
  }
 }
 resize();refresh();setInterval(refresh,3000);
-// Ask only when no saved receiver position is available. Browser decides permission.
-if(!reference)requestBrowserLocation();
+// An explicit location click may prompt for permission. On startup, use an
+// already granted location silently; otherwise display the Germany fallback.
+if(!reference && navigator.permissions && navigator.geolocation) {
+ navigator.permissions.query({name:"geolocation"}).then(result=>{
+   if(result.state==="granted"&&!userMoved)requestBrowserLocation();
+ }).catch(()=>{});
+}
 </script>
 </body></html>

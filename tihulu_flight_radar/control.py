@@ -5,6 +5,7 @@ import platform
 import shutil
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 from .core import DataError, read_local, read_remote
@@ -16,15 +17,54 @@ SYSTEMCTL = "/usr/bin/systemctl"
 MODES = ("Linux services", "Direct readsb", "Remote JSON")
 
 
+def _unit_active(unit: str) -> tuple[bool, str]:
+    """Read-only state check. Active process != confirmed RF reception."""
+    try:
+        result = subprocess.run(
+            [SYSTEMCTL, "is-active", unit],
+            capture_output=True, text=True, timeout=4, check=False,
+        )
+        state = (result.stdout or result.stderr).strip()
+        return result.returncode == 0 and state == "active", state or "unknown"
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return False, f"unknown ({exc})"
+
+
 def linux_service_state() -> tuple[bool, str]:
     if platform.system() != "Linux":
         return False, "Linux service mode is available only on Linux."
-    try:
-        r = subprocess.run([SYSTEMCTL, "is-active", "readsb.service"],
-                           capture_output=True, text=True, timeout=3, check=False)
-        return r.returncode == 0 and r.stdout.strip() == "active", r.stdout.strip() or r.stderr.strip()
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        return False, str(exc)
+    receiver_active, receiver_state = _unit_active("readsb.service")
+    _, map_state = _unit_active("tar1090.service")
+    return receiver_active, f"readsb: {receiver_state} · tar1090: {map_state}"
+
+
+def _verify_transition(action: str, timeout_seconds: float = 8.0) -> None:
+    """Require a stable decoder state, not just a transient systemd 'active'."""
+    expected = action == "start"
+    deadline = time.monotonic() + timeout_seconds
+    matched_since = None
+    last_state = "unknown"
+    while True:
+        active, last_state = _unit_active("readsb.service")
+        now = time.monotonic()
+        if active == expected:
+            if matched_since is None:
+                matched_since = now
+            # Catch the common USB-busy problem where readsb crashes just
+            # after systemd first reports it as active.
+            if not expected or now - matched_since >= 1.5:
+                return
+        else:
+            matched_since = None
+        if now >= deadline:
+            break
+        time.sleep(0.3)
+    target = "active" if expected else "stopped"
+    raise DataError(
+        f"readsb failed to stay {target} after {action}. Current state: {last_state}. "
+        "The SDR may still be in use by another application. "
+        "Inspect: journalctl -u readsb -n 30 --no-pager"
+    )
 
 
 def service_action(action: str) -> str:
@@ -32,16 +72,23 @@ def service_action(action: str) -> str:
         raise DataError("Unsupported service action.")
     if platform.system() != "Linux":
         raise DataError("Systemd service management is Linux-only.")
-    # Compatible with the v0.2 Debian package's narrowly scoped sudoers policy.
+    # The exact argument list matches the narrowly scoped sudoers policy.
+    # Never pass arbitrary strings or request blanket root permissions.
     cmd = ["/usr/bin/sudo", "-n", SYSTEMCTL, action, *UNITS]
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=False)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=False)
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise DataError(f"Service operation failed: {exc}") from exc
-    if r.returncode:
-        detail = (r.stderr or r.stdout).strip()[:500]
-        raise DataError(detail or "Service action failed. Configure restricted sudo access.")
-    return f"Receiver services: {action} completed."
+    if result.returncode:
+        details = (result.stderr or result.stdout).strip()[:500]
+        raise DataError(details or "Service operation failed. Verify the restricted sudo policy.")
+    if action in ("start", "stop"):
+        _verify_transition(action)
+    if action == "start":
+        return "Decoder started. Waiting for ADS-B messages; an active service does not guarantee RF reception."
+    if action == "stop":
+        return "Decoder stopped. Receiver can be used by another SDR module."
+    return f"Receiver boot setting: {action} completed."
 
 
 class ReceiverController:
@@ -87,6 +134,11 @@ class ReceiverController:
             return service_action("start")
         if self.process is not None and self.process.poll() is None:
             return "Direct receiver is already running."
+        if platform.system() == "Linux" and _unit_active("readsb.service")[0]:
+            raise DataError(
+                "The readsb system service already owns the SDR. "
+                "Stop Linux services before selecting Direct readsb mode."
+            )
         binary = self.decoder_path or shutil.which("readsb")
         if not binary and platform.system() == "Darwin":
             for candidate in ("/opt/homebrew/bin/readsb", "/usr/local/bin/readsb"):
@@ -112,6 +164,13 @@ class ReceiverController:
             self._directory = None
             raise DataError(f"Cannot launch readsb: {exc}") from exc
         return "Starting local readsb. Waiting for real aircraft messages."
+
+    def restart(self) -> str:
+        """Stop and start the selected receiver, surfacing start failures."""
+        if self.mode == "Remote JSON":
+            raise DataError("Remote receiver restart must happen on its own computer.")
+        self.stop()
+        return self.start()
 
     def stop(self) -> str:
         if self.mode == "Remote JSON":

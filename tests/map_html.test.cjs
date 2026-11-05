@@ -30,3 +30,17 @@ test("the OSM layer is usable before aircraft positions arrive if location is kn
   assert.match(html, /grid\(\);\s*if\(tileSwitch\.checked\)/);
   assert.doesNotMatch(html, /let lat=0,lon=0/);
 });
+
+
+test("Germany is the explicit map fallback, never a synthetic aircraft", () => {
+  assert.match(html, /const GERMANY_DEFAULT=\{lat:51\.1657,lon:10\.4515\}/);
+  assert.match(html, /centerOnGermany\(\)/);
+  assert.match(html, /id="germany"/);
+  assert.match(html, /id="receiver"/);
+  assert.match(html, /id="refocus"/);
+  assert.match(html, /id="locate"/);
+  assert.match(html, /id="manualLocation"/);
+  assert.match(html, /reference\|\|GERMANY_DEFAULT/);
+  assert.match(html, /not receiver location/);
+  assert.match(html, /if\(!aircraftFocused&&positioned\.length&&!userMoved\)focusNearest\(\)/);
+});
