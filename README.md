@@ -130,6 +130,16 @@ See the [feature preservation and Survival Kit checklist](docs/FEATURE_PARITY_AN
   background service startup remains a user-controlled opt-in.
 - Two applications cannot claim the same physical RTL-SDR simultaneously.
 
+## Survival Kit: full tar1090 map on phones and computers
+
+The separate Tihulu Survival Kit integration MUST provide the **complete**
+tar1090 aircraft-map experience on phone, tablet and desktop browsers through
+the same local hostname and authenticated Survival Kit routes. Its lightweight
+built-in aircraft map is a fallback, not a substitute for the rich map.
+For exact map-feature parity, reverse-proxy paths, aircraft/GPS/Germany camera
+priority and multi-device acceptance tests, see the
+[tar1090 full-map integration gate](docs/SURVIVAL_KIT_TAR1090_FULL_MAP_PARITY_2026-11-06.md).
+
 ## Roadmap
 
 - Signed Windows installer and notarized macOS DMG.
