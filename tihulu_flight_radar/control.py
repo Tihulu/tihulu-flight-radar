@@ -70,7 +70,14 @@ class ReceiverController:
             return False, "Direct receiver is stopped."
         code = self.process.poll()
         if code is not None:
-            return False, f"readsb exited with code {code}. Check SDR access and device availability."
+            detail = ""
+            if self._directory is not None:
+                try:
+                    detail = (Path(self._directory.name) / "readsb.log").read_text(
+                        encoding="utf-8", errors="replace")[-500:].strip()
+                except OSError:
+                    pass
+            return False, f"readsb exited with code {code}. {detail}"
         return True, "Direct readsb process is running."
 
     def start(self) -> str:
@@ -81,18 +88,25 @@ class ReceiverController:
         if self.process is not None and self.process.poll() is None:
             return "Direct receiver is already running."
         binary = self.decoder_path or shutil.which("readsb")
+        if not binary and platform.system() == "Darwin":
+            for candidate in ("/opt/homebrew/bin/readsb", "/usr/local/bin/readsb"):
+                if Path(candidate).is_file():
+                    binary = candidate
+                    break
         if not binary:
             raise DataError("readsb not found. Install a compatible native decoder first.")
         if self.decoder_path and not Path(binary).is_file():
             raise DataError("Specified readsb executable does not exist.")
+        if self._directory is not None:
+            self._directory.cleanup()
         self._directory = tempfile.TemporaryDirectory(prefix="tihulu-flight-radar-")
         cmd = [str(binary), "--device-type", "rtlsdr", "--device", "0",
                "--gain", "auto", "--write-json", self._directory.name,
                "--write-json-every", "1", "--quiet"]
         try:
-            self.process = subprocess.Popen(cmd, stdin=subprocess.DEVNULL,
-                                            stdout=subprocess.DEVNULL,
-                                            stderr=subprocess.DEVNULL)
+            with (Path(self._directory.name) / "readsb.log").open("wb") as log:
+                self.process = subprocess.Popen(cmd, stdin=subprocess.DEVNULL,
+                                                stdout=log, stderr=subprocess.STDOUT)
         except OSError as exc:
             self._directory.cleanup()
             self._directory = None
