@@ -272,6 +272,10 @@ class RadarWindow(QMainWindow):
 
         if busy:
             return  # Do not read receiver JSON while stop/start is changing hardware.
+        if mode != "Remote JSON" and not active:
+            # A stopped decoder may leave a recent but OLD aircraft.json file.
+            # Never show that snapshot as live traffic after Stop receiver.
+            return
         if self.snapshot_future is None:
             self._future_generation = self._snapshot_generation
             self.snapshot_future = self.pool.submit(self.controller.snapshot)
