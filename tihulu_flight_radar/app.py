@@ -24,6 +24,7 @@ from .map_server import LocalMapServer
 
 STYLES = """
 QWidget { background: #10131a; color: #f2f4f8; font-size: 13px; }
+QLabel { background: transparent; }
 QFrame#panel { background: #191f29; border: 1px solid #303845; border-radius: 12px; }
 QLabel#title { font-size: 25px; font-weight: 700; }
 QLabel#heading { color: #96aec0; font-size: 12px; font-weight: 700; }
@@ -67,6 +68,8 @@ class RadarWindow(QMainWindow):
         self.pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="radar")
         self.snapshot_future = None
         self.action_future = None
+        self._snapshot_generation = 0
+        self._future_generation = 0
         self.last_data = None
         self.last_messages = None
         self.last_time = None
@@ -109,9 +112,12 @@ class RadarWindow(QMainWindow):
         self.stop_button = QPushButton("■  Stop receiver")
         self.stop_button.setObjectName("stop")
         self.stop_button.clicked.connect(lambda: self._action("stop"))
+        self.restart_button = QPushButton("↻  Restart receiver")
+        self.restart_button.clicked.connect(lambda: self._action("restart"))
         control_row.addWidget(self.start_button)
         control_row.addWidget(self.stop_button)
         control.addLayout(control_row)
+        control.addWidget(self.restart_button)
         self.info = label("Select an input mode below. One SDR can serve only one decoder at a time.", "muted", True)
         control.addWidget(self.info)
         metrics = panel(self.layout, "Live reception")
@@ -190,21 +196,34 @@ class RadarWindow(QMainWindow):
             self.settings.setValue("mode", self.controller.mode)
             self.settings.setValue("remote", self.controller.remote_url)
             self.settings.setValue("decoder", self.controller.decoder_path)
-            self.last_data = None
-            self.last_messages = None
-            self.last_time = None
+            self._invalidate_snapshot()
             if not quiet:
                 self.info.setText("Receiver configuration applied.")
         except DataError as exc:
             if not quiet:
                 QMessageBox.warning(self, "Receiver configuration", str(exc))
 
+    def _invalidate_snapshot(self):
+        """Reject old async reads after any lifecycle or configuration change."""
+        self._snapshot_generation += 1
+        self.last_data = None
+        self.last_messages = None
+        self.last_time = None
+        for field in self.metric_widgets.values():
+            field.setText("—")
+        self.rssi.setText("Average aircraft RSSI: —")
+
     def _action(self, operation: str):
         if self.action_future is not None:
             return
-        self.info.setText("Applying receiver operation…")
-        method = self.controller.start if operation == "start" else self.controller.stop
-        self.action_future = self.pool.submit(method)
+        self._invalidate_snapshot()
+        self.info.setText(f"{operation.capitalize()} receiver requested…")
+        methods = {
+            "start": self.controller.start,
+            "stop": self.controller.stop,
+            "restart": self.controller.restart,
+        }
+        self.action_future = self.pool.submit(methods[operation])
 
     def _toggle_boot(self, enabled: bool):
         if self._boot_updating or platform.system() != "Linux":
@@ -221,22 +240,35 @@ class RadarWindow(QMainWindow):
             except Exception as exc:
                 self.info.setText(f"Operation failed: {exc}")
                 QMessageBox.warning(self, "Receiver operation failed", str(exc))
-            self.action_future = None
+            finally:
+                self._invalidate_snapshot()
+                self.action_future = None
+
         busy = self.action_future is not None
         mode = self.controller.mode
         active, detail = self.controller.status()
-        self.state_label.setText("●  RECEIVER RUNNING" if active else
-                                 "●  REMOTE MONITOR" if mode == "Remote JSON" else
-                                 "●  RECEIVER STOPPED")
+        self.state_label.setText(
+            "●  REMOTE DATA SOURCE" if mode == "Remote JSON" else
+            "●  DECODER STARTING / STOPPING" if busy else
+            "●  DECODER ACTIVE — WAITING FOR RF DATA" if active else
+            "●  DECODER STOPPED"
+        )
         self.detail_label.setText(detail)
         self.start_button.setEnabled(not busy and not active and mode != "Remote JSON")
         self.stop_button.setEnabled(not busy and active and mode != "Remote JSON")
+        self.restart_button.setEnabled(not busy and active and mode != "Remote JSON")
         self.boot_checkbox.setEnabled(not busy and mode == "Linux services")
+
+        if busy:
+            return  # Do not read receiver JSON while stop/start is changing hardware.
         if self.snapshot_future is None:
+            self._future_generation = self._snapshot_generation
             self.snapshot_future = self.pool.submit(self.controller.snapshot)
         elif self.snapshot_future.done():
             try:
                 data = self.snapshot_future.result()
+                if self._future_generation != self._snapshot_generation:
+                    return  # Discard pre-restart data read by the old decoder.
                 self.last_data = data
                 summary = summarize(data)
                 now = time.monotonic()
@@ -251,15 +283,27 @@ class RadarWindow(QMainWindow):
                 signal = summary["mean_rssi"]
                 self.rssi.setText("Average aircraft RSSI: —" if signal is None
                                   else f"Average aircraft RSSI: {signal:.1f} dBFS")
-                self.detail_label.setText(detail + "  ·  Real aircraft.json received.")
+                if mode == "Remote JSON":
+                    self.state_label.setText("●  RECEIVING REMOTE AIRCRAFT DATA")
+                elif active and rate > 0:
+                    self.state_label.setText("●  RECEIVING ADS-B MESSAGES")
+                elif active:
+                    self.state_label.setText("●  DECODER ACTIVE — NO RECENT RF MESSAGES")
+                if active and total == 0:
+                    self.detail_label.setText(
+                        detail + " · No messages yet. Verify antenna, SDR exclusivity and readsb logs."
+                    )
+                elif active:
+                    self.detail_label.setText(detail + " · Aircraft JSON updating.")
             except Exception as exc:
-                self.last_data = None
-                self.last_time = None
-                self.last_messages = None
-                for metric in self.metric_widgets.values():
-                    metric.setText("—")
-                self.rssi.setText("Average aircraft RSSI: —")
-                self.detail_label.setText(str(exc)[:180])
+                if self._future_generation == self._snapshot_generation:
+                    self.last_data = None
+                    self.last_time = None
+                    self.last_messages = None
+                    for field in self.metric_widgets.values():
+                        field.setText("—")
+                    self.rssi.setText("Average aircraft RSSI: —")
+                    self.detail_label.setText(str(exc)[:180])
             finally:
                 self.snapshot_future = None
 
