@@ -116,10 +116,22 @@ function worldY(x){return mercY(x)*Math.pow(2,zoom)*256}
 function pt(a,b){const s=devicePixelRatio;return [cv.width/2+(worldX(b)-worldX(lon))*s,cv.height/2+(worldY(a)-worldY(lat))*s]}
 function resize(){cv.width=cv.clientWidth*devicePixelRatio;cv.height=cv.clientHeight*devicePixelRatio;paint()}
 window.addEventListener("resize",resize);
-function tile(z,x,y){const key=z+"/"+x+"/"+y;if(cache.has(key))return cache.get(key);
+function tile(z,x,y){
+ const key=z+"/"+x+"/"+y;
+ if(cache.has(key)){
+   const existing=cache.get(key);
+   // An unavailable tile must not be fetched again every 3 seconds while offline.
+   if(!existing.failedAt || Date.now()-existing.failedAt<60000)return existing;
+   cache.delete(key);
+ }
  if(cache.size>120)cache.clear();
- const im=new Image();im.crossOrigin="anonymous";im.onload=paint;im.onerror=()=>{cache.delete(key)};
- im.src="https://tile.openstreetmap.org/"+key+".png";cache.set(key,im);return im;
+ const im=new Image();
+ im.crossOrigin="anonymous";
+ im.onload=paint;
+ im.onerror=()=>{cache.set(key,{failedAt:Date.now()});paint()};
+ im.src="https://tile.openstreetmap.org/"+key+".png";
+ cache.set(key,im);
+ return im;
 }
 function grid(){ctx.strokeStyle="#304559";ctx.fillStyle="#91a5b9";ctx.lineWidth=1*devicePixelRatio;
  ctx.font=(11*devicePixelRatio)+"px sans-serif";
