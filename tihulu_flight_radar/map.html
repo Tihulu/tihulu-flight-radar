@@ -23,7 +23,7 @@ a{color:#b1cfed}label{font-size:12px}
 <label><input type="checkbox" id="tiles"> Online OpenStreetMap tiles</label>
 <small id="updated">Waiting for receiver…</small></header>
 <main><section><canvas id="canvas"></canvas><div id="legend">Offline coordinate grid · Tracks are session-only · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a></div></section>
-<aside><h3>Aircraft received</h3><p id="status">No receiver data yet.</p><table><thead><tr><th>ICAO / Callsign</th><th>Altitude</th><th>Speed</th></tr></thead><tbody id="rows"></tbody></table><p>No coordinates? The aircraft stays in this list and is not placed on the map.</p></aside></main>
+<aside><h3>Aircraft received</h3><p id="status">No receiver data yet.</p><table><thead><tr><th>ICAO / Callsign</th><th>Altitude (ft)</th><th>Speed (kt)</th></tr></thead><tbody id="rows"></tbody></table><p>No coordinates? The aircraft stays in this list and is not placed on the map.</p></aside></main>
 <script>
 "use strict";
 const cv=document.getElementById("canvas"),ctx=cv.getContext("2d");
