@@ -34,6 +34,24 @@ password prompts after the one-time package installation. Review
 packaging/linux/sudoers.conf before installation. The app does not install
 a decoder or RTL-SDR driver by itself.
 
+## Linux installation (Pop!_OS, Ubuntu, Debian)
+
+Install or upgrade from GitHub **main** with the
+[interactive Linux installer](scripts/install-linux.sh). It installs the
+Python application through pipx, adds a COSMIC/XDG Applications launcher
+and icon, removes only the obsolete `tihulu-adsb-radar` and duplicate
+`tihulu-flight-radar` Debian packages if present, and grants the current
+Linux account narrowly scoped `readsb`/`tar1090` service controls.
+
+The ADS-B receiver services are **not removed**. Run as your normal user:
+
+```bash
+f="$(mktemp)" && curl -fLsS https://raw.githubusercontent.com/Tihulu/tihulu-flight-radar/main/scripts/install-linux.sh -o "$f" && bash "$f"; rm -f "$f"
+```
+
+Review the installer source before running scripts that request sudo.
+Afterward launch from **COSMIC Applications → Tihulu Flight Radar**
+or use `~/.local/bin/tihulu-flight-radar`.
 ## Development run
 
 Requires Python 3.11+ (3.12 recommended).
