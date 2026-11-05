@@ -26,7 +26,8 @@ from PySide6.QtWidgets import (
 
 from . import __version__
 from .control import MODES, ReceiverController, service_action
-from .core import DataError, export_json, summarize, recently_seen
+from .core import (DataError, detect_sdr_processes, export_json, find_tar1090_url,
+                   lan_ip, summarize, recently_seen)
 from .map_server import LocalMapServer
 
 
@@ -142,6 +143,7 @@ class RadarWindow(QMainWindow):
         self.pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="tihulu-radar")
         self.snapshot_future = None
         self.action_future = None
+        self.map_future = None
         self._snapshot_generation = 0
         self._future_generation = 0
         self.last_data = None
@@ -229,19 +231,24 @@ class RadarWindow(QMainWindow):
 
         map_section = add_card(body, "Map & exports")
         map_row = QHBoxLayout()
-        self.map_button = QPushButton("↗  Open live aircraft map")
+        self.map_button = QPushButton("↗  Open built-in aircraft map")
         self.map_button.setObjectName("map")
         self.map_button.clicked.connect(self._open_map)
-        self.export_button = QPushButton("↓  Export JSON")
-        self.export_button.clicked.connect(self._export)
-        map_row.addWidget(self.map_button, 2)
-        map_row.addWidget(self.export_button, 1)
+        self.full_map_button = QPushButton("↗  Open full tar1090 map")
+        self.full_map_button.clicked.connect(self._open_tar1090)
+        map_row.addWidget(self.map_button)
+        map_row.addWidget(self.full_map_button)
         map_section.addLayout(map_row)
+        self.export_button = QPushButton("↓  Export live JSON snapshot")
+        self.export_button.clicked.connect(self._export)
+        map_section.addWidget(self.export_button)
         map_section.addWidget(text(
-            "Map opens even without aircraft. Uses real flight positions, permitted "
-            "location, or Germany as the default viewport.",
+            "Built-in map opens even without aircraft (Germany default). "
+            "Full tar1090 map preserves the earlier detailed aircraft view when installed.",
             "muted", True
         ))
+        self.lan_label = text("LAN tar1090 map: checking…", "muted")
+        map_section.addWidget(self.lan_label)
 
         planes = add_card(body, "Aircraft currently received")
         self.aircraft_hint = text("Waiting for recent ADS-B / Mode S aircraft…", "muted", True)
@@ -330,6 +337,11 @@ class RadarWindow(QMainWindow):
         self.decoder_field.setText(str(self.settings.value("decoder", "")))
         self._apply_config(quiet=True)
         if platform.system() == "Linux":
+            address = lan_ip()
+            self.lan_label.setText(
+                f"LAN tar1090 map: http://{address}/tar1090/"
+                if address else "LAN tar1090 URL unavailable — use local map"
+            )
             self._boot_updating = True
             try:
                 result = subprocess.run(
@@ -407,6 +419,23 @@ class RadarWindow(QMainWindow):
         self.info.setText("Updating system startup preference…")
 
     def _tick(self):
+        if self.map_future is not None and self.map_future.done():
+            try:
+                url = self.map_future.result()
+                if url:
+                    webbrowser.open(url)
+                    self.info.setText("Full tar1090 aircraft map opened.")
+                else:
+                    QMessageBox.information(
+                        self, "Full map unavailable",
+                        "tar1090 is not reachable. Open the built-in map instead, "
+                        "or check the tar1090/lighttpd services."
+                    )
+            except Exception as exc:
+                self.info.setText(f"Map discovery failed: {exc}")
+            finally:
+                self.map_future = None
+
         if self.action_future is not None and self.action_future.done():
             try:
                 self.info.setText(str(self.action_future.result()))
@@ -572,6 +601,11 @@ class RadarWindow(QMainWindow):
 
     def _open_map(self):
         webbrowser.open(self.map_server.url)
+
+    def _open_tar1090(self):
+        if self.map_future is None:
+            self.info.setText("Checking for the full local tar1090 map…")
+            self.map_future = self.pool.submit(find_tar1090_url)
 
     def _focus_selected_map(self):
         aircraft = self._selected_aircraft()
