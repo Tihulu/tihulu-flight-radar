@@ -89,7 +89,7 @@
       <label><input id="showTiles" type="checkbox" checked> OSM tiles</label>
     </div>
     <div class="maptools">
-      <button id="expandMap" aria-pressed="false" title="Expand this independent browser radar map, even with readsb stopped">Full radar map</button><button id="focus">Focus aircraft</button><button id="cologne">Cologne</button>
+      <button id="fullTar1090" type="button" title="Open the complete bundled upstream tar1090 with live in-browser RF and Internet data">Full tar1090 interface</button><button id="expandMap" aria-pressed="false" title="Expand this independent browser radar map, even with readsb stopped">Full radar map</button><button id="focus">Focus aircraft</button><button id="cologne">Cologne</button>
       <button id="germany">Germany</button><button id="locate">Use my location</button>
       <button id="searchHere" title="Fetch Internet aircraft around the current map view, without changing your receiver location">Search here</button>
       <button id="zoomIn" aria-label="Zoom in">+</button><button id="zoomOut" aria-label="Zoom out">−</button>
@@ -114,7 +114,15 @@
    <h2>Selected aircraft</h2><pre id="details" class="details">Select an aircraft to inspect its received fields and source provenance.</pre>
   </aside>
  </div>
- <footer><span id="message" role="status">Ready — choose USB above or configure an Internet feed. No artificial flights are generated.</span><span>Offline-first · <a href="https://github.com/Tihulu/tihulu-flight-radar" target="_blank" rel="noopener noreferrer">GitHub source</a></span></footer>
+ <section id="tarBrowserShell" class="tar-browser-shell" hidden aria-label="Full tar1090 aircraft map and details interface">
+ <div class="tar-browser-title">
+  <strong>tar1090 — full interface · genuine WebUSB and Internet aircraft</strong>
+  <span>Original tar1090 frontend, browser data adapter · photo and metadata services require Internet</span>
+  <button id="closeFullTar" type="button" aria-label="Close full tar1090 and return to Flight Radar">Close full tar1090</button>
+ </div>
+ <iframe id="fullTarFrame" title="Original tar1090 aircraft map, photo, registration, airline and aircraft information" referrerpolicy="same-origin" loading="lazy"></iframe>
+</section>
+<footer><span id="message" role="status">Ready — choose USB above or configure an Internet feed. No artificial flights are generated.</span><span>Offline-first · <a href="https://github.com/Tihulu/tihulu-flight-radar" target="_blank" rel="noopener noreferrer">GitHub source</a></span></footer>
 </main>
 <script src="./app.js" defer></script>
 <script type="module" src="./browser_usb.mjs"></script>
