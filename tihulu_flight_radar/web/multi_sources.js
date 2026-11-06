@@ -34,12 +34,13 @@ const TihuluMultiSources = (() => {
   if(id==="adsbfi")upstream="https://opendata.adsb.fi/api/v3/lat/"+a+"/lon/"+b+"/dist/"+r;
   if(id==="opensky"){
    // Bounded approximate circle -> a small bounding box, then exact great-circle filter.
-   const dl=r/60,dn=dl/Math.max(0.15,Math.cos(lat*Math.PI/180));
+   const coarseLat=Number(a),coarseLon=Number(b);
+   const dl=r/60,dn=dl/Math.max(0.15,Math.cos(coarseLat*Math.PI/180));
    const u=new URL("https://opensky-network.org/api/states/all");
-   u.searchParams.set("lamin",String(Math.max(-90,lat-dl)));
-   u.searchParams.set("lamax",String(Math.min(90,lat+dl)));
-   u.searchParams.set("lomin",String(Math.max(-180,lon-dn)));
-   u.searchParams.set("lomax",String(Math.min(180,lon+dn)));
+   u.searchParams.set("lamin",String(Math.max(-90,coarseLat-dl)));
+   u.searchParams.set("lamax",String(Math.min(90,coarseLat+dl)));
+   u.searchParams.set("lomin",String(Math.max(-180,coarseLon-dn)));
+   u.searchParams.set("lomax",String(Math.min(180,coarseLon+dn)));
    upstream=u.href;
   }
   // Third-party public relay; never pass raw IQ, credentials, pairing tokens,
@@ -80,7 +81,8 @@ const TihuluMultiSources = (() => {
    const hex=hexValue(a);
    if(!hex||seenIds.has(hex)||!positionOk(a)||
       distanceNM(lat,lon,a.lat,a.lon)>radius)continue;
-   const seen=Number(a.seen),seenPos=Number(a.seen_pos);
+   if(typeof a.seen!=="number"||typeof a.seen_pos!=="number")continue;
+   const seen=a.seen,seenPos=a.seen_pos;
    if(!Number.isFinite(seen)||seen<0||seen>60||
       !Number.isFinite(seenPos)||seenPos<0||seenPos>60)continue;
    seenIds.add(hex);
