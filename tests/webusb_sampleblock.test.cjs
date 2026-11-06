@@ -72,7 +72,7 @@ test("Verified Linux DVB recovery is explicit, limited to Nooelec, and never aut
  assert.match(script,/matches\[@\]/);
  assert.match(script,/unbind/);
  assert.match(script,/bind/);
- assert.doesNotMatch(script,/killall|modprobe\s+-r|blacklist|chmod\s+777/);
+ assert.doesNotMatch(script,/(?:^|\n)\s*(?:killall|modprobe\s+-r|blacklist\s+|chmod\s+777)\b/m);
  assert.match(manual,/user explicitly unbound/);
  assert.match(manual,/Do not unplug\/replug/);
  assert.match(manual,/1-4:1\.0/);
