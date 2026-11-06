@@ -65,6 +65,25 @@ Requires Python 3.11+ (3.12 recommended).
 
 All visible UI copy, messages, docs and workflows are in English.
 
+
+## GitHub Pages and paired local web receiver (development candidate)
+
+A responsive static web dashboard has been added under `tihulu_flight_radar/web/` for GitHub Pages and local browser use. **This feature is not released or published yet.** The intended project URL after enabling the Pages deployment workflow is `https://tihulu.github.io/tihulu-flight-radar/`.
+
+To use local USB ADS-B data, launch the paired companion on the **receiver computer**, not on GitHub Pages:
+
+```sh
+# From a checkout of the development branch (Python 3.11+):
+python -m pip install --no-deps .
+tihulu-flight-bridge
+```
+
+Open `http://127.0.0.1:8510/`, enter the session pairing token displayed in the terminal and choose **Antenna only**, **Internet only**, **Hybrid**, or **Auto**. Bridge hardware controls default **disabled**; use `tihulu-flight-bridge --allow-control` for explicit authenticated hardware Start/Stop/Restart. Local readsb and direct RTL-SDR still require platform-specific drivers/decoder. No Python or USB code can run directly on GitHub Pages. Internet data on the Pages app presently also uses the paired companion (because the public providers' browser CORS support is not assured).
+
+The bridge binds only to loopback. **Pi/Survival Kit secure LAN/mobile connectivity and a no-companion hosted online provider are not implemented yet.** Other platforms can run the local bridge and use the already existing Qt desktop build previews; ARM64 Pi is source-based/CI smoke tested, not yet hardware-validated. The desktop Qt dashboard and full tar1090 viewer are retained unchanged.
+
+See [Web, GitHub Pages and bridge guide](docs/GITHUB_PAGES_AND_LOCAL_BRIDGE.md), [feature issue #5](https://github.com/Tihulu/tihulu-flight-radar/issues/5) and [Survival Kit issue #9](https://github.com/Tihulu/tihulu-survival-kit/issues/9).
+
 ## Receiver modes
 
 - **Linux services**: controls an already installed readsb + tar1090 systemd
