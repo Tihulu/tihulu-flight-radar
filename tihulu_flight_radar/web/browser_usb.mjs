@@ -4,7 +4,9 @@
  * Driver is pinned to the same release used by Tihulu Satellite Center.
  * Worker receives raw IQ locally; the SDR bytes are NEVER uploaded.
  */
-const LIBRARY="https://esm.sh/@jtarrio/webrtlsdr@3.0.7/rtlsdr.js?bundle";
+// Bundled by GitHub Actions from pinned Apache-2.0 @jtarrio/webrtlsdr 3.0.7.
+// No third-party JavaScript executes from a runtime CDN on the public site.
+const LIBRARY="./vendor/rtlsdr.mjs";
 let Driver=null, device=null, chosenDevice=null, worker=null;
 let stopRequested=false,readLoop=null,ackResolve=null,bytes=0,alreadyReported=false;
 const $=id=>document.getElementById(id);
@@ -28,7 +30,7 @@ async function preload(){
   tell("WebUSB ready. Stop readsb/Gqrx/welle.io if they own your only RTL-SDR before choosing USB.");
  }catch(error){
   tell("Browser RTL-SDR driver could not load: "+error.message+
-       ". Check the browser network connection. No USB device was opened.",true);
+       ". The static GitHub Pages WebUSB bundle may be missing. No USB device was opened.",true);
  }
 }
 function usbError(error){
