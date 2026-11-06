@@ -422,14 +422,37 @@ canvas.addEventListener("wheel",e=>{
 $("connect").onclick=connect;
 $("disconnect").onclick=disconnect;
 $("refresh").onclick=refresh;
+function tarFocusURL(raw){
+ const url=new URL(raw);
+ if(!["http:","https:"].includes(url.protocol) || url.username || url.password)
+  throw Error("Use a valid HTTP(S) tar1090 URL without embedded credentials.");
+ // Do not replace a previously saved manual map view unless user opens tar1090.
+ const visibleFresh=state.data.filter(a=>visible(a)&&isPositioned(a));
+ const ref={lat:state.lat,lon:state.lon};
+ visibleFresh.sort((a,b)=>{
+  const d=x=>Math.pow(x.lat-ref.lat,2)+Math.pow((x.lon-ref.lon)*Math.cos(ref.lat*Math.PI/180),2);
+  return d(a)-d(b);
+ });
+ const best=visibleFresh[0]||null;
+ const center=best||ref;
+ for(const param of ["icao","noIsolation","SiteLat","SiteLon","centerReceiver","zoom"])
+  url.searchParams.delete(param);
+ url.searchParams.set("SiteLat",center.lat.toFixed(6));
+ url.searchParams.set("SiteLon",center.lon.toFixed(6));
+ url.searchParams.set("zoom",best?"10":"7");
+ url.searchParams.set("centerReceiver","");
+ // ICAO selection only if the aircraft really came from our antenna.
+ if(best && best.sources?.includes("antenna") && /^[0-9a-f]{6}$/i.test(best.hex||"")){
+  url.searchParams.set("icao",best.hex);
+  url.searchParams.set("noIsolation","");
+ }
+ return url.href;
+}
 $("fullMap").onclick=()=>{
  const raw=prompt("Full tar1090 URL (receiver must host tar1090):","http://127.0.0.1/tar1090/");
  if(raw===null)return;
  try{
-  const u=new URL(raw);
-  if(!["http:","https:"].includes(u.protocol) || u.username || u.password)
-   throw Error("Use a valid HTTP(S) tar1090 URL without embedded credentials.");
-  window.open(u.href,"_blank","noopener,noreferrer");
+  window.open(tarFocusURL(raw),"_blank","noopener,noreferrer");
  }catch(e){notice("Cannot open tar1090: "+e.message)}
 };
 $("start").onclick=()=>control("start");
