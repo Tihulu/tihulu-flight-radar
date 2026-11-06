@@ -89,3 +89,42 @@ After a user screenshot showed a nonfunctional unpaired page, an invalid bare `1
 - Test RF reception with actual attached RTL-SDR, local readsb and hardware ownership.
 
 These are draft changes in [PR #6](https://github.com/Tihulu/tihulu-flight-radar/pull/6), not a released update.
+
+## November 6, 2026 — Why native shows Internet planes but static Pages showed radio only
+
+The desktop application uses its own Python-backed `DataProvider` to call
+`api.adsb.lol` / `adsb.fi`. A static GitHub Pages origin cannot directly read
+those APIs without the providers enabling browser CORS. Previously the web
+app defaulted to IntelSky, a **military/government-only** CORS-compatible feed,
+so 0 Internet aircraft near Cologne was possible even while the desktop
+showed dozens of general flights. **This is not a USB RF failure.**
+
+The browser/PWA now offers a clearly identified **experimental general ADS-B**
+source, using the external public `cors.dev` gateway to read the
+`adsb.lol` point API without running a local bridge. Selection is visible
+above the radar; in WebUSB mode it is queried alongside true radio messages
+with independent timestamps and I/R source badges.
+
+Limitations to be transparent about:
+- The public gateway is **not operated by TIHULU** and may be unavailable,
+  deny a request, rate-limit its shared egress IP, or be blocked upstream.
+  It is not a guaranteed replacement for the native desktop backend.
+- A public gateway sees the browser's IP address and **coarse map center**
+  (rounded to 0.1°). No WebUSB IQ, pairing token, AirLabs API key, or
+  permissioned high-precision GPS coordinate is forwarded.
+- Requests to the shared gateway are rate-limited by the client and bounded
+  to fixed public ADS-B point endpoints; no arbitrary URL proxying.
+- Source attributions: **adsb.lol, ODbL 1.0**; the gateway is separate.
+  Only actual fresh records from `now` / `seen` / `seen_pos` count as
+  Internet observations. Duplicate ICAO24 IDs combine into one I/R icon.
+- If the relay fails, the SDR stays open and real antenna counts remain.
+  The UI reports the specific error. Network CORS, API usage permissions,
+  upstream quota and availability still need real browser acceptance tests.
+- For reliable use, deploy the existing
+  `deploy/cloudflare-worker.mjs` to a **user-owned HTTPS hosting account**
+  after checking upstream terms and rate limits; enter its fixed
+  `/api/aircraft` URL via Custom provider. Never pretend GitHub Pages alone
+  includes a live server, and never embed private API keys in static JS.
+
+The browser-only source is an enhancement to, not a replacement for,
+the existing local receiver service and separate tar1090 integration.
