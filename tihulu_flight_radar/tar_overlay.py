@@ -58,11 +58,11 @@ MAP_CENTER_JS = r"""JSON.stringify((() => {
 # Even when tar1090 fails to initialize its OpenLayers map, show a visible
 # diagnostic instead of an invisible Internet layer. This does not modify tar.
 BOOTSTRAP_JS = r"""(() => {
-  // tar1090's selected_infoblock is an absolute sidebar on the left.
-  // Mount the TIHULU controls *inside* the actual map_container so they
-  // cannot sit on top of the aircraft information panel.
+  // Both #map_container and #selected_infoblock are in tar1090's layout,
+  // but the selected info block overlays the left side of the map itself.
+  // So mounting to map_container alone DOES NOT prevent collision.
   const host=document.getElementById('map_container');
-  if(!host) return;
+  if(!host)return;
   let panel=document.getElementById('tihulu-tar-overlay-panel');
   if(!panel){
     panel=document.createElement('div');
@@ -70,11 +70,59 @@ BOOTSTRAP_JS = r"""(() => {
     panel.textContent='Internet overlay: waiting for tar1090 map…';
   }
   panel.style.cssText='position:absolute;top:64px;left:12px;z-index:2147483000;'+
-    'box-sizing:border-box;max-width:calc(100% - 24px);width:max-content;'+
+    'box-sizing:border-box;width:max-content;max-width:calc(100% - 24px);'+
     'background:#101d2aef;color:#eaf7ff;padding:9px;border:1px solid #407391;'+
     'border-radius:8px;font:12px/1.4 system-ui;overflow-wrap:anywhere;'+
     'pointer-events:auto';
   if(panel.parentElement!==host)host.appendChild(panel);
+  const layout=()=>{
+    const container=document.getElementById('map_container');
+    const widget=document.getElementById('tihulu-tar-overlay-panel');
+    if(!container||!widget||typeof container.getBoundingClientRect!=='function')return;
+    const bounds=container.getBoundingClientRect();
+    if(!Number.isFinite(bounds.width)||bounds.width<=0)return;
+    const selected=document.getElementById('selected_infoblock');
+    let left=12;
+    if(selected && typeof selected.getBoundingClientRect==='function'){
+      const style=window.getComputedStyle?.(selected);
+      const rect=selected.getBoundingClientRect();
+      const showing=style?.display!=='none' && style?.visibility!=='hidden' &&
+        rect.width>30 && rect.height>30 &&
+        rect.right>bounds.left && rect.left<bounds.right &&
+        rect.bottom>bounds.top+64 && rect.top<bounds.bottom;
+      if(showing){
+        // Rectangles are measured in viewport coordinates. Subtract the
+        // actual map origin rather than blindly adding the sidebar width.
+        left=Math.max(12,Math.ceil(rect.right-bounds.left)+12);
+      }
+    }
+    const space=Math.max(0,Math.floor(bounds.width-left-12));
+    widget.style.left=left+'px';
+    widget.style.top='64px';
+    widget.style.maxWidth=space+'px';
+    widget.style.width='max-content';
+    widget.style.display=space<75?'none':'';
+    widget.style.padding=space<170?'5px':'9px';
+    widget.style.font=space<170?'10px/1.3 system-ui':'12px/1.4 system-ui';
+  };
+  window.tihuluTarPlacePanel=layout;
+  if(!window.tihuluTarLayoutObservers){
+    window.tihuluTarLayoutObservers=true;
+    window.addEventListener?.('resize',layout);
+    const selected=document.getElementById('selected_infoblock');
+    if(typeof ResizeObserver!=='undefined'){
+      const obs=new ResizeObserver(layout);
+      obs.observe(host);
+      if(selected)obs.observe(selected);
+      window.tihuluTarSizeObserver=obs;
+    }
+    if(selected && typeof MutationObserver!=='undefined'){
+      const obs=new MutationObserver(layout);
+      obs.observe(selected,{attributes:true,attributeFilter:['style','class','hidden']});
+      window.tihuluTarSelectedObserver=obs;
+    }
+  }
+  layout();
 })()"""
 
 # Delivered from the native application into the local tar1090 WebEngine page.
@@ -199,6 +247,7 @@ OVERLAY_JS = r"""(function(input){
     panel.appendChild(status);
     const host=document.getElementById('map_container');
     if(host && panel.parentElement!==host)host.appendChild(panel);
+    window.tihuluTarPlacePanel?.();
     app.status=status;
     window.tihuluTarOverlay=app;
   }
@@ -308,7 +357,9 @@ class TarOverlayView(QWebEngineView):
             return
         # Refresh R badges as original tar1090 moves its own RF airplanes,
         # independent of the low-rate Internet provider.
-        self.page().runJavaScript("window.tihuluTarOverlay?.updateRadio?.()", 0)
+        self.page().runJavaScript(
+            "window.tihuluTarPlacePanel?.();"
+            "window.tihuluTarOverlay?.updateRadio?.()", 0)
         if self._pending is not None:
             if self._pending.done():
                 f, generation=self._pending, self._generation
