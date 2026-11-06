@@ -17,29 +17,41 @@ from .core import recently_seen, position_is_fresh
 
 # tar1090 (wiedehopf) defines the lexical OLMap map in html/script.js.
 MAP_CENTER_JS = r"""(() => {
-  if (typeof OLMap === 'undefined' || !OLMap || typeof ol === 'undefined')
-    return null;
-  // These are view-only changes. Do not mutate SiteLat/SiteLon or tar1090's
-  // receiver location: doing so produces a fake center dot and range rings.
-  if (typeof siteCircleLayer !== 'undefined' && siteCircleLayer)
-    siteCircleLayer.setVisible(false);
-  if (typeof locationDotLayer !== 'undefined' && locationDotLayer)
-    locationDotLayer.setVisible(false);
-  if (!window.tihuluTarCameraApplied) {
+  // Run in Qt WebEngine's MainWorld: tar1090 defines OLMap with top-level let.
+  // This routine does not change receiver coordinates, configurations or data.
+  try {
     const params = new URLSearchParams(location.search);
-    const a = Number(params.get('tihuluFocusLat'));
-    const b = Number(params.get('tihuluFocusLon'));
-    if (params.has('tihuluFocusLat') && params.has('tihuluFocusLon') &&
-        Number.isFinite(a) && Number.isFinite(b) &&
-        Math.abs(a)<=90 && Math.abs(b)<=180) {
-      OLMap.getView().setCenter(ol.proj.fromLonLat([b,a]));
-      OLMap.getView().setZoom(Number(params.get('zoom')) || 9);
+    const map = typeof OLMap !== 'undefined' ? OLMap : null;
+    const olLib = typeof ol !== 'undefined' ? ol : null;
+    if (!map || !map.getView || !olLib || !olLib.proj) {
+      return {ready:false, reason:'Waiting for tar1090 OpenLayers (OLMap/ol)'};
     }
-    window.tihuluTarCameraApplied = true;
+    if (typeof siteCircleLayer !== 'undefined' && siteCircleLayer &&
+        typeof siteCircleLayer.setVisible === 'function')
+      siteCircleLayer.setVisible(false);
+    if (typeof locationDotLayer !== 'undefined' && locationDotLayer &&
+        typeof locationDotLayer.setVisible === 'function')
+      locationDotLayer.setVisible(false);
+    if (!window.tihuluTarCameraApplied) {
+      const hasCoords=params.has('tihuluFocusLat') && params.has('tihuluFocusLon');
+      const a=Number(params.get('tihuluFocusLat'));
+      const b=Number(params.get('tihuluFocusLon'));
+      if (hasCoords && Number.isFinite(a) && Number.isFinite(b) &&
+          Math.abs(a)<=90 && Math.abs(b)<=180) {
+        map.getView().setCenter(olLib.proj.fromLonLat([b,a]));
+        const zoom=Number(params.get('zoom'));
+        if (Number.isFinite(zoom) && zoom>=2 && zoom<=18)
+          map.getView().setZoom(zoom);
+      }
+      window.tihuluTarCameraApplied = true;
+    }
+    const p=olLib.proj.toLonLat(map.getView().getCenter());
+    if (!p || !Number.isFinite(p[0]) || !Number.isFinite(p[1]))
+      return {ready:false,reason:'Map is loading a valid geographic center'};
+    return {ready:true,lon:p[0],lat:p[1]};
+  } catch(error) {
+    return {ready:false,reason:'OpenLayers initialization: ' + String(error).slice(0,180)};
   }
-  const p = ol.proj.toLonLat(OLMap.getView().getCenter());
-  if (!p || !isFinite(p[0]) || !isFinite(p[1])) return null;
-  return {lon:p[0],lat:p[1]};
 })()"""
 
 # Even when tar1090 fails to initialize its OpenLayers map, show a visible
