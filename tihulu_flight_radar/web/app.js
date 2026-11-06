@@ -26,6 +26,10 @@ function visible(a){
         (c==="internet" && $("showInternet").checked);
 }
 function getBase(raw){
+ // People naturally type "127.0.0.1:8510" without a scheme.
+ // Normalize only known loopback origins; never downgrade arbitrary hosts.
+ raw=String(raw||"").trim();
+ if(/^(?:localhost|127\\.0\\.0\\.1)(?::[0-9]{1,5})?\\/?$/i.test(raw)) raw="http://"+raw;
  const u=new URL(raw);
  if(u.username || u.password || u.search || u.hash || u.pathname!=="/") throw Error("Use a bridge origin without a path or credentials.");
  if(u.protocol==="http:" && !["127.0.0.1","localhost","[::1]"].includes(u.hostname))
@@ -33,6 +37,14 @@ function getBase(raw){
  if(u.protocol!=="https:" && u.protocol!=="http:") throw Error("Bridge URL must use HTTP(S).");
  return u.origin;
 }
+// Called only by our packaged Qt WebEngine wrapper after the trusted local
+// page is loaded. The token is never placed in a URL, cookies or storage.
+window.tihuluNativeConnect=async function(base, token){
+ document.documentElement.classList.add("native");
+ $("bridgeUrl").value=base;
+ $("token").value=token;
+ await connect();
+};
 async function api(path,options={}){
  if(!state.base || !state.token) throw Error("Pair with your local bridge first.");
  const abort=new AbortController(), timeout=setTimeout(()=>abort.abort(),10000);
