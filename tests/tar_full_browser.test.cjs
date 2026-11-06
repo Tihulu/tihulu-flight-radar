@@ -94,3 +94,64 @@ test("No extra USB or readsb process is started by the tar frontend adapter",()=
  assert.match(adapter,/jQuery\.ajaxTransport\("\+json"/);
  assert.match(adapter,/data\/\(receiver|aircraft/);
 });
+
+
+test("Internet-only full tar1090 draws genuine planes with no receiver or antenna",async()=>{
+ const h=harness(), now=Date.now()/1000;
+ h.handlers.message({
+  origin:"https://tihulu.github.io",source:h.parent,
+  data:{type:"tihulu:tar-aircraft",now,messages:0,aircraft:[
+   {hex:"3C1234",lat:50.94,lon:6.96,seen:3,seen_pos:4,flight:"ONLINE1",sources:["internet"],internet_providers:["adsblol","adsbfi"]},
+   {hex:"abc012",lat:51.0,lon:7.0,seen:2,seen_pos:5,flight:"ONLINE2",sources:["internet"]}
+  ]}
+ });
+ const data=await requestJson(h,"data/aircraft.json");
+ assert.equal(data.messages,0,"internet does not fabricate RF message counters");
+ assert.equal(data.aircraft.length,2);
+ assert.equal(data.aircraft[0].hex,"3c1234");
+ assert.equal(data.aircraft[0].lat,50.94);
+ assert.match(h.status.textContent,/Internet-only/);
+ assert.match(h.status.textContent,/R 0 · I 2 · I\/R 0/);
+ assert.match(browser,/resolveTarBrowserURL/);
+ assert.match(browser,/TRUSTED_HOSTED_TAR/);
+ assert.match(browser,/await setBrowserTar\(true\)/);
+});
+test("Host-only iframe refuses arbitrary origins but accepts explicit local Qt parent",async()=>{
+ const h=harness(),now=Date.now()/1000;
+ h.handlers.message({origin:"http://127.0.0.1.attacker.test:8510",source:h.parent,
+  data:{type:"tihulu:tar-aircraft",now,aircraft:[
+    {hex:"abcdef",lat:51,lon:7,seen:1,seen_pos:1,sources:["internet"]}
+  ]}});
+ assert.equal((await requestJson(h,"data/aircraft.json")).aircraft.length,0);
+ h.handlers.message({origin:"http://127.0.0.1:8510",source:h.parent,
+  data:{type:"tihulu:tar-aircraft",now,aircraft:[
+    {hex:"abcdef",lat:51,lon:7,seen:1,seen_pos:1,sources:["internet"]}
+  ]}});
+ assert.equal((await requestJson(h,"data/aircraft.json")).aircraft.length,1);
+ h.handlers.message({origin:"http://127.0.0.1:8511",source:h.parent,
+  data:{type:"tihulu:tar-aircraft",now,aircraft:[
+    {hex:"abdcba",lat:51,lon:7,seen:1,seen_pos:1,sources:["internet"]}
+  ]}});
+ assert.equal((await requestJson(h,"data/aircraft.json")).aircraft.length,1,
+  "iframe cannot switch owner mid-session");
+});
+test("Combined radio + overlapping Internet stays one tar1090 plane",async()=>{
+ const h=harness(),now=Date.now()/1000;
+ h.handlers.message({origin:"https://tihulu.github.io",source:h.parent,
+  data:{type:"tihulu:tar-aircraft",now,messages:17,aircraft:[
+   {hex:"3c1234",lat:50.9,lon:7,seen:1,seen_pos:1,sources:["internet"]},
+   {hex:"3c1234",lat:50.9,lon:7,seen:1,seen_pos:1,sources:["antenna","internet"]}
+  ]}});
+ const rows=(await requestJson(h,"data/aircraft.json")).aircraft;
+ assert.equal(rows.length,1);
+ assert.match(h.status.textContent,/I\/R 1/);
+ assert.equal((await requestJson(h,"data/aircraft.json")).messages,17);
+});
+test("Browser tar interface has the native-like source layer panel",()=>{
+ assert.match(adapter,/tihulu-source-layers/);
+ assert.match(adapter,/Local radio \(R\)/);
+ assert.match(adapter,/Internet planes \(I\)/);
+ assert.match(adapter,/Both Internet \+ radio \(I\/R\)/);
+ assert.match(adapter,/liveSnapshot\(\)/);
+ assert.match(html,/Full tar1090 · Internet or Radio/);
+});
