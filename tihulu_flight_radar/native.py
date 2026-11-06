@@ -35,7 +35,7 @@ class EmbeddedRadarView(QWebEngineView):
         from .tar_overlay import TarOverlayView
         owner = self.window()
         provider = getattr(getattr(owner, "bridge", None), "online", None)
-        child = TarOverlayView(dialog, provider=provider)
+        child = TarOverlayView(dialog, provider=provider, assume_tar=True)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(child)
         self._popups.append(dialog)
