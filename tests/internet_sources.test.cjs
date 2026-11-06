@@ -230,7 +230,8 @@ test("Relay HTTP 429 and CORS errors show as unavailable, never invent a network
  await assert.rejects(()=>fn(),/Network or CORS blocked/);
 });
 test("Static page selects general ADS-B as the explicit experimental default",()=>{
- assert.match(html,/value="adsblol-relay" selected/);
+ assert.match(html,/value="multi" selected/);
+ assert.match(html,/value="adsblol-relay"/);
  assert.match(html,/independent public cors\.dev relay/);
  assert.match(html,/never raw USB IQ/);
  assert.match(js,/ADSBLOL_PUBLIC_RELAY/);
