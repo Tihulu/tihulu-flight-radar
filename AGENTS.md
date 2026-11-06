@@ -1,5 +1,21 @@
 # TIHULU FLIGHT RADAR — TWO PAGES CONTRACT (read before every change)
 
+## User-verified 0.3.1 stable baseline and optional multi-provider preview (Nov 6, 2026)
+
+Preserve the user's installed Pop!_OS `0.3.1` binary; the native `0.3.2.dev0`
+branch is **opt-in only**. On actual user hardware, antenna (R) and Internet
+(I) planes already work, and the same ICAO shows once as I/R. This is a hard
+regression gate across Linux, macOS, Windows, Pi and both Pages origins.
+
+The preview adds independent network inclusion layers for adsb.lol, adsb.fi,
+OpenSky and IntelSky, with bounded polling, timestamps, provider attribution,
+rate-limits and no duplicate ICAO markers. Airplanes.live is feeder-restricted:
+do not silently poll it. Local RF observations always remain distinguishable
+and RF-preferred. Do not claim live provider availability from fixture tests.
+Read `tihulu_flight_radar/network_sources.py`, `web/multi_sources.js`, and the
+associated tests before changing Internet flight handling.
+
+
 **Source of truth:** `Tihulu/tihulu-flight-radar` — never develop a second, divergent Flight Radar app in TEXT CENTER.
 
 The **same browser build** must be published at BOTH addresses:
