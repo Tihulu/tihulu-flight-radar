@@ -521,15 +521,17 @@ function tarFocusURL(raw){
  const url=new URL(raw);
  if(!["http:","https:"].includes(url.protocol) || url.username || url.password)
   throw Error("Use a valid HTTP(S) tar1090 URL without embedded credentials.");
- // Do not replace a previously saved manual map view unless user opens tar1090.
- const visibleFresh=state.data.filter(a=>visible(a)&&isPositioned(a));
- const ref={lat:state.lat,lon:state.lon};
- visibleFresh.sort((a,b)=>{
-  const d=x=>Math.pow(x.lat-ref.lat,2)+Math.pow((x.lon-ref.lon)*Math.cos(ref.lat*Math.PI/180),2);
-  return d(a)-d(b);
- });
- const best=visibleFresh[0]||null;
- const center=best||ref;
+ // Inherit the already resolved startup camera: permitted location,
+ // genuine nearest RF plane, or Cologne. Do not recenter on arbitrary
+ // Internet aircraft merely because they happen to be visible.
+ const center={lat:state.lat,lon:state.lon};
+ const selected=state.data.find(a=>state.selected===a.hex && isPositioned(a));
+ const bestRadio=selected?.position_source==="antenna" ? selected :
+   (state.startupSource==="antenna"&&!state.moved
+     ? state.data.find(a=>a.position_source==="antenna" &&
+         a.sources?.includes("antenna") && isPositioned(a) &&
+         Math.abs(a.lat-center.lat)<0.01 && Math.abs(a.lon-center.lon)<0.01)
+     : null);
  for(const param of ["icao","noIsolation","SiteLat","SiteLon","centerReceiver",
                       "lockDotCentered","zoom","rangeRings",
                       "tihuluFocusLat","tihuluFocusLon"])
@@ -538,10 +540,10 @@ function tarFocusURL(raw){
  url.searchParams.set("tihuluFocusLat",center.lat.toFixed(6));
  url.searchParams.set("tihuluFocusLon",center.lon.toFixed(6));
  url.searchParams.set("rangeRings","0");
- url.searchParams.set("zoom",best?"10":"7");
+ url.searchParams.set("zoom",String(state.zoom||9));
  // ICAO selection only if the aircraft really came from our antenna.
- if(best && best.sources?.includes("antenna") && /^[0-9a-f]{6}$/i.test(best.hex||"")){
-  url.searchParams.set("icao",best.hex);
+ if(bestRadio && /^[0-9a-f]{6}$/i.test(bestRadio.hex||"")){
+  url.searchParams.set("icao",bestRadio.hex);
   url.searchParams.set("noIsolation","");
  }
  return url.href;
