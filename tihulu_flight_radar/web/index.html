@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#111822">
+<meta name="description" content="Tihulu Flight Radar — source-aware ADS-B radar for a paired local receiver.">
+<title>Tihulu Flight Radar — Web</title>
+<link rel="stylesheet" href="./style.css">
+</head><body>
+<header class="masthead">
+ <div class="brand"><span class="brandmark" aria-hidden="true">✈</span><div><strong>TIHULU FLIGHT RADAR</strong><small>REAL OBSERVATIONS · WEB & LOCAL RECEIVER</small></div></div>
+ <div class="connection"><span id="connectionDot" class="dot"></span><span id="connectionLabel" role="status">Not paired</span></div>
+</header>
+<main>
+ <div class="toolbar">
+  <label class="field">Bridge URL <input id="bridgeUrl" value="http://127.0.0.1:8510" spellcheck="false" aria-label="Local bridge URL"></label>
+  <label class="field token">Session pairing token <input id="token" type="password" placeholder="Paste token from local bridge terminal" autocomplete="off"></label>
+  <button id="connect" class="primary">Connect</button><button id="disconnect">Disconnect</button>
+  <label class="field">Source mode <select id="mode">
+   <option value="auto">Auto (local first)</option><option value="antenna">Antenna only</option>
+   <option value="internet">Internet only</option><option value="hybrid">Hybrid</option>
+  </select></label>
+  <button id="refresh">Refresh now</button>
+ </div>
+ <div class="notice">GitHub Pages hosts only this interface. Install and run the local bridge on the device with the receiver. Online requests use the paired bridge; public aircraft APIs may not support browser CORS. Internet queries send the selected map center to adsb.lol.</div>
+ <div class="metrics" aria-label="Live source statistics">
+  <div class="metric"><span>Local aircraft</span><strong id="localCount">—</strong></div>
+  <div class="metric"><span>Online aircraft</span><strong id="onlineCount">—</strong></div>
+  <div class="metric"><span>Unique aircraft</span><strong id="combinedCount">—</strong></div>
+  <div class="metric"><span>Last update</span><strong id="lastUpdate" class="small">—</strong></div>
+ </div>
+ <div class="layout">
+  <section class="map-panel" aria-label="Aircraft map">
+   <div class="mapbar">
+    <div class="overlays" aria-label="Map source filters">
+      <label><input id="showAntenna" type="checkbox" checked><i class="key antenna"></i> Antenna</label>
+      <label><input id="showInternet" type="checkbox" checked><i class="key internet"></i> Internet</label>
+      <label><input id="showBoth" type="checkbox" checked><i class="key both"></i> Both</label>
+      <label><input id="showTracks" type="checkbox" checked> Tracks</label>
+      <label><input id="showTiles" type="checkbox" checked> OSM tiles</label>
+    </div>
+    <div class="maptools">
+      <button id="focus">Focus aircraft</button><button id="germany">Germany</button>
+      <button id="locate">Use my location</button>
+      <button id="zoomIn" aria-label="Zoom in">+</button><button id="zoomOut" aria-label="Zoom out">−</button>
+    </div>
+   </div>
+   <canvas id="map" role="img" aria-label="Live geographic aircraft map, with offline coordinate grid"></canvas>
+   <div class="mapfooter"><span id="mapLabel">Germany default view · no receiver position assumed</span><span><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a> · online aircraft © adsb.lol (ODbL)</span></div>
+  </section>
+  <aside class="side">
+   <h2>Receiver</h2>
+   <p id="receiverStatus" class="muted">Connect to a trusted local bridge to inspect receiver state.</p>
+   <div class="buttons"><button id="start">Start</button><button id="stop">Stop</button><button id="restart">Restart</button></div>
+   <h2>Sources</h2><p id="feedStatus" class="muted">No source connected.</p>
+   <h2>Aircraft <span id="visibleCount" class="muted">0</span></h2>
+   <div class="tablewrap"><table><thead><tr><th>Flight / ICAO</th><th>Altitude</th><th>Speed</th><th>Source</th></tr></thead><tbody id="aircraftRows"></tbody></table></div>
+   <h2>Selected aircraft</h2><pre id="details" class="details">Select an aircraft to inspect its received fields and source provenance.</pre>
+  </aside>
+ </div>
+ <footer><span id="message" role="status">Ready — connect to a bridge. No artificial flights are generated.</span><span>Offline-first · <a href="https://github.com/Tihulu/tihulu-flight-radar" target="_blank" rel="noopener noreferrer">GitHub source</a></span></footer>
+</main>
+<script src="./app.js" defer></script>
+</body></html>
