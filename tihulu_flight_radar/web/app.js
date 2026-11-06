@@ -168,6 +168,10 @@ function configuredOnlineFeed(){
  state.onlineProvider=$("onlinePreset")?.value||"intelsky";
  if(state.onlineProvider==="off")return "";
  if(state.onlineProvider==="intelsky")return INTELSKY_URL;
+ if(state.onlineProvider==="airlabs"){
+  if(!String($("airlabsKey")?.value||"").trim())throw Error("AirLabs needs your own personal API key (session only).");
+  return "https://airlabs.co/api/v9/flights";
+ }
  return getFeedURL($("onlineFeedUrl").value);
 }
 function greatCircleNM(lat1,lon1,lat2,lon2){
@@ -177,6 +181,26 @@ function greatCircleNM(lat1,lon1,lat2,lon2){
 }
 function normalizeInternetPayload(raw,provider,lat,lon,radius,now=Date.now()/1000){
  const limited=provider==="intelsky";
+ if(provider==="airlabs"){
+  if(raw?.error)throw Error("AirLabs: "+String(raw.error.message||raw.error.code||"API error").slice(0,150));
+  if(!Array.isArray(raw?.response))throw Error("AirLabs response has no aircraft array.");
+  const rows=raw.response.slice(0,10000).map(a=>{
+   if(!a||typeof a!=="object")return null;
+   const updateAge=Number.isFinite(a.updated)?now-a.updated:0;
+   return {
+    hex:a.hex,flight:a.flight_icao||a.flight_iata||a.flight_number||null,
+    lat:a.lat,lon:a.lng,
+    alt_baro:Number.isFinite(a.alt)?a.alt*3.280839895:null,
+    gs:Number.isFinite(a.speed)?a.speed/1.852:null,
+    track:Number.isFinite(a.dir)?a.dir:null,
+    seen:updateAge,seen_pos:updateAge,
+    observation_age_unknown:!Number.isFinite(a.updated),
+    flight_source_fields:{aircraft_icao:a.aircraft_icao,registration:a.reg_number}
+   };
+  }).filter(Boolean);
+  raw={generated_at:now,aircraft:rows,provider:"AirLabs",
+    attribution:"AirLabs.co · API-key-based live flight data (plan coverage and quotas apply)"};
+ }
  const stamp=Number(limited?raw?.now:raw?.generated_at);
  const age=now-stamp;
  if(!Number.isFinite(stamp)||age < -10||age > 90)
@@ -214,8 +238,18 @@ async function fetchInternetFeed(){
  if(!state.onlineFeed)throw Error("No Internet source is configured.");
  if(Date.now()<state.internetBackoffUntil)
   throw Error("Internet feed cooling down after rate limit or outage; retry later.");
- const limited=state.onlineProvider==="intelsky",u=new URL(state.onlineFeed);
- if(!limited){
+ const limited=state.onlineProvider==="intelsky",airlabs=state.onlineProvider==="airlabs";
+ const u=new URL(state.onlineFeed);
+ if(airlabs){
+  u.searchParams.set("api_key",String($("airlabsKey").value).trim());
+  const radius=Math.min(250,state.queryRadius),latD=radius/60;
+  const lonD=latD/Math.max(0.15,Math.cos(state.queryLat*Math.PI/180));
+  u.searchParams.set("bbox",[
+    Math.max(-90,state.queryLat-latD),Math.max(-180,state.queryLon-lonD),
+    Math.min(90,state.queryLat+latD),Math.min(180,state.queryLon+lonD)
+  ].map(x=>x.toFixed(3)).join(","));
+  u.searchParams.set("_fields","hex,flight_icao,flight_iata,flight_number,lat,lng,alt,dir,speed,updated,aircraft_icao,reg_number");
+ }else if(!limited){
   u.searchParams.set("lat",state.queryLat.toFixed(3));
   u.searchParams.set("lon",state.queryLon.toFixed(3));
   u.searchParams.set("radius",String(state.queryRadius));
@@ -233,7 +267,7 @@ async function fetchInternetFeed(){
   }
   const text=await response.text();
   if(text.length>4*1024*1024)throw Error("Internet response exceeds 4 MiB.");
-  return normalizeInternetPayload(JSON.parse(text),limited?"intelsky":"custom",
+  return normalizeInternetPayload(JSON.parse(text),limited?"intelsky":airlabs?"airlabs":"custom",
     state.queryLat,state.queryLon,state.queryRadius);
  }catch(error){
   if(error?.name==="AbortError")throw Error("Internet feed timeout (10 seconds).");
@@ -765,6 +799,7 @@ const preset=$("onlinePreset");
 const customFeed=$("onlineFeedUrl");
 function showProviderChoice(){
  customFeed.disabled=preset.value!=="custom";
+ $("airlabsKeyField").hidden=preset.value!=="airlabs";
  customFeed.title=customFeed.disabled
   ?"Select Custom HTTPS/CORS ADS-B feed to enter a URL."
   :"Only trusted /api/aircraft endpoints with documented CORS and source attribution.";
