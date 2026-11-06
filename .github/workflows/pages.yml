@@ -1,7 +1,7 @@
 name: Publish Flight Radar GitHub Pages
 on:
   push:
-    branches: [feature/github-pages-local-bridge-2026-11-06]
+    branches: [feature/github-pages-local-bridge-2026-11-06, feature/tar1090-internet-only-2026-11-06]
     paths:
       - "tihulu_flight_radar/web/**"
       - "tihulu_flight_radar/network_sources.py"
@@ -15,6 +15,8 @@ on:
       - "tests/multi_sources.test.cjs"
       - "tests/test_multi_sources.py"
       - "tests/webusb_sampleblock.test.cjs"
+      - "tests/tar_full_browser.test.cjs"
+      - "scripts/install-linux.sh"
   pull_request:
     branches: [main]
     paths:
