@@ -2,7 +2,7 @@
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#111822">
-<meta name="description" content="Tihulu Flight Radar — source-aware ADS-B radar for a paired local receiver.">
+<meta name="description" content="Tihulu Flight Radar — genuine ADS-B from browser WebUSB, optional Internet and paired receiver.">
 <title>Tihulu Flight Radar — Web</title>
 <link rel="stylesheet" href="./style.css">
 <link rel="manifest" href="./manifest.webmanifest">
@@ -23,7 +23,16 @@
    <button id="usbStop" disabled>Hard stop / release USB</button>
    <span id="usbStatus" role="status" aria-live="polite">Checking direct browser USB capability…</span>
   </div>
-  <p class="usb-hint">No desktop app, Python server or pairing token required. This page reads genuine ADS-B on 1090 MHz and decodes verified messages inside your browser. It stops USB on tab hide/close. A device already occupied by readsb or another SDR app cannot be claimed by the browser.</p>
+  <p class="usb-hint">No desktop app, Python server or pairing token required. This page reads genuine ADS-B on 1090 MHz and decodes verified messages inside your browser. It stops USB on tab hide/close. If a desktop readsb decoder still owns your single SDR, WebUSB cannot claim it.</p>
+  <details id="usbHelp" class="usb-help">
+   <summary>USB cannot connect? Check permissions and driver conflicts (no installation)</summary>
+   <div class="usb-check-actions">
+    <button id="usbCheck" type="button">Check USB permissions (read-only)</button>
+    <button id="usbCopy" type="button">Copy diagnostics</button>
+   </div>
+   <pre id="usbReport" role="status" aria-live="polite">The permission check does not open the USB receiver or interrupt any running program.</pre>
+   <p class="usb-hint">If the RTL-SDR is busy, close Flight Radar desktop, Gqrx, Satellite Center or other receivers. On Pop!_OS, if the readsb systemd service is still active and you want to pause it, use the terminal command shown in this report. Browser scripts cannot stop system services or change USB permissions.</p>
+  </details>
  </section>
  <details class="bridge-advanced"><summary>Optional: paired receiver / Internet feed settings (advanced)</summary>
  <div class="toolbar">
