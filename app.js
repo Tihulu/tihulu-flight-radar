@@ -520,6 +520,15 @@ async function connect(){
    state.connected=true;displayUsbSnapshot();
    if(!state.timer)state.timer=setInterval(()=>{if(!document.hidden)refresh()},15000);
    notice("Optional Internet feed failed; direct WebUSB remains connected: "+e.message);
+  }else if(state.connectionKind==="internet" && state.onlineFeed){
+   // A public CORS relay outage should not permanently end the browser's
+   // Internet-only session. Retry while visible without touching RF devices.
+   state.token="";state.connected=true;
+   connection(true,"Internet source configured · awaiting live observations");
+   $("networkStatus").textContent="Internet unavailable: "+e.message+" · automatic retry while tab is visible.";
+   $("feedStatus").textContent="Antenna: not connected\nInternet: unavailable ("+e.message+")";
+   if(!state.timer)state.timer=setInterval(()=>{if(!document.hidden)refresh()},15000);
+   notice("Internet source unavailable: "+e.message+". Retrying automatically; no aircraft will be shown without fresh observations.");
   }else{
    state.connected=false;state.token="";state.connectionKind="none";
    connection(false,"Not connected");
@@ -693,6 +702,11 @@ async function refresh(raise=false){
                   internet:state.data.filter(a=>a.sources?.includes("internet")).length,
                   combined:state.data.length});
   renderTable();paint();
+  if(state.connectionKind==="internet"){
+   $("networkStatus").textContent="Internet unavailable: "+e.message+
+     ". Retrying while this tab remains open; no simulated aircraft.";
+   $("feedStatus").textContent="Antenna: not connected\nInternet: unavailable ("+e.message+")";
+  }
   notice("Feed unavailable: "+e.message+". Showing only remaining fresh real observations, not new aircraft.");
   if(raise)throw e;
   return false;
@@ -1090,8 +1104,26 @@ if("serviceWorker" in navigator && location.protocol==="https:"){
  window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js",{scope:"./"}).catch(()=>{}));
 }
 if(location.hostname==="tihulu.github.io"){
- $("mode").value="auto";
- notice("GitHub Pages ready. Start Direct WebUSB for actual 1090 MHz ADS-B, or configure an Internet feed. No local app is required.");
+ // Both GitHub Pages sites share this source. Load public Internet flights
+ // automatically in the foreground without claiming USB or opening a bridge.
+ $("mode").value="internet";
+ notice("Loading real adsb.lol Internet aircraft near the selected map region. Antenna remains optional.");
+ const startPagesInternet=()=>{
+  if(state.connectionKind!=="none" || $("onlinePreset").value==="off")return;
+  void connect();
+ };
+ if(document.hidden){
+  const onFirstVisible=()=>{
+   if(document.hidden)return;
+   document.removeEventListener("visibilitychange",onFirstVisible);
+   startPagesInternet();
+  };
+  document.addEventListener("visibilitychange",onFirstVisible);
+ }else startPagesInternet();
+ document.addEventListener("visibilitychange",()=>{
+  if(!document.hidden && state.connected && state.connectionKind!=="bridge")
+   void refresh();
+ });
 }
 
 initializeStartupLocation();
