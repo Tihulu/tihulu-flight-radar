@@ -15,6 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from PySide6.QtCore import Qt, QUrl, QSettings, QTimer
 from PySide6.QtGui import QAction
+from PySide6.QtWebEngineCore import QWebEnginePermission
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import QApplication, QDialog, QMainWindow, QMessageBox, QVBoxLayout
 
@@ -106,6 +107,7 @@ class NativeRadarWindow(QMainWindow):
         self.web = EmbeddedRadarView(self)
         self.setCentralWidget(self.web)
         self.web.loadFinished.connect(self._paired_on_loaded)
+        self.web.page().permissionRequested.connect(self._location_permission_requested)
         # This desktop installation can start in the selected region without
         # misrepresenting it as the real antenna position or requesting GPS.
         region = str(self.settings.value("start_region", "cologne")).lower()
@@ -155,6 +157,33 @@ class NativeRadarWindow(QMainWindow):
         # The startup is asynchronous so failing sudo/USB detection cannot
         # freeze the entire map or prevent Internet aircraft rendering.
         QTimer.singleShot(700, self._start_receiver_if_needed)
+
+    def _location_permission_requested(self, permission):
+        # The main application may request location for startup viewport only.
+        # Never grant it silently, and never permit another origin to receive
+        # location. Denial falls back to the nearest real RF plane or Cologne.
+        origin = permission.origin()
+        if (permission.permissionType()
+                != QWebEnginePermission.PermissionType.Geolocation):
+            permission.deny()
+            return
+        if (origin.scheme() != "http" or origin.host() != "127.0.0.1"
+                or origin.port() != self.server.server_port):
+            permission.deny()
+            return
+        choice = QMessageBox.question(
+            self, "Flight Radar location",
+            "Use your current location as the initial radar map center?\n"
+            "If unavailable or declined, the app will focus on the nearest "
+            "radio-received aircraft; otherwise Cologne.\n"
+            "This does not change the SDR receiver's physical site location.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if choice == QMessageBox.StandardButton.Yes:
+            permission.grant()
+        else:
+            permission.deny()
 
     def _start_receiver_if_needed(self):
         if (self._exit_requested or not self.autostart_action.isChecked()):
