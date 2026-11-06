@@ -38,7 +38,7 @@
  <section class="internet-panel" aria-label="Internet aircraft source">
   <div class="internet-panel-head">
    <strong>Internet aircraft overlay</strong>
-   <span id="networkStatus" role="status" aria-live="polite">General ADS-B source selected (community relay; availability not guaranteed).</span>
+   <span id="networkStatus" role="status" aria-live="polite">Loading live aircraft from adsb.lol via the browser relay…</span>
   </div>
   <div class="internet-controls">
   <label class="field">Internet source
@@ -56,7 +56,7 @@
   </label>
    <button id="networkApply" type="button">Enable / refresh Internet layer</button>
   </div>
-  <p class="usb-hint"><strong>General flights:</strong> adsb.lol is used through an independent public cors.dev relay because its API does not permit direct GitHub Pages requests. The relay receives your browser IP and an approximately 10 km-rounded map center, <strong>never raw USB IQ</strong>; it may be rate-limited or unavailable. Data © adsb.lol (ODbL 1.0). Select IntelSky for direct, keyless but limited military/government coverage; AirLabs requires your own key. Your SDR continues independently if any Internet service fails.</p>
+  <p class="usb-hint"><strong>General flights:</strong> On GitHub Pages, real adsb.lol aircraft load automatically without an antenna or local app, through an independent public cors.dev relay because its API does not permit direct GitHub Pages requests. The relay receives your browser IP and an approximately 10 km-rounded map center, <strong>never raw USB IQ</strong>; it may be rate-limited or unavailable. Data © adsb.lol (ODbL 1.0). Select IntelSky for direct, keyless but limited military/government coverage; AirLabs requires your own key. Your SDR continues independently if any Internet service fails.</p>
  </section>
  <details class="bridge-advanced"><summary>Optional: paired receiver / Internet feed settings (advanced)</summary>
  <div class="toolbar">
