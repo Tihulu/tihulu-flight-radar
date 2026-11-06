@@ -79,6 +79,15 @@ class NativeRadarWindow(QMainWindow):
         classic = QAction("Open full classic receiver dashboard", self)
         classic.triggered.connect(self.open_classic)
         menu.addAction(classic)
+        self.release_action = QAction("Release local SDR on exit", self)
+        self.release_action.setCheckable(True)
+        self.release_action.setChecked(
+            self.settings.value("release_sdr_on_exit", True, type=bool)
+        )
+        self.release_action.toggled.connect(
+            lambda value: self.settings.setValue("release_sdr_on_exit", value)
+        )
+        menu.addAction(self.release_action)
         reload_view = QAction("Reload radar view", self)
         reload_view.triggered.connect(self.web.reload)
         menu.addAction(reload_view)
