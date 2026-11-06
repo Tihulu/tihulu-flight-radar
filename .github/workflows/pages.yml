@@ -14,6 +14,7 @@ on:
       - "scripts/build-browser-assets.sh"
       - "tests/internet_sources.test.cjs"
       - "tests/multi_sources.test.cjs"
+      - "tests/tar_layers_regression.test.cjs"
       - "tests/test_multi_sources.py"
       - "tests/webusb_sampleblock.test.cjs"
       - "tests/tar_full_browser.test.cjs"
