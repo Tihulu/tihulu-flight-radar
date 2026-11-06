@@ -23,7 +23,8 @@
    <button id="usbStop" disabled>Hard stop / release USB</button>
    <span id="usbStatus" role="status" aria-live="polite">Checking direct browser USB capability…</span>
   </div>
-  <p class="usb-hint">No desktop app, Python server or pairing token required. This page reads genuine ADS-B on 1090 MHz and decodes verified messages inside your browser. It stops USB on tab hide/close. If a desktop readsb decoder still owns your single SDR, WebUSB cannot claim it.</p>
+  <label class="usb-hint" style="display:flex;gap:8px;align-items:center"><input id="usbKeepHidden" type="checkbox"> Allow receiver while switching to Geolocation tab (opt-in; uses CPU/power; default OFF; Hard Stop or closing Flight Radar always releases USB)</label>
+  <p class="usb-hint">No desktop app, Python server or pairing token required. This page receives genuine ADS-B on 1090 MHz and decodes verified messages in your browser. By default USB stops when this tab is hidden; the optional setting above allows same-origin Geolocation to receive live aircraft while you switch tabs. Closing this page or clicking Hard Stop always releases the device. If readsb still owns the SDR, WebUSB cannot claim it.</p>
   <details id="usbHelp" class="usb-help">
    <summary>USB cannot connect? Check permissions and driver conflicts (no installation)</summary>
    <div class="usb-check-actions">
