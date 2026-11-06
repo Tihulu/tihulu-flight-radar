@@ -32,7 +32,10 @@ class EmbeddedRadarView(QWebEngineView):
         dialog.setWindowTitle("Tihulu Flight Radar — Additional map")
         dialog.resize(1180, 800)
         layout = QVBoxLayout(dialog)
-        child = QWebEngineView(dialog)
+        from .tar_overlay import TarOverlayView
+        owner = self.window()
+        provider = getattr(getattr(owner, "bridge", None), "online", None)
+        child = TarOverlayView(dialog, provider=provider)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(child)
         self._popups.append(dialog)
