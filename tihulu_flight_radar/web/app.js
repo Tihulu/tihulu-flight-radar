@@ -534,7 +534,7 @@ async function connect(){
   }
   state.connected=true;
   await refresh(true);
-  connection(true,state.connectionKind==="bridge"?"Paired with local bridge":"Internet feed connected");
+  connection(true,state.connectionKind==="bridge"?"Paired with local bridge":"Internet source configured · check individual provider statuses");
   $("token").value="";
   state.timer=setInterval(()=>{if(!document.hidden)refresh()},15000);
  }catch(e){
