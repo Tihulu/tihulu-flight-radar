@@ -6,6 +6,8 @@ on:
       - "tihulu_flight_radar/web/**"
       - ".github/workflows/pages.yml"
       - "AGENTS.md"
+      - "scripts/build-web-tar1090.sh"
+      - "scripts/build-browser-assets.sh"
   pull_request:
     branches: [main]
     paths:
@@ -15,13 +17,13 @@ on:
 
 # Two URLs, one source: this repo's browser source is mirrored by the
 # TIHULU-TEXT-CENTER sync workflow to /flight_radar/.
-# Pages must be enabled once at Settings -> Pages -> Source: GitHub Actions.
+# Pages must be enabled once at Settings -> Pages -> Source: Deploy from branch gh-pages / (root).
 concurrency:
   group: tihulu-flight-radar-standalone-pages
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   web-check:
@@ -65,12 +67,7 @@ jobs:
     needs: web-check
     runs-on: ubuntu-24.04
     permissions:
-      contents: read
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      contents: write
     concurrency:
       group: flight-radar-pages
       cancel-in-progress: false
@@ -88,10 +85,27 @@ jobs:
           printf '{"repo":"Tihulu/tihulu-flight-radar","source_ref":"%s","source_sha":"%s"}\n' \
             "$GITHUB_REF_NAME" "$GITHUB_SHA" > tihulu_flight_radar/web/source-revision.json
           printf '%s\n' 'https://tihulu.github.io/tihulu-flight-radar/' > "$RUNNER_TEMP/standalone-url.txt"
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - name: Checkout standalone Pages publishing branch
+        uses: actions/checkout@v4
         with:
-          path: tihulu_flight_radar/web
-      - name: Deploy GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          ref: gh-pages
+          path: pages
+      - name: Publish exactly the source browser build at branch root
+        run: |
+          set -euo pipefail
+          rsync -a --delete --exclude=.git tihulu_flight_radar/web/ pages/
+          touch pages/.nojekyll
+          test -s pages/index.html
+          test -s pages/tar1090/index.html
+          test -s pages/vendor/rtlsdr.mjs
+          test -s pages/source-revision.json
+          git -C pages config user.name 'github-actions[bot]'
+          git -C pages config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git -C pages add -A
+          if ! git -C pages diff --cached --quiet; then
+            git -C pages commit -m "publish: standalone Flight Radar same browser source"
+            git -C pages push origin HEAD:gh-pages
+          fi
+          echo "Target: https://tihulu.github.io/tihulu-flight-radar/"
+          echo "If still 404, enable Settings → Pages → Deploy from branch gh-pages / (root)."
+
