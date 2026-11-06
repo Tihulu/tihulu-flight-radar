@@ -89,7 +89,8 @@ test("Real browser request does not upload local RF or position to global IntelS
 test("No clandestine tar1090 endpoint is opened when WebUSB owns the one SDR",()=>{
  assert.match(js,/state\.connectionKind==="usb"[\s\S]{0,230}setRadarExpanded\(true\)/);
  assert.match(js,/tar1090 needs a separate live readsb JSON backend/);
- assert.match(js,/status\.active/);
+ assert.match(js,/api\/tar-status/);
+ assert.match(js,/live\.available/);
  assert.match(html,/id="expandMap"/);
  assert.match(html,/id="legacyTar"/);
  assert.doesNotMatch(html,/id="fullMap"/);
@@ -147,4 +148,14 @@ test("AirLabs request uses only the user's chosen key and regional bbox",async()
  assert.equal(again,first,"cached feed must not spend API quota every 15 seconds");
  assert.equal(url.href,unchangedUrl);
  assert.ok(state.airlabsLastFetch>0);
+});
+
+test("Internet source setup is visible and usable without the advanced bridge panel",()=>{
+ assert.match(html,/class="internet-panel"/);
+ assert.match(html,/id="networkApply"/);
+ assert.match(html,/id="networkStatus"/);
+ assert.match(js,/\$\("networkApply"\)\.onclick/);
+ assert.match(js,/IntelSky connected/);
+ assert.match(js,/Internet error/);
+ assert.match(js,/limited_coverage:state\.onlineProvider==="intelsky"/);
 });
