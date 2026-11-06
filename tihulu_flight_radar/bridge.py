@@ -70,6 +70,32 @@ def _coord(value: str | None, fallback: float, low: float, high: float) -> float
     return result
 
 
+def validate_search_place(value: object) -> dict:
+    """Strict small WGS84 map *search* preference; never SDR site metadata."""
+    if not isinstance(value, dict):
+        raise DataError("Invalid saved map search location.")
+    lat, lon, radius = value.get("lat"), value.get("lon"), value.get("radius")
+    if (not isinstance(lat, (int, float)) or isinstance(lat, bool)
+            or not isinstance(lon, (int, float)) or isinstance(lon, bool)
+            or not math.isfinite(lat) or not math.isfinite(lon)
+            or abs(lat) > 90 or abs(lon) > 180
+            or type(radius) is not int or radius not in (25, 50, 100, 150, 250)):
+        raise DataError("Invalid saved map coordinates or radius.")
+    place = {"lat": float(lat), "lon": float(lon), "radius": radius, "zoom": 9}
+    for name, max_chars in (("label", 190), ("name", 100),
+                            ("region", 100), ("country", 10), ("provider", 35)):
+        raw = value.get(name, "")
+        if not isinstance(raw, str) or len(raw) > max_chars or any(
+                ord(c) < 32 for c in raw):
+            raise DataError("Invalid map location label.")
+        place[name] = raw.strip()
+    if not place["label"]:
+        raise DataError("Saved map location needs a display label.")
+    if place["country"] not in ("", "DE", "TR", "all"):
+        raise DataError("Invalid map country.")
+    return place
+
+
 def _icao(aircraft: dict) -> str | None:
     value = aircraft.get("hex")
     if isinstance(value, str) and len(value) == 6 and all(c in "0123456789abcdefABCDEF" for c in value):
@@ -241,6 +267,37 @@ class Bridge:
         self.online = DataProvider()
         self.multi_online = MultiNetworkProvider()
         self.last_start_error: str | None = None
+        self._place_lock = threading.Lock()
+        # Native Qt uses an ephemeral loopback port; browser localStorage
+        # changes origin on each launch. This owner-only settings file retains
+        # the selected SEARCH region across ports, OS restarts and platforms.
+        self._place_path = (Path.home() / ".config" / "tihulu-flight-radar"
+                            / "map-search-location.json")
+
+    def get_saved_search_place(self) -> dict | None:
+        with self._place_lock:
+            try:
+                if not self._place_path.is_file() or self._place_path.stat().st_size > 2048:
+                    return None
+                return validate_search_place(json.loads(
+                    self._place_path.read_text(encoding="utf-8")))
+            except (OSError, ValueError, DataError, UnicodeError):
+                return None
+
+    def save_search_place(self, raw: object) -> dict:
+        place = validate_search_place(raw)
+        with self._place_lock:
+            self._place_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            tmp = self._place_path.with_name(
+                self._place_path.name+"."+secrets.token_hex(6)+".tmp")
+            try:
+                with tmp.open("x", encoding="utf-8") as fh:
+                    json.dump(place, fh, ensure_ascii=False, allow_nan=False)
+                tmp.chmod(0o600)
+                tmp.replace(self._place_path)
+            finally:
+                tmp.unlink(missing_ok=True)
+        return place
 
     def snapshot(self, mode: str, lat: float, lon: float, radius: int,
                  networks: tuple[str, ...] | None = None) -> dict:
@@ -441,6 +498,9 @@ def make_handler(bridge: Bridge, port: int):
             if path.path == "/api/tar-status":
                 self._send(HTTPStatus.OK, bridge.tar1090_status())
                 return
+            if path.path == "/api/search-location":
+                self._send(HTTPStatus.OK, {"place": bridge.get_saved_search_place()})
+                return
             if path.path != "/api/aircraft":
                 self._send(HTTPStatus.NOT_FOUND, {"error": "Not found."})
                 return
@@ -462,7 +522,8 @@ def make_handler(bridge: Bridge, port: int):
         def do_POST(self):
             if not self._guard():
                 return
-            if urlsplit(self.path).path != "/api/control":
+            endpoint = urlsplit(self.path).path
+            if endpoint not in ("/api/control", "/api/search-location"):
                 self._send(HTTPStatus.NOT_FOUND, {"error": "Not found."})
                 return
             if not self._authorized():
@@ -473,6 +534,9 @@ def make_handler(bridge: Bridge, port: int):
                 if not 1 <= n <= MAX_BODY:
                     raise DataError("Invalid request length.")
                 body = json.loads(self.rfile.read(n))
+                if endpoint == "/api/search-location":
+                    self._send(HTTPStatus.OK, {"place": bridge.save_search_place(body)})
+                    return
                 if not isinstance(body, dict) or body.get("action") not in ("start", "stop", "restart"):
                     raise DataError("Invalid receiver action.")
                 self._send(HTTPStatus.OK, {"message": bridge.control(body["action"])})
