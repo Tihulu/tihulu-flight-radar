@@ -45,6 +45,11 @@ function usbError(error){
 function ack(){if(ackResolve){const callback=ackResolve;ackResolve=null;callback();}}
 function processMessage(msg){
  if(msg.type==="ack"){ack();return;}
+ if(msg.type==="error"){
+  tell("In-browser Mode S decoder error: "+String(msg.message||"unknown"),true);
+  void stop();
+  return;
+ }
  if(msg.type==="snapshot"){
   window.tihuluUsbSnapshot?.(msg);
   const count=Number(msg.messages)||0;
