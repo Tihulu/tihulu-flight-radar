@@ -9,9 +9,10 @@ from __future__ import annotations
 import json
 import sys
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from PySide6.QtCore import Qt, QUrl, QSettings
+from PySide6.QtCore import Qt, QUrl, QSettings, QTimer
 from PySide6.QtGui import QAction
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import QApplication, QDialog, QMainWindow, QMessageBox, QVBoxLayout
@@ -94,10 +95,25 @@ class NativeRadarWindow(QMainWindow):
         self.web.setUrl(QUrl(self.local_url + "/"))
 
         self.classic_window = None
+        self._startup_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="tihulu-rf-start")
+        self._startup_future = None
+        self._exit_requested = False
+        self._startup_timer = QTimer(self)
+        self._startup_timer.setInterval(250)
+        self._startup_timer.timeout.connect(self._check_startup)
         menu = self.menuBar().addMenu("Receiver")
         classic = QAction("Open full classic receiver dashboard", self)
         classic.triggered.connect(self.open_classic)
         menu.addAction(classic)
+        self.autostart_action = QAction("Start local receiver on application launch", self)
+        self.autostart_action.setCheckable(True)
+        self.autostart_action.setChecked(
+            self.settings.value("auto_start_receiver", True, type=bool)
+        )
+        self.autostart_action.toggled.connect(
+            lambda checked: self.settings.setValue("auto_start_receiver", checked)
+        )
+        menu.addAction(self.autostart_action)
         self.release_action = QAction("Release local SDR on exit", self)
         self.release_action.setCheckable(True)
         self.release_action.setChecked(
@@ -116,6 +132,50 @@ class NativeRadarWindow(QMainWindow):
         self.statusBar().showMessage(
             "Local radar in this window · readsb reception separate from Internet data"
         )
+        # Start after the GUI is visible; never auto-start remote receivers.
+        # The startup is asynchronous so failing sudo/USB detection cannot
+        # freeze the entire map or prevent Internet aircraft rendering.
+        QTimer.singleShot(700, self._start_receiver_if_needed)
+
+    def _start_receiver_if_needed(self):
+        if (self._exit_requested or not self.autostart_action.isChecked()):
+            return
+        if self.bridge.receiver.mode == "Remote JSON":
+            return
+        self.bridge.last_start_error = None
+        self.statusBar().showMessage("Checking local receiver and USB ownership…")
+        self._startup_future = self._startup_pool.submit(self._ensure_receiver_active)
+        self._startup_timer.start()
+
+    def _ensure_receiver_active(self):
+        with self.bridge.receiver_lock:
+            active, message = self.bridge.receiver.status()
+            if active:
+                return "Local decoder already running: " + message
+            return self.bridge.receiver.start()
+
+    def _check_startup(self):
+        f = self._startup_future
+        if f is None or not f.done():
+            return
+        self._startup_timer.stop()
+        self._startup_future = None
+        try:
+            result = f.result()
+            self.bridge.last_start_error = None
+            self.statusBar().showMessage(result)
+        except Exception as exc:
+            message = str(exc)
+            self.bridge.last_start_error = message
+            self.statusBar().showMessage("Local receiver unavailable: " + message)
+        if not self._exit_requested:
+            self.web.page().runJavaScript(
+                "if (typeof checkReceiver === 'function') checkReceiver().catch(()=>{});"
+            )
+        else:
+            # The close request waits for startup completion. Do not race a
+            # systemd start and leave the USB device claimed after close.
+            self.close()
 
     def _paired_on_loaded(self, ok: bool):
         if not ok:
@@ -163,8 +223,15 @@ class NativeRadarWindow(QMainWindow):
         )
 
     def closeEvent(self, event):
-        # Do not stop systemd-managed readsb/tar1090; release only direct child
-        # processes owned by the shared receiver controller on app exit.
+        if self._startup_future is not None and not self._startup_future.done():
+            self._exit_requested = True
+            self.statusBar().showMessage("Finishing receiver startup before safe shutdown…")
+            event.ignore()
+            return
+        self._startup_timer.stop()
+        self._startup_pool.shutdown(wait=False, cancel_futures=True)
+        # Stop the app-owned direct child; optionally stop local readsb and
+        # tar1090 services to release the same USB tuner for other SDR apps.
         if self.classic_window is not None:
             self.classic_window.close()
         self.web.setUrl(QUrl("about:blank"))
