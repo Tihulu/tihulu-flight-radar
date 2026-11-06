@@ -1,16 +1,24 @@
 name: Publish Flight Radar GitHub Pages
 on:
   push:
-    branches: [main]
+    branches: [feature/github-pages-local-bridge-2026-11-06]
     paths:
       - "tihulu_flight_radar/web/**"
       - ".github/workflows/pages.yml"
+      - "AGENTS.md"
   pull_request:
     branches: [main]
     paths:
       - "tihulu_flight_radar/web/**"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
+
+# Two URLs, one source: this repo's browser source is mirrored by the
+# TIHULU-TEXT-CENTER sync workflow to /flight_radar/.
+# Pages must be enabled once at Settings -> Pages -> Source: GitHub Actions.
+concurrency:
+  group: tihulu-flight-radar-standalone-pages
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -36,7 +44,7 @@ jobs:
           node --check tihulu_flight_radar/web/usb_tools.mjs
           bash -n scripts/rtl-sdr-usb-interface.sh
           node --check deploy/cloudflare-worker.mjs
-          node --test tests/web_bridge.test.cjs tests/pages_tar.test.cjs tests/browser_adsb.test.cjs tests/browser_source.test.cjs tests/aircraft_visuals.test.cjs tests/webusb_sampleblock.test.cjs tests/internet_sources.test.cjs tests/internet_sources.test.cjs
+          node --test tests/web_bridge.test.cjs tests/pages_tar.test.cjs tests/browser_adsb.test.cjs tests/browser_source.test.cjs tests/aircraft_visuals.test.cjs tests/webusb_sampleblock.test.cjs tests/internet_sources.test.cjs
           python3 -m json.tool tihulu_flight_radar/web/manifest.webmanifest >/dev/null
           test -s tihulu_flight_radar/web/icon.svg
           test -s tihulu_flight_radar/web/sw.js
@@ -47,7 +55,7 @@ jobs:
           test -s tihulu_flight_radar/web/vendor/RTLSDR-LICENSE.txt
           grep -q 'app.js' tihulu_flight_radar/web/index.html
   deploy:
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/feature/github-pages-local-bridge-2026-11-06'
     needs: web-check
     runs-on: ubuntu-24.04
     permissions:
@@ -67,6 +75,11 @@ jobs:
           node-version: "22"
       - name: Build pinned browser WebUSB assets for deployment
         run: bash scripts/build-browser-assets.sh
+      - name: Record the exact browser source revision
+        run: |
+          printf '{"repo":"Tihulu/tihulu-flight-radar","source_ref":"%s","source_sha":"%s","published_by":"standalone"}\n' \
+            "$GITHUB_REF_NAME" "$GITHUB_SHA" > tihulu_flight_radar/web/source-revision.json
+          printf '%s\n' 'https://tihulu.github.io/tihulu-flight-radar/' > "$RUNNER_TEMP/standalone-url.txt"
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
