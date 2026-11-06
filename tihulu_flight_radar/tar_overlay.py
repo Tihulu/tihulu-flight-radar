@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import math
+from urllib.parse import parse_qs, urlsplit
 from concurrent.futures import ThreadPoolExecutor
 
 from PySide6.QtCore import QTimer
@@ -163,6 +164,7 @@ class TarOverlayView(QWebEngineView):
         self._timer.timeout.connect(self._poll)
         self._probe_busy = False
         self._last_reason = ""
+        self._probe_failures = 0
         self.loadFinished.connect(self._loaded)
         self.destroyed.connect(lambda *_: self._pool.shutdown(wait=False, cancel_futures=True))
 
@@ -179,6 +181,7 @@ class TarOverlayView(QWebEngineView):
                             and (self._assume_tar or "/tar1090" in self.url().path))
         self._probe_busy = False
         self._last_reason = ""
+        self._probe_failures = 0
         self._generation += 1
         if self._active:
             self.page().runJavaScript(BOOTSTRAP_JS, 0)
@@ -242,22 +245,50 @@ class TarOverlayView(QWebEngineView):
                 value = {"ready": False, "reason": "Invalid map probe JSON"}
         if not isinstance(value,dict) or not value.get("ready"):
             reason = (value.get("reason") if isinstance(value, dict)
-                      else "tar1090 JS callback unavailable — using initial map region")
+                      else "tar1090 JS callback unavailable")
             if reason != self._last_reason:
                 self._last_reason = reason
                 self._set_status(str(reason))
+            self._probe_failures += 1
+            if self._probe_failures >= 3 and value is None:
+                # The tar map is visibly functional, but this Qt runtime
+                # cannot return its JS probe. Request verified network data
+                # near the *view-only* initial focus, not an invented receiver
+                # location. The layer itself still checks that OLMap exists.
+                self._probe_failures = 0
+                focus = self._initial_focus()
+                if focus:
+                    self._set_status("Qt map callback unavailable; loading around opening view")
+                    self._queue_feed(*focus)
             return
+        self._probe_failures = 0
         self._last_reason = ""
         lat,lon=value.get("lat"),value.get("lon")
         if not (isinstance(lat,(int,float)) and isinstance(lon,(int,float))
                 and math.isfinite(lat) and math.isfinite(lon)
                 and -90<=lat<=90 and -180<=lon<=180):
             return
+        self._queue_feed(float(lat), float(lon))
+
+    def _initial_focus(self):
+        try:
+            params = parse_qs(urlsplit(self.url().toString()).query)
+            lat = float(params.get("tihuluFocusLat", [None])[0])
+            lon = float(params.get("tihuluFocusLon", [None])[0])
+            if math.isfinite(lat) and math.isfinite(lon) and -90 <= lat <= 90 and -180 <= lon <= 180:
+                return lat, lon
+        except (TypeError, ValueError, IndexError):
+            pass
+        return None
+
+    def _queue_feed(self, lat, lon):
+        if self._pending is not None:
+            return
         from time import monotonic
-        self._next_poll=monotonic()+16
-        self._pending=self._pool.submit(self._provider.fetch,float(lat),float(lon),100)
+        self._next_poll = monotonic() + 16
+        self._pending = self._pool.submit(self._provider.fetch, lat, lon, 100)
         if not getattr(self, "_overlay_bootstrapped", False):
-            self._overlay_bootstrapped=True
+            self._overlay_bootstrapped = True
             self._draw_overlay([], "Connecting to Internet feed", "")
 
     def _set_status(self, message):
