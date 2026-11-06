@@ -308,8 +308,8 @@ async function fetchInternetFeed(){
   return normalized;
  }catch(error){
   if(error?.name==="AbortError")throw Error("Internet feed timeout (10 seconds).");
-  if(error instanceof TypeError)
-   throw Error("Network or CORS blocked this feed. General ADS-B providers may need an HTTPS/CORS relay.");
+  if(error instanceof TypeError || error?.name==="TypeError")
+   throw Error("Network or CORS blocked this feed. Public relay may be unavailable, throttled or blocked; try again later.");
   throw error;
  }finally{clearTimeout(timeout)}
 }
