@@ -391,7 +391,7 @@ def make_handler(bridge: Bridge, port: int):
             if not self._guard():
                 return
             path = urlsplit(self.path)
-            if path.path in ("/", "/index.html", "/app.js", "/style.css", "/manifest.webmanifest", "/icon.svg", "/sw.js", "/multi_sources.js", "/browser_usb.mjs", "/adsb_worker.mjs", "/usb_tools.mjs"):
+            if path.path in ("/", "/index.html", "/app.js", "/style.css", "/manifest.webmanifest", "/icon.svg", "/sw.js", "/multi_sources.js", "/flight_location_ui.mjs", "/location_search.mjs", "/cities-de-tr.json", "/CITY_DATA_LICENSE.md", "/browser_usb.mjs", "/adsb_worker.mjs", "/usb_tools.mjs"):
                 name = "index.html" if path.path == "/" else path.path[1:]
                 file = STATIC_DIR / name
                 if not file.is_file():
@@ -401,6 +401,8 @@ def make_handler(bridge: Bridge, port: int):
                 mime = ("text/html" if name.endswith(".html") else
                         "application/javascript" if name.endswith((".js", ".mjs")) else
                         "text/css" if name.endswith(".css") else
+                        "application/json" if name.endswith(".json") else
+                        "text/markdown" if name.endswith(".md") else
                         "application/manifest+json" if name.endswith(".webmanifest") else
                         "image/svg+xml")
                 self._headers(HTTPStatus.OK, mime + "; charset=utf-8", len(raw))
