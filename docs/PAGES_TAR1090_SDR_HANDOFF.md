@@ -83,3 +83,54 @@ Before using the preview on real Nooelec hardware, ensure no concurrent
 rtl_433, rtl_test, welle.io or SDR module is claiming the single USB tuner.
 If the source remains unavailable, inspect the actual application error and
 readsb/tar1090 systemd journal rather than repeatedly reinstalling.
+
+
+## 2026-11-06 — follow-up to screenshot: 27 Internet, 0 RF messages, tar overlay stuck
+
+Screenshot-confirmed behavior in actual native Qt build:
+- Main responsive radar was paired successfully and displayed 27 **real
+  online** aircraft, demonstrating the network feed and auto-pairing worked.
+- readsb and tar1090 processes were marked active but readsb reported **zero
+  receiver messages**. Running processes do not prove USB capture or RF
+  decoding; no software must claim otherwise.
+- The embedded tar1090 map rendered tiles but the added overlay stayed
+  `Internet overlay: waiting for tar1090 map…`. This is a **separate**
+  Qt WebEngine OpenLayers attachment problem, not evidence of absent
+  online planes.
+- The initial map view was centered around Germany's geographic midpoint,
+  near Erfurt, which did not match the user's intended Cologne view.
+
+Changes on Draft PR #6:
+1. `TarOverlayView` explicitly executes the map probe and online feature
+   renderer in Qt WebEngine **MainWorld (0)**. The probe reports a
+   `ready/reason` result, catches JavaScript exceptions, retries immediately
+   after load, and presents real diagnostic text when OpenLayers is not ready.
+   No infinite silent “waiting” label if a probe fails. The same camera-only
+   site-location protection and ring hiding remain intact.
+2. The embedded tar1090 window has a **separate Internet feed cache**. Earlier
+   it shared the main radar's global 35-second cooldown for one coordinate
+   key; a different tar map center consequently returned zero planes.
+   Each view queries only when opened/required; upstream provider backoff and
+   licensing still apply. A Qt window displaying tar1090 without OpenLayers
+   symbols must clearly report the limitation; never invent overlays.
+3. Native desktop initially selects the **Cologne city region** (coarse
+   50.938 N, 6.960 E, not the physical receiver location). Web default
+   remains Germany. Both expose explicit Cologne, Germany, GPS-permission
+   and Search Here controls. The map **camera center and online search
+   center are independent**, so focusing an aircraft no longer changes the
+   API coordinate cache key and makes planes disappear.
+4. Internet provider per-request timeout now fits inside the frontend's
+   timeout. Brief failures preserve only last *genuinely received*
+   observations with monotonically increasing seen/seen_pos ages;
+   old planes vanish automatically beyond their freshness limit.
+   Provider names, attribution and last genuine observation time are shown.
+5. RF source state `decoder_no_rf_messages` shows explanatory diagnostics:
+   check `journalctl -u readsb -n 40 --no-pager`, 1090 MHz antenna, USB
+   device exclusivity, and previous Satellite Center/Brave sessions.
+   This is read-only diagnosis; no opportunistic USB reset, driver unload,
+   readsb restart or permission bypass is performed.
+
+**Still pending**: physical validation of Nooelec ADS-B messages and correct
+tar1090 OpenLayers overlay positioning on the user's Pop!_OS COSMIC Qt
+runtime. Cross-platform CI verifies source/logic but cannot substitute for
+live RF hardware.
