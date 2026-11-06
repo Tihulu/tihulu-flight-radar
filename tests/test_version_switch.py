@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SWITCH = ROOT / "scripts/popos-version-switch.sh"
 INSTALL = ROOT / "scripts/install-linux.sh"
 LEGACY = "67280cd84feb89faec6a80f5fe2a55ce5f7b89e6"
-PREVIEW = "e56a0fc890327c6a3705dcb4bde9226b7bed19b6"
+PREVIEW = "def7a62ff6951951bc3a432b93da3251c7ea4162"
 
 
 def test_switcher_is_valid_bash_and_help_never_installs():
