@@ -60,7 +60,7 @@ exit 1
     assert "Name=Tihulu Flight Radar\n" in qt
     assert 'Exec="'+str(home)+"/.local/bin/tihulu-flight-radar"+'"' in qt
     assert "Terminal=false" in qt
-    assert "Name=Tihulu Flight Radar Web" in web
+    assert "Name=Tihulu Flight Radar Live" in web
     assert 'Exec="'+str(home)+"/.local/bin/tihulu-flight-radar"+'"' in web
     assert "Terminal=false" in web
     classic = (appdir / "tihulu-flight-radar-classic.desktop").read_text()
