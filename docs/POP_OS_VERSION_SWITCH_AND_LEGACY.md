@@ -5,7 +5,7 @@
 | Version | GitHub ref | Pinned source SHA | Role |
 | --- | --- | --- | --- |
 | **0.3.1** | [`legacy/v0.3.1`](https://github.com/Tihulu/tihulu-flight-radar/tree/legacy/v0.3.1) | `67280cd84feb89faec6a80f5fe2a55ce5f7b89e6` | Last archived 0.3.1 code snapshot **before** multi-provider enhancement |
-| **0.3.2.dev4** | [`preview/v0.3.2-dev4`](https://github.com/Tihulu/tihulu-flight-radar/tree/preview/v0.3.2-dev4) | `e56a0fc890327c6a3705dcb4bde9226b7bed19b6` | Current full tar1090 + Internet-only, optional local SDR preview |
+| **0.3.2.dev4** | [`preview/v0.3.2-dev4`](https://github.com/Tihulu/tihulu-flight-radar/tree/preview/v0.3.2-dev4) | `def7a62ff6951951bc3a432b93da3251c7ea4162` | Current full tar1090 + Internet-only, optional local SDR preview |
 | 0.3.2.dev0 | [`preview/v0.3.2-dev0`](https://github.com/Tihulu/tihulu-flight-radar/tree/preview/v0.3.2-dev0) | `c1e9c2c849cab681c863d4f63d538c1a940397f9` | Historical multi-provider preview, also preserved |
 
 The user physically verified a `0.3.1` installation on Pop!_OS with RF (R),
