@@ -189,7 +189,14 @@ function onIQ(buffer){
 if(typeof self!=="undefined" && typeof self.addEventListener==="function"){
  self.addEventListener("message",event=>{
   const msg=event.data||{};
-  if(msg.type==="iq" && msg.buffer instanceof ArrayBuffer)onIQ(msg.buffer);
+  if(msg.type==="iq" && msg.buffer instanceof ArrayBuffer){
+   try{onIQ(msg.buffer);}
+   catch(error){
+    // Never strand the USB reader waiting for an ACK if one IQ block fails.
+    self.postMessage({type:"error",message:String(error?.message||error).slice(0,160)});
+    self.postMessage({type:"ack"});
+   }
+  }
   if(msg.type==="reset"){store=new BrowserAircraftStore();tail=new Uint8Array(0);bytes=0;lastPublish=0;}
  });
 }
