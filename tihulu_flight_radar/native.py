@@ -129,7 +129,7 @@ class NativeRadarWindow(QMainWindow):
         self.autostart_action = QAction("Start local receiver on application launch", self)
         self.autostart_action.setCheckable(True)
         self.autostart_action.setChecked(
-            self.settings.value("auto_start_receiver", True, type=bool)
+            self.settings.value("auto_start_receiver", False, type=bool)
         )
         self.autostart_action.toggled.connect(
             lambda checked: self.settings.setValue("auto_start_receiver", checked)
