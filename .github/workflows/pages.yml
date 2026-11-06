@@ -1,5 +1,5 @@
 name: Publish Flight Radar GitHub Pages
-# Publish full original tar1090 mode and 0.3.2.dev2 browser parity; antenna optional.
+# Publish Flight Radar 0.3.2.dev4, Satellite-style DE/TR city selector and antenna-optional tar1090.
 on:
   push:
     branches: [feature/github-pages-local-bridge-2026-11-06, feature/tar1090-internet-only-2026-11-06]
