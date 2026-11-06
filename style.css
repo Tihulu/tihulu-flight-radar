@@ -1,0 +1,122 @@
+:root{color-scheme:dark;--bg:#0e141d;--surface:#192331;--surface2:#202d3c;--line:#324459;--fg:#eef5fc;--muted:#adc0d1;--a:#50dcad;--b:#5cafe8;--both:#e6b56b;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg)}a{color:#9ecbef}button,input,select{font:inherit}button{background:#2b3d50;border:1px solid #4e6279;color:var(--fg);border-radius:8px;padding:9px 11px;cursor:pointer;white-space:nowrap}button:hover{background:#3c5268}button:disabled{opacity:.45;cursor:not-allowed}.primary{background:#206a60;border-color:#328c7c;font-weight:700}.primary:hover{background:#298173}
+input:not([type=checkbox]),select{background:#0d1824;border:1px solid #3e5367;color:var(--fg);padding:9px;border-radius:7px;min-width:0}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid #7dcaee;outline-offset:2px}
+input[type=checkbox]{accent-color:#49c8a3;width:16px;height:16px;vertical-align:middle}
+.masthead{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:15px max(16px,2vw);background:var(--surface);border-bottom:1px solid var(--line)}.brand{display:flex;align-items:center;gap:13px}.brandmark{display:grid;place-items:center;width:43px;height:43px;border-radius:12px;background:#24554c;color:#b7f6e3;font-size:27px}.brand strong{font-size:18px;letter-spacing:.8px;display:block}.brand small{display:block;font-size:10px;color:var(--muted);letter-spacing:1px;margin-top:3px}.connection{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px}.dot{width:9px;height:9px;border-radius:100%;background:#ed9d72}.dot.online{background:var(--a)}
+main{padding:15px max(12px,1.6vw);max-width:2400px;margin:auto}.toolbar{display:flex;align-items:end;flex-wrap:wrap;gap:9px;padding:12px;background:var(--surface);border:1px solid var(--line);border-radius:12px}.field{display:flex;flex-direction:column;gap:5px;color:var(--muted);font-size:12px}.field input{width:240px}.field.token input{width:285px}.field select{min-width:152px}
+.notice{font-size:12px;color:var(--muted);padding:12px 4px;line-height:1.5}.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:11px;margin:6px 0 13px}.metric{border:1px solid var(--line);background:var(--surface);padding:13px 16px;border-radius:12px}.metric span{font-size:12px;color:var(--muted);display:block}.metric strong{display:block;font-size:29px;margin-top:4px}.metric strong.small{font-size:17px;line-height:37px}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:13px;min-height:64vh;align-items:stretch}.map-panel{min-width:0;display:flex;flex-direction:column;border:1px solid var(--line);background:#0c1d29;border-radius:12px;overflow:hidden}.mapbar{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:11px;background:var(--surface)}.overlays,.maptools{display:flex;flex-wrap:wrap;align-items:center;gap:9px}.overlays label{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:#d7e4f0;cursor:pointer}.maptools button{font-size:12px;padding:7px}
+.key{display:inline-block;width:9px;height:9px;border-radius:50%}.key.antenna{background:var(--a)}.key.internet{background:var(--b)}.key.both{background:var(--both)}#map{display:block;width:100%;height:58vh;min-height:370px;touch-action:none;cursor:grab}#map:active{cursor:grabbing}.mapfooter{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;background:#101b28;color:#afc3d7;font-size:11px;padding:10px}
+.side{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:15px;min-width:0;overflow:auto;max-height:85vh}.side h2{font-size:14px;margin:14px 0 7px;letter-spacing:.2px}.side h2:first-child{margin-top:0}.muted{color:var(--muted);font-size:12px;line-height:1.5}.buttons{display:flex;gap:5px}.buttons button{flex:1;font-size:12px}.tablewrap{max-height:290px;overflow:auto}.tablewrap table{width:100%;border-collapse:collapse;font-size:12px}.tablewrap th,.tablewrap td{padding:9px 4px;text-align:left;border-bottom:1px solid var(--line)}.tablewrap th{font-size:11px;color:var(--muted);position:sticky;top:0;background:var(--surface)}.tablewrap tr{cursor:pointer}.tablewrap tr:hover,.tablewrap tr.selected{background:#2b4055}.tag{font-size:10px;font-weight:700}.tag.antenna{color:var(--a)}.tag.internet{color:var(--b)}.tag.both{color:var(--both)}.details{white-space:pre-wrap;overflow-wrap:anywhere;font:11px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;background:#0f1b28;border:1px solid #344252;border-radius:8px;padding:10px;max-height:300px;overflow:auto}
+footer{color:var(--muted);display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;padding:16px 4px;font-size:12px}
+@media(max-width:1120px){.layout{grid-template-columns:1fr}.side{max-height:none}#map{height:53vh}.tablewrap{max-height:360px}}@media(max-width:620px){.masthead{align-items:flex-start}.brand strong{font-size:14px}.brand small{font-size:9px}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.toolbar .field{flex:1 1 100%}.toolbar .field input{width:100%}.toolbar .field select{width:100%}.maptools{width:100%}.maptools button{flex:1 1 auto}.mapbar{gap:12px}#map{height:54vh;min-height:330px}}
+
+/* The installed Qt app pairs with its own private bridge. Hide browser-only pairing widgets. */
+html.native .toolbar .field:first-child,html.native .toolbar .field.token,html.native #connect,html.native #disconnect{display:none!important}
+html.native .notice{display:none!important}
+
+/* Browser-first RTL-SDR receiver; no local bridge is required for WebUSB. */
+.usb-direct-panel{border:1px solid #385572;border-radius:12px;padding:15px 18px;
+ background:linear-gradient(105deg,#182e43,#152334);margin:0 0 12px}
+.usb-topline,.usb-controls{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+.usb-topline{justify-content:space-between;margin-bottom:12px}
+.usb-pill{border:1px solid #427c9c;border-radius:24px;padding:4px 9px;
+ color:#b5e1f4;font-size:11px}
+.usb-controls>button{flex:0 0 auto}
+#usbStatus{color:#d1e5f7;font-size:12px;flex:1 1 250px;line-height:1.45}
+#usbStatus[data-error="true"]{color:#ffc6a8}
+.usb-hint{font-size:12px;color:#bbd1e6;line-height:1.55;margin:10px 0 0}
+.bridge-advanced{margin-bottom:12px;border:1px solid var(--line);
+ background:#172230;border-radius:9px;padding:9px 12px}
+.bridge-advanced summary{cursor:pointer;color:#c8dded;font-size:12px;user-select:none}
+.bridge-advanced .toolbar{border:0;margin-top:9px;padding:9px}
+html.native .usb-direct-panel{display:none}
+html.native .bridge-advanced>summary{display:none}
+html.native .bridge-advanced{border:0;margin:0;padding:0;background:transparent}
+html.native .bridge-advanced:not([open])>.toolbar{display:flex}
+@media(max-width:620px){.usb-controls>button{flex:1 1 100%}}
+
+/* The same altitude stops are used by the main, embedded and tar1090 views.
+   Source letters remain independent of height and stay legible on any fill. */
+.aircraft-legend{display:flex;align-items:center;flex-wrap:wrap;gap:8px 14px;
+ padding:7px 11px;background:#111e2c;border-top:1px solid #324459;
+ color:#cbddeb;font-size:11px}
+.aircraft-legend strong{display:inline-block;color:#fff;font-size:11px;
+ background:#102b40;border:1px solid #8ca4bf;border-radius:4px;
+ padding:1px 4px;margin-right:3px}
+.altitude-label{color:#b3c4d6}
+.altitude-ramp{height:10px;width:clamp(100px,20%,260px);border-radius:4px;
+ border:1px solid #687b8d;background:linear-gradient(to right,
+ #f36b3e 0%,#f0aa38 5%,#d8d941 15%,#61d65b 25%,
+ #25c8c0 45%,#417ded 65%,#a15be7 87.5%,#e44bc3 100%)}
+@media(max-width:620px){.aircraft-legend{gap:6px 10px}.altitude-ramp{width:100px}}
+
+/* Browser and installed PWA: USB help stays in normal document flow.
+   No floating status panel may cover a selected aircraft or the map. */
+.usb-help{margin-top:10px;border:1px solid #425e76;border-radius:8px;
+ padding:9px 11px;background:#101e2d;overflow:hidden}
+.usb-help summary{cursor:pointer;font-size:12px;color:#b8d8f5}
+.usb-check-actions{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.usb-check-actions button{font-size:12px;white-space:normal}
+#usbReport{white-space:pre-wrap;overflow-wrap:anywhere;max-height:240px;
+ overflow:auto;background:#0a1623;border:1px solid #334b62;border-radius:6px;
+ padding:9px;font:12px/1.55 ui-monospace,Consolas,monospace}
+.map-panel>.mapbar,.map-panel>.aircraft-legend{position:relative;z-index:1;flex-shrink:0}
+.map-panel>#map{position:relative;z-index:0}
+@media(max-width:620px){.usb-check-actions button{width:100%}}
+
+/* Integrated full radar is independent of readsb/tar1090 backend. The map
+   keeps its live WebUSB/Internet observations, with a separate source list. */
+body.radar-expanded{overflow:hidden}
+.radar-expanded .layout{position:fixed;inset:0;z-index:10000;
+ width:100vw;height:100dvh;min-height:0;margin:0;padding:6px;
+ display:grid;grid-template-columns:minmax(0,1fr) minmax(240px,310px);
+ background:#0c141e;gap:6px}
+.radar-expanded .map-panel{min-height:0;height:100%;border-radius:8px}
+.radar-expanded #map{height:auto!important;min-height:0!important;flex:1 1 0}
+.radar-expanded .side{height:100%;max-height:none;border-radius:8px}
+.radar-expanded .mapbar{gap:6px;padding:6px}
+.radar-expanded .mapbar button{padding:5px 7px}
+.radar-expanded .aircraft-legend{padding:5px 9px}
+@media(max-width:720px){
+ .radar-expanded .layout{grid-template-columns:1fr;grid-template-rows:minmax(0,1fr) 175px}
+ .radar-expanded .side{height:175px;max-height:175px}
+}
+
+#airlabsKeyField[hidden]{display:none!important}
+.source-key-warning{flex:1 1 100%;font-size:11px;color:#b2cadd;
+ line-height:1.4;margin:0 0 4px}
+
+/* Explicit, first-class online aircraft configuration for browser/PWA.
+   Distinguishes a real, limited free feed from a full receiver-network API. */
+.internet-panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;
+ padding:12px 15px;margin:0 0 11px}
+.internet-panel-head{display:flex;align-items:center;justify-content:space-between;
+ gap:10px;flex-wrap:wrap;font-size:13px;margin-bottom:10px}
+#networkStatus{font-size:12px;color:#b7d9ef;line-height:1.45;overflow-wrap:anywhere}
+.internet-controls{display:flex;align-items:end;gap:9px;flex-wrap:wrap}
+.internet-controls>.field{max-width:100%;min-width:145px}
+.internet-controls>.field select,.internet-controls>.field input{width:100%;max-width:100%}
+.internet-controls #networkApply{white-space:normal;font-size:12px}
+html.native .internet-panel .internet-controls{display:none}
+html.native .internet-panel>.usb-hint{display:none}
+@media(max-width:650px){
+ .internet-controls>.field,.internet-controls #networkApply{flex:1 1 100%}
+ .internet-panel{padding:11px}
+}
+
+/* The genuine, bundled tar1090 aircraft interface, not a second map clone.
+ * Runs over the exact real RF and Internet aircraft shown by Flight Radar. */
+.tar-browser-shell[hidden]{display:none!important}
+.tar-browser-shell{position:fixed;inset:0;z-index:6000;background:#0b1522;
+ display:flex;flex-direction:column;min-height:0}
+.tar-browser-title{display:flex;flex-wrap:wrap;align-items:center;gap:10px;
+ justify-content:space-between;background:#101d2d;border-bottom:1px solid #36546d;
+ padding:7px 13px;color:#f0f6ff;font-size:12px}
+.tar-browser-title>span{color:#adcae1;font-size:11px}
+.tar-browser-title button{margin-left:auto;flex-shrink:0}
+#fullTarFrame{border:0;flex:1 1 auto;width:100%;min-height:0;
+ background:#14212e;color-scheme:dark}
+body.tar-open{overflow:hidden}
+@media(max-width:620px){.tar-browser-title>span{display:none}.tar-browser-title{padding:6px;gap:5px}}

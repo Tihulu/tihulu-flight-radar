@@ -1,0 +1,2 @@
+Aircraft metadata © tar1090-db contributors, see https://github.com/wiedehopf/tar1090-db
+Metadata is NOT a live air traffic observation.
