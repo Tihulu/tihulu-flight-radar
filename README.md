@@ -1,5 +1,47 @@
 # Tihulu Flight Radar
 
+## Optional multi-source preview — 0.3.2.dev0 (6 Nov 2026)
+
+**The existing installed Pop!_OS 0.3.1 is the user-verified stable baseline.
+Do not auto-upgrade or silently replace it.** The following features are in the
+reviewed development branch only until acceptance.
+
+- Browser and native Qt WebEngine radar now expose an **Internet source selector**:
+  adsb.lol (unchanged and individually available), adsb.fi (personal/non-commercial),
+  OpenSky (API credits; at most every 5 minutes), and limited IntelSky. The
+  `Combine selected` mode is the new browser preview default with adsb.lol
+  and adsb.fi on; **Select all available** adds the others. Individual source
+  checkboxes act as inclusion layers. Airplanes.live is labeled disabled
+  because public API use currently requires feeder authorization.
+- Each Internet network has independent bounded polling, TTL and 429/CORS
+  diagnostics. The original adsb.lol-only mode is always available. When a
+  public relay blocks or throttles a network, its actual availability is
+  shown; the app does not invent flights or label cached stale records live.
+  GitHub Pages uses a third-party CORS relay, not a guaranteed private service.
+  For production reliability, provision a bounded owner-hosted HTTPS relay
+  after verifying provider use policies; never publish credentials.
+- Aircraft are deduplicated by **verified six-character ICAO24** across all
+  selected Internet sources. Each record retains the list of networks and
+  individual raw observations. The `I` badge is Internet-only; **`I/R` only
+  appears when the same ICAO is also genuinely received locally**. Local RF
+  position, counters, and observations take priority, as in 0.3.1.
+- The optional native bridge accepts a `net=adsblol,adsbfi,opensky,intelsky`
+  query *only on an authenticated, explicitly paired local endpoint*.
+  Without `net`, the original adsb.lol + adsb.fi fallback code path remains
+  untouched. The new companion never starts or takes over an SDR when
+  gathering Internet-only flights.
+- Identical browser assets are expected at
+  https://tihulu.github.io/tihulu-flight-radar/ and
+  https://tihulu.github.io/TIHULU-TEXT-CENTER/flight_radar/
+  only after **both publishing runs and Pages deployments** succeed.
+  The sole browser source is `tihulu_flight_radar/web/` in this repository.
+
+**Verification:** source-level and synthetic fixture tests are not a live
+API/CORS uptime guarantee, nor proof of an automatic update on the user's
+computer. Keep the existing 0.3.1 installed until the optional development
+preview is manually installed and physically tested.
+
+
 ## Current browser preview — source ownership and real Internet options (6 Nov 2026)
 
 **Working preview URL:** https://tihulu.github.io/TIHULU-TEXT-CENTER/flight_radar/
