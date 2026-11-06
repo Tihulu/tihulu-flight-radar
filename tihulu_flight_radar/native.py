@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import sys
 import threading
-from http.server import ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QAction
@@ -58,7 +58,7 @@ class NativeRadarWindow(QMainWindow):
         self.bridge = Bridge(allow_control=True)
         # Ephemeral loopback port allows multiple instances without taking over
         # an unrelated running service or requiring manual bridge connection.
-        self.server = ThreadingHTTPServer(("127.0.0.1", 0), object)
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), BaseHTTPRequestHandler)
         self.server.RequestHandlerClass = make_handler(self.bridge, self.server.server_port)
         self.server.daemon_threads = True
         self.server_thread = threading.Thread(
@@ -94,7 +94,9 @@ class NativeRadarWindow(QMainWindow):
             return
         # Called only for this on-loopback document. The secret remains
         # ephemeral and is never copied into a browser URL or query string.
-        if self.web.url().origin() != QUrl(self.local_url).origin():
+        if not (self.web.url().scheme() == "http"
+                and self.web.url().host() == "127.0.0.1"
+                and self.web.url().port() == self.server.server_port):
             self.statusBar().showMessage("Untrusted web origin — auto-pairing refused.")
             return
         code = (
