@@ -51,3 +51,17 @@ html.native .bridge-advanced:not([open])>.toolbar{display:flex}
  #f36b3e 0%,#f0aa38 5%,#d8d941 15%,#61d65b 25%,
  #25c8c0 45%,#417ded 65%,#a15be7 87.5%,#e44bc3 100%)}
 @media(max-width:620px){.aircraft-legend{gap:6px 10px}.altitude-ramp{width:100px}}
+
+/* Browser and installed PWA: USB help stays in normal document flow.
+   No floating status panel may cover a selected aircraft or the map. */
+.usb-help{margin-top:10px;border:1px solid #425e76;border-radius:8px;
+ padding:9px 11px;background:#101e2d;overflow:hidden}
+.usb-help summary{cursor:pointer;font-size:12px;color:#b8d8f5}
+.usb-check-actions{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.usb-check-actions button{font-size:12px;white-space:normal}
+#usbReport{white-space:pre-wrap;overflow-wrap:anywhere;max-height:240px;
+ overflow:auto;background:#0a1623;border:1px solid #334b62;border-radius:6px;
+ padding:9px;font:12px/1.55 ui-monospace,Consolas,monospace}
+.map-panel>.mapbar,.map-panel>.aircraft-legend{position:relative;z-index:1;flex-shrink:0}
+.map-panel>#map{position:relative;z-index:0}
+@media(max-width:620px){.usb-check-actions button{width:100%}}
