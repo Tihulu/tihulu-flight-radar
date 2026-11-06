@@ -3,13 +3,19 @@
 // Never fabricates receiver observations or sends a pairing token elsewhere.
 const $ = id => document.getElementById(id);
 const GERMANY = {lat:51.1657, lon:10.4515};
+const COLOGNE = {lat:50.938, lon:6.960};
+const startRegion = new URLSearchParams(location.search).get("region");
+const initialCenter = startRegion === "cologne" ? COLOGNE : GERMANY;
 const COLORS = {antenna:"#50dcad", internet:"#5cafe8", both:"#e6b56b"};
 const canvas = $("map"), ctx = canvas.getContext("2d");
 const state = {
   base:"", token:"", onlineFeed:"", connectionKind:"none", connected:false, data:[], mode:"auto", selected:null, 
-  lat:GERMANY.lat, lon:GERMANY.lon, zoom:7, moved:false, autoFocused:false,
+  lat:initialCenter.lat, lon:initialCenter.lon, zoom:8, moved:false, autoFocused:false,
+  // Camera movement must not change the API search key during feed cooldown.
+  queryLat:initialCenter.lat, queryLon:initialCenter.lon, queryRadius:100,
+  lastFreshAt:0, lastData:[],
   pointer:null, tracks:new Map(), tiles:new Map(), tileFailures:0, fetching:false, timer:null,
-  centerLabel:"Germany default view · not receiver location"
+  centerLabel:(startRegion==="cologne"?"Cologne regional view":"Germany default view")+" · not receiver location"
 };
 const selectors = ["showAntenna","showInternet","showBoth","showTracks","showTiles"];
 function notice(s){$("message").textContent=s}
@@ -48,9 +54,9 @@ function getFeedURL(raw){
 }
 async function fetchInternetFeed(){
  const u=new URL(state.onlineFeed);
- u.searchParams.set("lat",state.lat.toFixed(3));
- u.searchParams.set("lon",state.lon.toFixed(3));
- u.searchParams.set("radius","100");
+ u.searchParams.set("lat",state.queryLat.toFixed(3));
+ u.searchParams.set("lon",state.queryLon.toFixed(3));
+ u.searchParams.set("radius",String(state.queryRadius));
  const abort=new AbortController(), timeout=setTimeout(()=>abort.abort(),10000);
  try{
   const response=await fetch(u.href,{mode:"cors",credentials:"omit",cache:"no-store",signal:abort.signal});
@@ -149,7 +155,7 @@ async function connect(){
 }
 function disconnect(){
  if(state.timer)clearInterval(state.timer);
- state.timer=null;state.token="";state.base="";state.onlineFeed="";state.connectionKind="none";state.data=[];
+ state.timer=null;state.token="";state.base="";state.onlineFeed="";state.connectionKind="none";state.data=[];state.lastData=[];state.lastFreshAt=0;
  state.tracks.clear();state.autoFocused=false;
  connection(false,"Disconnected");updateCounters();renderTable();paint();
  $("feedStatus").textContent="No source connected.";
@@ -231,11 +237,12 @@ function focusAir(force=false){
  if(state.moved&&!force)return;
  const has=state.data.filter(a=>visible(a)&&isPositioned(a));
  if(!has.length){
-  state.lat=GERMANY.lat;state.lon=GERMANY.lon;state.zoom=7;
-  state.centerLabel="Germany default view · no fresh aircraft position";
+  state.lat=state.queryLat;state.lon=state.queryLon;state.zoom=8;
+  state.centerLabel="Selected region · no fresh aircraft position";
   if(force)state.moved=false;paint();return;
  }
- const distance=a=>Math.pow(a.lat-GERMANY.lat,2)+Math.pow((a.lon-GERMANY.lon)*.6,2);
+ const distance=a=>Math.pow(a.lat-state.queryLat,2)+
+    Math.pow((a.lon-state.queryLon)*Math.cos(state.queryLat*Math.PI/180),2);
  has.sort((a,b)=>distance(a)-distance(b));
  state.lat=has[0].lat;state.lon=has[0].lon;state.zoom=9;
  state.autoFocused=true;
@@ -250,11 +257,13 @@ async function refresh(raise=false){
   const mode=$("mode").value;
   if(state.connectionKind==="internet" && mode==="antenna")
    throw Error("Antenna-only mode requires a paired local bridge.");
-  const args=new URLSearchParams({mode,lat:state.lat.toFixed(3),lon:state.lon.toFixed(3),radius:"100"});
+  const args=new URLSearchParams({mode,lat:state.queryLat.toFixed(3),lon:state.queryLon.toFixed(3),radius:String(state.queryRadius)});
   const result=state.connectionKind==="bridge"
     ? await api("/api/aircraft?"+args.toString())
     : await fetchInternetFeed();
   state.data=Array.isArray(result.aircraft)?result.aircraft:[];
+  state.lastData=state.data.map(a=>({...a}));
+  state.lastFreshAt=Date.now();
   updateCounters(result.counts);feedSummary(result.sources);recordTracks();
   if(!state.autoFocused&&!state.moved)focusAir();
   $("lastUpdate").textContent=formatTime(result.generated_at);
@@ -263,9 +272,19 @@ async function refresh(raise=false){
      (state.connectionKind==="internet"&&mode==="hybrid"?" Antenna layer requires a local bridge.":""));
   return true;
  }catch(e){
-  notice("Update failed: "+e.message+" — previous positions are not treated as live.");
-  state.data=[];updateCounters();renderTable();paint();
-  $("lastUpdate").textContent="—";
+  const elapsed=Math.max(0,(Date.now()-state.lastFreshAt)/1000);
+  // Last-known real observations retain their original observation time.
+  state.data=state.lastData.map(a=>{
+    const row={...a};
+    if(Number.isFinite(row.seen))row.seen+=elapsed;
+    if(Number.isFinite(row.seen_pos))row.seen_pos+=elapsed;
+    return row;
+  }).filter(a=>Number.isFinite(a.seen)&&a.seen<=60);
+  updateCounters({antenna:state.data.filter(a=>a.sources?.includes("antenna")).length,
+                  internet:state.data.filter(a=>a.sources?.includes("internet")).length,
+                  combined:state.data.length});
+  renderTable();paint();
+  notice("Feed unavailable: "+e.message+". Showing only remaining fresh real observations, not new aircraft.");
   if(raise)throw e;
   return false;
  }finally{state.fetching=false}
