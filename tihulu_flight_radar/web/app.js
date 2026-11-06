@@ -309,15 +309,37 @@ function grid(){
 }
 function getTile(z,x,y){
  const key=z+"/"+x+"/"+y,old=state.tiles.get(key);
- if(old && (!old.failedAt || Date.now()-old.failedAt<90000))return old;
- if(state.tiles.size>120)state.tiles.clear();
- const img=new Image();
- const info={img,failedAt:0};
- img.crossOrigin="anonymous";
- img.onload=()=>paint();
- img.onerror=()=>{info.failedAt=Date.now();paint()};
- img.src="https://tile.openstreetmap.org/"+key+".png";
+ if(old && (!old.failedAt || Date.now()-old.failedAt<300000))return old;
+ if(state.tiles.size>120){
+  for(const entry of state.tiles.values())if(entry.objectURL)URL.revokeObjectURL(entry.objectURL);
+  state.tiles.clear();
+ }
+ const info={img:null,failedAt:0,objectURL:null};
  state.tiles.set(key,info);
+ // Inspect HTTP status before drawing, so OSM's 403 "Access blocked"
+ // image never appears as if it were a legitimate map tile.
+ fetch("https://tile.openstreetmap.org/"+key+".png",{
+  mode:"cors",credentials:"omit",cache:"default",
+  referrerPolicy:"strict-origin-when-cross-origin"
+ }).then(response=>{
+  if(!response.ok)throw Error("Map tile HTTP "+response.status);
+  return response.blob();
+ }).then(blob=>{
+  if(!blob.type.startsWith("image/"))throw Error("Tile is not an image");
+  info.objectURL=URL.createObjectURL(blob);
+  const img=new Image();
+  info.img=img;
+  img.onload=()=>paint();
+  img.onerror=()=>{info.failedAt=Date.now();paint()};
+  img.src=info.objectURL;
+ }).catch(error=>{
+  info.failedAt=Date.now();state.tileFailures++;
+  if(state.tileFailures>=3 && $("showTiles").checked){
+   $("showTiles").checked=false;
+   notice("Map tiles blocked or unavailable. Showing offline coordinate grid. "+error.message);
+  }
+  paint();
+ });
  return info;
 }
 function tiles(){
@@ -329,7 +351,7 @@ function tiles(){
   const tx=Math.floor(x0)+dx,ty=Math.floor(y0)+dy;
   if(ty<0||ty>=n)continue;
   const t=getTile(z,((tx%n)+n)%n,ty);
-  if(t.img.complete&&t.img.naturalWidth)
+  if(t.img&&t.img.complete&&t.img.naturalWidth)
    ctx.drawImage(t.img,(tx-x0)*256,(ty-y0)*256,256,256);
  }
 }
@@ -429,9 +451,31 @@ $("locate").onclick=()=>{
 };
 $("zoomIn").onclick=()=>{state.zoom=Math.min(12,state.zoom+1);state.moved=true;paint()};
 $("zoomOut").onclick=()=>{state.zoom=Math.max(2,state.zoom-1);state.moved=true;paint()};
-for(const id of selectors)$(id).onchange=()=>{renderTable();paint()};
+for(const id of selectors)$(id).onchange=()=>{
+ if(id==="showTiles" && $("showTiles").checked)state.tileFailures=0;
+ renderTable();paint();
+};
 $("bridgeUrl").value=location.hostname==="127.0.0.1"||location.hostname==="localhost"
  ? location.origin:"http://127.0.0.1:8510";
 connection(false,"Not paired");
 window.addEventListener("resize",resize);
 resize();
+
+// PWA caches the app shell only; never cache receiver data or map tile responses.
+let pwaInstallPrompt=null;
+window.addEventListener("beforeinstallprompt",event=>{
+ event.preventDefault();pwaInstallPrompt=event;$("installApp").hidden=false;
+});
+$("installApp").onclick=async()=>{
+ if(!pwaInstallPrompt)return;
+ pwaInstallPrompt.prompt();
+ await pwaInstallPrompt.userChoice;
+ pwaInstallPrompt=null;$("installApp").hidden=true;
+};
+if("serviceWorker" in navigator && location.protocol==="https:"){
+ window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js",{scope:"./"}).catch(()=>{}));
+}
+if(location.hostname==="tihulu.github.io"){
+ $("mode").value="internet";
+ notice("GitHub Pages ready. Enter a trusted HTTPS Internet feed URL or pair a local bridge for antenna data.");
+}
