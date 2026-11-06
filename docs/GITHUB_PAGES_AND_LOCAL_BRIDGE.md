@@ -68,3 +68,24 @@ The `pages.yml` workflow validates static files on PRs and deploys only from `ma
 - Verify provider availability, ODbL obligations, aircraft feed quotas, result schemas and privacy flows against real live API responses.
 
 Issue tracking: [Flight Radar #5](https://github.com/Tihulu/tihulu-flight-radar/issues/5), [Survival Kit #9](https://github.com/Tihulu/tihulu-survival-kit/issues/9).
+
+
+## Desktop GUI repair: use an application window, not a browser (2026-11-06)
+
+After a user screenshot showed a nonfunctional unpaired page, an invalid bare `127.0.0.1:8510` URL and mixed `403 Access blocked` OSM tiles, the design was corrected:
+
+- `tihulu-flight-radar` now starts `tihulu_flight_radar.native:main`, an actual **Qt WebEngine main window** with the responsive source-aware radar. It starts a randomly ported loopback bridge and passes its ephemeral pairing token to the trusted embedded page after load. No URL entry, terminal token or external browser is required in the native window.
+- `tihulu-flight-radar-classic` starts the original Qt dashboard. The new native window also offers **Receiver → Open full classic receiver dashboard** and shares the same receiver controller (no duplicate RTL-SDR ownership). Legacy map buttons use Qt WebEngine dialogs instead of `webbrowser.open`.
+- COSMIC Applications launchers include **Tihulu Flight Radar** (native), **Tihulu Flight Radar Live** (old Web shortcut updated to native), and **Tihulu Flight Radar Classic** (preserved).
+- Standalone GitHub Pages browsers now normalize `127.0.0.1:8510` into `http://127.0.0.1:8510`. The bridge still must actually be running, and the token is required in a browser.
+- The bridge now serves `Referrer-Policy: strict-origin-when-cross-origin` rather than `no-referrer`, to comply with [OSM tile server requirements](https://operations.osmfoundation.org/policies/tiles/). Browser reload and clearing previously blocked cached tiles may be necessary; the offline coordinate grid remains usable if third-party map tiles still refuse access.
+- Qt WebEngine is a new desktop dependency: `PySide6-WebEngine`. Linux package installation includes its additional shared libraries. Raspberry Pi headless bridge remains independent of this optional large GUI engine.
+
+### Remaining verification gates
+
+- Test the native Qt window and the browser map on the user's real Pop!_OS COSMIC Wayland desktop, including NVIDIA/Qt GPU interaction.
+- Verify macOS ARM64 and Windows x64 Qt WebEngine packaging and runtime, not merely wheel installation.
+- Confirm OSM volunteer tiles load with proper Referer and rate-limited cache usage. Never evade OSM blocks by disguising the client; use alternate authorized providers or offline tiles if still blocked.
+- Test RF reception with actual attached RTL-SDR, local readsb and hardware ownership.
+
+These are draft changes in [PR #6](https://github.com/Tihulu/tihulu-flight-radar/pull/6), not a released update.
