@@ -243,6 +243,24 @@ class Bridge:
                            "combined": len(merge_aircraft(local, online))},
                 "sources": {"antenna": local_status, "internet": online_status}}
 
+    def tar1090_status(self) -> dict:
+        """Only report a local tar1090 with recent genuine decoder JSON.
+
+        A served HTML page alone is not a working tar1090 receiver. This
+        check never starts, stops or retunes an RTL-SDR.
+        """
+        from .core import find_tar1090_url
+        url = find_tar1090_url()
+        return {
+            "available": bool(url),
+            "url": url,
+            "reason": None if url else (
+                "No independent live readsb aircraft.json backend for tar1090. "
+                "If this browser owns the single RTL-SDR via WebUSB, use "
+                "Full radar map here instead; do not start readsb concurrently."
+            )
+        }
+
     def receiver_state(self) -> dict:
         with self.receiver_lock:
             active, detail = self.receiver.status()
@@ -351,6 +369,9 @@ def make_handler(bridge: Bridge, port: int):
                 return
             if path.path == "/api/status":
                 self._send(HTTPStatus.OK, bridge.receiver_state())
+                return
+            if path.path == "/api/tar-status":
+                self._send(HTTPStatus.OK, bridge.tar1090_status())
                 return
             if path.path != "/api/aircraft":
                 self._send(HTTPStatus.NOT_FOUND, {"error": "Not found."})
