@@ -107,6 +107,7 @@ def test_http_pairing_host_origin_cors_and_static_assets():
         })
         with urllib.request.urlopen(req, timeout=3) as r:
             assert r.headers["Access-Control-Allow-Origin"] == "https://tihulu.github.io"
+            assert r.headers["Referrer-Policy"] == "strict-origin-when-cross-origin"
             assert "control_enabled" in json.loads(r.read())
         req = urllib.request.Request(base+"/api/status", headers={
             "Authorization":"Bearer secret-for-test",
