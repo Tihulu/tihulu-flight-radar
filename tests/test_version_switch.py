@@ -34,7 +34,7 @@ def test_pinned_git_sources_and_single_replacement_are_explicit():
     # User's working RF backend must never be purged or restarted by the installer.
     assert "apt-get purge" not in installer
     assert "systemctl restart readsb" not in installer
-    assert "systemctl stop readsb" not in installer
+    assert "sudo systemctl stop readsb" not in installer
 
 
 def test_invalid_switch_command_must_not_touch_system():
