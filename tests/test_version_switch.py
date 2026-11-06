@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SWITCH = ROOT / "scripts/popos-version-switch.sh"
 INSTALL = ROOT / "scripts/install-linux.sh"
 LEGACY = "67280cd84feb89faec6a80f5fe2a55ce5f7b89e6"
-PREVIEW = "72ccc336764d372e9a6e8146c68af88e9d089138"
+PREVIEW = "d275a53adec350b72ffc6dff2055325fda40a97b"
 
 
 def test_switcher_is_valid_bash_and_help_never_installs():
@@ -27,7 +27,7 @@ def test_pinned_git_sources_and_single_replacement_are_explicit():
     installer = INSTALL.read_text(encoding="utf-8")
     assert LEGACY in script
     assert PREVIEW in script
-    assert 'expected="0.3.2.dev2"' in script
+    assert 'expected="0.3.2.dev3"' in script
     assert 'expected="0.3.1"' in script
     assert 'TIHULU_REF="$ref" bash "$tmp"' in script
     assert 'pipx install --force "git+https://github.com/Tihulu/tihulu-flight-radar.git@$ref"' in installer
