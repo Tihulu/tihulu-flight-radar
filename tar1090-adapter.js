@@ -117,6 +117,72 @@
     panel.appendChild(message);
     map.appendChild(panel);
     window.tihuluTarSourcePanel=panel;
+    // Restore the legacy selected-aircraft-safe layout. In tar1090 the
+    // selected_info block is a SIBLING of map_container and floats above it,
+    // so an unconditional top-left legend obscures the aircraft details.
+    const layout=()=>{
+      const host=document.getElementById("map_container");
+      const side=document.getElementById("sidebar_container");
+      const selected=document.getElementById("selected_infoblock");
+      if(!host || !host.getBoundingClientRect)return;
+      const bounds=host.getBoundingClientRect();
+      if(bounds.width<1 || bounds.height<1)return;
+      const selectedRect=selected?.getBoundingClientRect?.();
+      const selectedStyle=selected && window.getComputedStyle?.(selected);
+      const infoblockVisible=!!(selectedRect && selectedStyle?.display!=="none" &&
+        selectedStyle?.visibility!=="hidden" &&
+        selectedRect.width>30 && selectedRect.height>30 &&
+        selectedRect.right>bounds.left && selectedRect.left<bounds.right);
+      const safeLeft=infoblockVisible
+        ? Math.max(12,Math.ceil(selectedRect.right-bounds.left)+12):12;
+      const remaining=Math.max(0,Math.floor(bounds.width-safeLeft-12));
+      const sideBounds=side?.getBoundingClientRect?.();
+      const dockToSidebar=infoblockVisible && remaining<190 &&
+        sideBounds?.width>240 && sideBounds?.height>200;
+      if(dockToSidebar){
+        if(panel.parentElement!==side)side.insertBefore(panel,side.firstChild);
+        panel.style.position="relative";panel.style.left="auto";panel.style.top="auto";
+        panel.style.width="auto";panel.style.maxWidth="calc(100% - 12px)";
+        panel.style.margin="6px";panel.style.flexShrink="0";
+      }else{
+        if(panel.parentElement!==host)host.appendChild(panel);
+        panel.style.position="absolute";panel.style.left=safeLeft+"px";
+        panel.style.top="64px";panel.style.width="max-content";
+        panel.style.maxWidth=Math.max(70,remaining)+"px";
+        panel.style.margin="0";panel.style.flexShrink="";
+      }
+      // The original tar1090 altitude ramp is up to 800px wide and stays
+      // on the map bottom. Narrow the ramp when a selected plane's detail
+      // pane occupies the left side; never let ramp and details intersect.
+      const chart=document.getElementById("altitude_chart");
+      if(chart){
+        const right=Math.min(85,Math.max(12,Math.round(bounds.width*.06)));
+        const space=Math.max(0,Math.floor(bounds.width-right-(infoblockVisible?safeLeft:12)-12));
+        const width=Math.min(800,space);
+        chart.style.right=right+"px";
+        chart.style.width=width+"px";
+        chart.style.maxWidth=width+"px";
+        chart.style.visibility=space<125?"hidden":"";
+      }
+    };
+    window.tihuluTarLayout=layout;
+    window.addEventListener("resize",layout);
+    if(typeof ResizeObserver!=="undefined"){
+      const obs=new ResizeObserver(layout);
+      obs.observe(map);
+      const sel=document.getElementById("selected_infoblock");
+      if(sel)obs.observe(sel);
+      window.tihuluTarLayoutResizeObserver=obs;
+    }
+    if(typeof MutationObserver!=="undefined"){
+      const sel=document.getElementById("selected_infoblock");
+      if(sel){
+        const obs=new MutationObserver(layout);
+        obs.observe(sel,{attributes:true,attributeFilter:["style","class","hidden"]});
+        window.tihuluTarLayoutMutationObserver=obs;
+      }
+    }
+    layout();
     mountStatus();
   }
   const status = document.createElement("div");
