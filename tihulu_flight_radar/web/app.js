@@ -350,7 +350,10 @@ function browserSourceResult(mode=String($("mode").value),internetError=null){
    internet:{state:!state.onlineFeed?"not_configured":
        internetError?"error":state.internetSnapshot?"available":"not_yet_loaded",
       error:internetError,provider:state.internetSnapshot?.sources?.internet?.provider,
-      attribution:attribution||"Network provider attribution not yet available",
+      attribution:attribution||(
+        state.onlineProvider==="intelsky"?"IntelSky.org · limited military/government coverage":
+        "Network provider attribution not yet available"),
+      limited_coverage:state.onlineProvider==="intelsky",
       updated_at:state.internetSnapshot?.sources?.internet?.updated_at}
   }
  };
@@ -567,6 +570,19 @@ function feedSummary(feed){
  ];
  $("feedStatus").textContent=details.join("\n");
  $("feedStatus").style.whiteSpace="pre-line";
+ const status=$("networkStatus");
+ if(status){
+  const count=state.data.filter(a=>a.sources?.includes("internet")).length;
+  status.textContent=i.state==="not_configured"
+    ?"Internet off / not configured. Select a provider and Enable Internet."
+    :i.error?"Internet error: "+i.error
+    :i.state==="available"&&count===0
+      ?(i.limited_coverage?"IntelSky connected — 0 covered aircraft in this region (limited military/government feed).":
+         "Network connected — 0 fresh positioned aircraft in this search area.")
+    :i.state==="available"
+      ?"Internet active: "+count+" aircraft · "+(i.provider||"configured provider")
+    :"Internet: "+(i.state||"not connected")+". "+(i.provider||"Select a provider to connect.");
+ }
 }
 function recordTracks(){
  for(const a of state.data){
@@ -832,6 +848,21 @@ preset.onchange=()=>{
  }
 };
 showProviderChoice();
+$("networkApply").onclick=()=>{
+ if(state.connectionKind==="bridge"){
+  notice("The paired readsb bridge manages its own network source. To configure a browser Internet provider, disconnect the bridge first; this will not stop your readsb service.");
+  return;
+ }
+ if($("onlinePreset").value==="off"){
+  if(state.connectionKind==="usb"){
+   state.onlineFeed="";state.internetSnapshot=null;$("mode").value="antenna";
+   displayUsbSnapshot();feedSummary(browserSourceResult().sources);
+  }else if(state.connectionKind==="internet")disconnect();
+  $("networkStatus").textContent="Internet overlay disabled; radio continues independently.";
+  return;
+ }
+ void connect();
+};
 $("connect").onclick=connect;
 $("disconnect").onclick=disconnect;
 $("refresh").onclick=()=>{
