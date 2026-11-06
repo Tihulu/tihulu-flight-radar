@@ -15,3 +15,24 @@ footer{color:var(--muted);display:flex;flex-wrap:wrap;justify-content:space-betw
 /* The installed Qt app pairs with its own private bridge. Hide browser-only pairing widgets. */
 html.native .toolbar .field:first-child,html.native .toolbar .field.token,html.native #connect,html.native #disconnect{display:none!important}
 html.native .notice{display:none!important}
+
+/* Browser-first RTL-SDR receiver; no local bridge is required for WebUSB. */
+.usb-direct-panel{border:1px solid #385572;border-radius:12px;padding:15px 18px;
+ background:linear-gradient(105deg,#182e43,#152334);margin:0 0 12px}
+.usb-topline,.usb-controls{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+.usb-topline{justify-content:space-between;margin-bottom:12px}
+.usb-pill{border:1px solid #427c9c;border-radius:24px;padding:4px 9px;
+ color:#b5e1f4;font-size:11px}
+.usb-controls>button{flex:0 0 auto}
+#usbStatus{color:#d1e5f7;font-size:12px;flex:1 1 250px;line-height:1.45}
+#usbStatus[data-error="true"]{color:#ffc6a8}
+.usb-hint{font-size:12px;color:#bbd1e6;line-height:1.55;margin:10px 0 0}
+.bridge-advanced{margin-bottom:12px;border:1px solid var(--line);
+ background:#172230;border-radius:9px;padding:9px 12px}
+.bridge-advanced summary{cursor:pointer;color:#c8dded;font-size:12px;user-select:none}
+.bridge-advanced .toolbar{border:0;margin-top:9px;padding:9px}
+html.native .usb-direct-panel{display:none}
+html.native .bridge-advanced>summary{display:none}
+html.native .bridge-advanced{border:0;margin:0;padding:0;background:transparent}
+html.native .bridge-advanced:not([open])>.toolbar{display:flex}
+@media(max-width:620px){.usb-controls>button{flex:1 1 100%}}
