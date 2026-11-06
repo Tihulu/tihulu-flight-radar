@@ -183,6 +183,7 @@ function onIQ(buffer){
   self.postMessage({type:"snapshot",aircraft:store.snapshot(now),
     messages:store.messages,receivedBytes:bytes,updatedAt:now});
  }
+ self.postMessage({type:"ack"});
 }
 if(typeof self!=="undefined" && typeof self.addEventListener==="function"){
  self.addEventListener("message",event=>{
