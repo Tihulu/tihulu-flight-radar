@@ -34,32 +34,32 @@ password prompts after the one-time package installation. Review
 packaging/linux/sudoers.conf before installation. The app does not install
 a decoder or RTL-SDR driver by itself.
 
-## One-line Linux install / upgrade (Pop!_OS, Ubuntu, Debian)
+## One-line install / update (Pop!_OS, Ubuntu, Debian)
 
-The installer installs or **replaces your old Tihulu ADS-B/Flight Radar desktop version** using pipx and creates two COSMIC/XDG Applications shortcuts:
+The installer updates the existing Tihulu Flight Radar through pipx and refreshes COSMIC/XDG Applications shortcuts. **The default desktop application is now a real Qt WebEngine window; it does not launch a system browser.** The bundled local receiver bridge pairs automatically, so there is no `127.0.0.1:8510` field or session token to enter in the native app.
 
-- **Tihulu Flight Radar** — existing full Qt desktop dashboard and advanced tar1090 access.
-- **Tihulu Flight Radar Web** — starts the loopback-only browser companion, opens the local web dashboard and prints a temporary pairing token to the terminal.
+- **Tihulu Flight Radar** — new native in-app live radar with Antenna/Internet/Hybrid/Auto source modes, overlays and map.
+- **Tihulu Flight Radar Live** — replaces the old "Web" Applications shortcut; opens the same native radar window, not an external browser.
+- **Tihulu Flight Radar Classic** — preserves the earlier native Qt dashboard with all receiver controls, raw details, quick exports and full tar1090 access. It can also be opened from the new app's **Receiver** menu. Its maps now open inside Qt windows.
 
-It preserves `readsb`/`tar1090` services, receiver settings and recordings; removes only identified obsolete Tihulu desktop *packages* (with `apt-get remove`, not purge) and the former `tihulu-adsb-radar.desktop` launcher. The new bridge's hardware controls are off by default.
-
-**Preview installer for this unmerged development branch** (one line, as your normal user, without `sudo` in front):
+**Install or update the current draft preview with one command (run as your regular user):**
 
 ```bash
 bash -c 'set -euo pipefail; f=$(mktemp); trap "rm -f \"$f\"" EXIT; curl -fLsS https://raw.githubusercontent.com/Tihulu/tihulu-flight-radar/feature/github-pages-local-bridge-2026-11-06/scripts/install-linux.sh -o "$f"; TIHULU_REF=feature/github-pages-local-bridge-2026-11-06 bash "$f"'
 ```
 
-After the reviewed changes reach `main`, the stable one-line updater will be:
+**Stable installer (only after this PR has passed checks and is merged to main):**
 
 ```bash
 bash -c 'set -euo pipefail; f=$(mktemp); trap "rm -f \"$f\"" EXIT; curl -fLsS https://raw.githubusercontent.com/Tihulu/tihulu-flight-radar/main/scripts/install-linux.sh -o "$f"; bash "$f"'
 ```
 
-**Do not use the stable updater to request the preview features until they are actually merged.** This script needs an Internet connection and will ask for sudo permission for distro packages, cleanup of old Debian app packages, and narrowly scoped readsb/tar1090 service rules. Review [the script](scripts/install-linux.sh) before execution, especially on a machine with customized packages.
+The installer asks for narrowly scoped sudo permissions when necessary, replaces only known obsolete Tihulu application packages and icons, and **does not reset readsb/tar1090 services, other SDR modules, recordings or receiver settings**. Review [the installer source](scripts/install-linux.sh) before allowing package changes. Running the same command again updates the application; if COSMIC has cached the menu, log out/in to refresh it.
 
-The same command can be run again to update the pipx installation and application entries. The terminal shown when opening **Tihulu Flight Radar Web** contains the short-lived pairing token that must be pasted into the web page; do not publish it. If Applications has not refreshed immediately, sign out and back in. For manual launch, use `~/.local/bin/tihulu-flight-radar` or `~/.local/bin/tihulu-flight-bridge --open-browser` (the second should be run in a visible terminal).
+The **GitHub Pages version** is separate and still needs a locally launched bridge or compatible hosted API for live data. To start the manual bridge for a browser, use `~/.local/bin/tihulu-flight-bridge` in a terminal, then pair using its token. Browsers now accept `127.0.0.1:8510` and `http://127.0.0.1:8510`. The online OpenStreetMap tile issue has been addressed by sending a policy-compatible origin Referer from the local server; offline coordinate-grid fallback remains available.
 
-**Limitations:** This is still a draft implementation, not a released site. The local bridge requires the existing readsb decoder and correct RTL-SDR driver for actual RF reception. It does not provide insecure public LAN control.
+**Development caveat:** the native Qt WebEngine app and map fixes are in a draft PR, not yet released or physically validated on every OS/receiver. Windows USB driver/readsb and Pi 5 hardware need separate tests.
+
 ## Development run
 
 Requires Python 3.11+ (3.12 recommended).
