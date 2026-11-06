@@ -50,7 +50,7 @@ test("PWA has diagnostic controls, valid module references and updated offline c
  const usb=fs.readFileSync(path.join(web,"browser_usb.mjs"),"utf8");
  const sw=fs.readFileSync(path.join(web,"sw.js"),"utf8");
  const bridge=fs.readFileSync(path.join(__dirname,"../tihulu_flight_radar/bridge.py"),"utf8");
- for(const id of ["usbCheck","usbCopy","usbReport","usbHelp"])
+ for(const id of ["usbCheck","usbClaimTest","usbCopy","usbReport","usbHelp"])
   assert.match(html,new RegExp('id="'+id+'"'));
  assert.match(usb,/normalizeIqSampleBlock\(sampleBlock\)/);
  assert.match(usb,/explainUsbError\(error,platform\)/);
@@ -76,4 +76,39 @@ test("Verified Linux DVB recovery is explicit, limited to Nooelec, and never aut
  assert.match(manual,/user explicitly unbound/);
  assert.match(manual,/Do not unplug\/replug/);
  assert.match(manual,/1-4:1\.0/);
+});
+
+test("On-demand claim probe reproduces native kernel-owned interface failure without RF sampling",async()=>{
+ const {probeUsbInterface}=await tools;
+ const calls=[];
+ const usbDevice={
+  vendorId:0x0bda,productId:0x2838,opened:false,configuration:null,
+  async open(){calls.push("open");this.opened=true;},
+  async selectConfiguration(n){calls.push("select "+n);this.configuration={configurationValue:n}},
+  async claimInterface(n){calls.push("claim "+n);throw new Error("Unable to claim interface.")},
+  async releaseInterface(){throw Error("no interface was claimed")},
+  async close(){calls.push("close");this.opened=false}
+ };
+ const res=await probeUsbInterface({async getDevices(){calls.push("list");return[usbDevice]}});
+ assert.equal(res.ok,false);
+ assert.equal(res.stage,"USBDevice.claimInterface(0)");
+ assert.match(res.errorMessage,/Unable to claim interface/);
+ assert.deepEqual(calls,["list","open","select 1","claim 0","close"]);
+ assert.equal(usbDevice.opened,false);
+});
+test("On-demand claim probe opens and releases only the authorized receiver",async()=>{
+ const {probeUsbInterface}=await tools;
+ const calls=[];
+ const device={
+  vendorId:0x0bda,productId:0x2838,opened:false,configuration:null,
+  async open(){calls.push("open");this.opened=true},
+  async selectConfiguration(){calls.push("config");this.configuration={}},
+  async claimInterface(){calls.push("claim")},
+  async releaseInterface(){calls.push("release")},
+  async close(){calls.push("close");this.opened=false}
+ };
+ const result=await probeUsbInterface({async getDevices(){return [device]}});
+ assert.equal(result.ok,true);
+ assert.deepEqual(calls,["open","config","claim","release","close"]);
+ assert.equal(device.opened,false);
 });
