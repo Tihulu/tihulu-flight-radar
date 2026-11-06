@@ -56,7 +56,7 @@ rm -f "$app_dir/tihulu-adsb-radar.desktop"
 policy="$(mktemp)"
 trap 'rm -f "$policy"' EXIT
 cat > "$policy" <<EOF
-Cmnd_Alias TIHULU_FLIGHT = /usr/bin/systemctl start readsb.service tar1090.service, /usr/bin/systemctl stop readsb.service tar1090.service, /usr/bin/systemctl enable readsb.service tar1090.service, /usr/bin/systemctl disable readsb.service tar1090.service
+Cmnd_Alias TIHULU_FLIGHT = /usr/bin/systemctl start readsb.service tar1090.service, /usr/bin/systemctl stop readsb.service tar1090.service, /usr/bin/systemctl stop readsb.service, /usr/bin/systemctl enable readsb.service tar1090.service, /usr/bin/systemctl disable readsb.service tar1090.service
 $login ALL=(root) NOPASSWD: TIHULU_FLIGHT
 EOF
 sudo visudo -cf "$policy"

@@ -317,8 +317,9 @@ class RadarWindow(QMainWindow):
         self.diagnostics_button.clicked.connect(self._show_diagnostics)
         settings.addWidget(self.diagnostics_button)
         settings.addWidget(text(
-            "Existing systemd services remain active when this window closes. "
-            "A decoder launched in Direct readsb mode stops with the application.",
+            "A readsb receiver started here stops when this app closes (including Linux service mode). "
+            "A service already active before launch is externally managed: use Stop explicitly to release it. "
+            "Direct readsb child processes also stop on exit.",
             "muted", True
         ))
         body.addWidget(self.settings_frame)
@@ -699,9 +700,24 @@ class RadarWindow(QMainWindow):
 
     def closeEvent(self, event):
         self.timer.stop()
+        # Let an in-flight Start/Restart finish before releasing the receiver.
+        # Keep the executor available if close fails, so Stop can be retried.
+        if self.action_future is not None:
+            try:
+                self.action_future.result(timeout=35)
+            except Exception:
+                pass
+        try:
+            self.controller.close()
+        except DataError as exc:
+            QMessageBox.warning(self, "Receiver still active",
+                "The receiver could not be stopped automatically. "
+                "Close was cancelled to avoid silently leaving the SDR busy.\n\n"+str(exc))
+            event.ignore()
+            self.timer.start(2000)
+            return
+        self.pool.shutdown(wait=True, cancel_futures=True)
         self.map_server.close()
-        self.controller.close()
-        self.pool.shutdown(wait=False, cancel_futures=True)
         super().closeEvent(event)
 
 

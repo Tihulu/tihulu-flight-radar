@@ -137,3 +137,29 @@ See the [feature preservation and Survival Kit checklist](docs/FEATURE_PARITY_AN
 - Raspberry Pi packages and headless Survival Kit Radio/SDR Center backend.
 - Offline MBTiles packages, aircraft history database, signal graphs and
   multiple receiver support.
+
+
+### Closing the app releases receivers started by this app
+
+The application already has **Start / Stop / Restart** buttons. The Linux
+`readsb.service` is now treated as an app-owned session **only if it was
+inactive and explicitly started using the Flight Radar Start button**.
+On desktop window close, the program finishes pending actions and stops
+that app-started systemd receiver (as well as directly spawned readsb
+children), preventing the RTL-SDR from remaining busy. Pre-existing
+systemd services are considered **externally managed** and are **not
+stopped silently**: select Stop first when switching to FM/DAB. If the
+restricted sudo permission fails on close, the application reports the
+failure and cancels close rather than claiming the USB is free.
+
+Boot-enable/disable is a separate explicit control; closing the app does
+not change system startup settings. No broad process-kill commands are used.
+Background-mode default is OFF for receivers owned by the desktop app.
+
+
+On automatic close, Flight Radar stops **readsb.service only**, leaving
+an independent tar1090 map/UI service running. The exact one-unit
+`systemctl stop readsb.service` command requires a refreshed narrow
+sudoers policy; re-running the Linux installer after this PR merges
+installs it without broadening to unrestricted sudo. Explicit in-app
+Stop/Restart controls retain the previous paired readsb/tar1090 behavior.
