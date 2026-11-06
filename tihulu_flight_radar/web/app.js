@@ -86,6 +86,8 @@ async function fetchInternetFeed(){
 // page is loaded. The token is never placed in a URL, cookies or storage.
 window.tihuluNativeConnect=async function(base, token){
  document.documentElement.classList.add("native");
+ // Desktop explicitly opts into both observed RF and public online layers.
+ $("mode").value="hybrid";
  $("bridgeUrl").value=base;
  $("token").value=token;
  await connect();
