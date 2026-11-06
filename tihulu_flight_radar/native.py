@@ -11,7 +11,7 @@ import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from PySide6.QtCore import Qt, QUrl
+from PySide6.QtCore import Qt, QUrl, QSettings
 from PySide6.QtGui import QAction
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import QApplication, QDialog, QMainWindow, QMessageBox, QVBoxLayout
@@ -55,6 +55,7 @@ class NativeRadarWindow(QMainWindow):
         self.setWindowTitle("Tihulu Flight Radar — Live Radar")
         self.resize(1420, 880)
         self.setMinimumSize(850, 560)
+        self.settings = QSettings("Tihulu", "FlightRadar")
         self.bridge = Bridge(allow_control=True)
         # Ephemeral loopback port allows multiple instances without taking over
         # an unrelated running service or requiring manual bridge connection.
