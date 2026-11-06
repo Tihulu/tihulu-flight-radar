@@ -213,7 +213,10 @@ def make_handler(bridge: Bridge, port: int):
             self.send_header("Content-Length", str(length))
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
-            self.send_header("Referrer-Policy", "no-referrer")
+            # OSM volunteer tiles require a valid Referer and caching; no-referrer
+            # caused the user's screenshot's striped '403 Access blocked' tiles.
+            # strict-origin does not reveal local URL paths or pairing secrets.
+            self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
             origin = self.headers.get("Origin")
             if origin in allowed:
                 self.send_header("Access-Control-Allow-Origin", origin)
