@@ -39,7 +39,7 @@ jobs:
         if: matrix.label == 'linux-x64'
         run: bash -n scripts/install-linux.sh
       - name: Verify map autofocus / nearest-aircraft logic
-        run: node --test tests/map_focus.test.cjs tests/map_html.test.cjs tests/web_bridge.test.cjs tests/pages_tar.test.cjs tests/browser_adsb.test.cjs
+        run: node --test tests/map_focus.test.cjs tests/map_html.test.cjs tests/web_bridge.test.cjs tests/pages_tar.test.cjs tests/browser_adsb.test.cjs tests/browser_source.test.cjs
       - name: Install Linux Qt runtime dependencies
         if: matrix.label == 'linux-x64'
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libegl1 libgl1 libxkbcommon0 libdbus-1-3 libnss3 libnspr4 libxcomposite1 libxdamage1 libxrandr2 libgbm1 libxtst6 libxkbfile1 libxss1 libxshmfence1 libasound2t64
