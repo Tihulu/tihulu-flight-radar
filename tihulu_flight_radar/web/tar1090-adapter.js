@@ -25,6 +25,38 @@
   let updatedAt = 0;
   let connected = false;
   const MAX_AIRCRAFT = 1500;
+  // Pinned upstream tar1090 declares 'let OLMap' at global lexical scope.
+  // It is not window.OLMap. Use that actual map for genuine I/R badge layer.
+  function originalMap(){
+    return typeof OLMap !== "undefined" && OLMap ? OLMap : window.OLMap;
+  }
+  function originalPlanes(){return typeof g !== "undefined" && g ? g : window.g;}
+  function originalOl(){return typeof ol !== "undefined" && ol ? ol : window.ol;}
+  function updateUpstreamTable(){
+    const tar=typeof TAR !== "undefined" ? TAR : window.TAR;
+    if(tar?.planeMan?.refresh)tar.planeMan.refresh();
+    originalMap()?.render?.();
+  }
+  // tar1090 retains aircraft models after a JSON row disappears.
+  // Filtering transport JSON alone therefore cannot disable a map layer.
+  // Remove only excluded objects using upstream's own reaper pattern.
+  function reconcileSourceVisibility(){
+    if(!connected)return;
+    const group=originalPlanes();
+    if(!group || !Array.isArray(group.planesOrdered) || !group.planes)return;
+    const permitted=new Set(visibleAircraft().map(a=>a.hex));
+    let removed=0;
+    for(const plane of [...group.planesOrdered]){
+      if(!plane || permitted.has(String(plane.icao||"").toLowerCase()))continue;
+      if(plane.selected && typeof deselectAllPlanes==="function")deselectAllPlanes();
+      delete group.planes[plane.icao];
+      const i=group.planesOrdered.indexOf(plane);
+      if(i!==-1)group.planesOrdered.splice(i,1);
+      if(typeof plane.destroy==="function")plane.destroy();
+      removed++;
+    }
+    if(removed)updateUpstreamTable();
+  }
   function visibleAircraft(){
     const elapsed=Math.max(0,(Date.now()-updatedAt)/1000);
     return snapshot.aircraft.filter(a=>{
@@ -72,7 +104,8 @@
       checkbox.setAttribute("aria-label","Show "+name);
       checkbox.onchange=()=>{
         show[key]=checkbox.checked;
-        refreshBadges(); // upstream reads fresh filtered JSON on next poll
+        reconcileSourceVisibility(); // remove already-drawn markers and table rows
+        refreshBadges();
       };
       label.appendChild(checkbox);
       label.appendChild(document.createTextNode(" "+name));
@@ -163,6 +196,7 @@
     snapshot={now,messages:Number.isFinite(m.messages)?m.messages:0,aircraft};
     sources=observations;
     connected=true;updatedAt=Date.now();mountStatus();
+    reconcileSourceVisibility();
     refreshBadges();
   });
   function reply(){
@@ -205,7 +239,7 @@
   let tagLayer=null,tagSource=null;
   function refreshBadges(){
     if(!connected)return;
-    const ol=window.ol,map=window.OLMap;
+    const ol=originalOl(),map=originalMap();
     if(!ol?.layer?.Vector || !map?.addLayer || !ol?.proj?.fromLonLat)return;
     if(!tagLayer){
       tagSource=new ol.source.Vector();
@@ -233,5 +267,9 @@
       }));
     }
   }
-  window.setInterval(refreshBadges,2200);
+  window.setInterval(()=>{
+    reconcileSourceVisibility();
+    refreshBadges();
+    window.tihuluTarLayout?.();
+  },2200);
 })();
