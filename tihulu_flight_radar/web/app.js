@@ -128,23 +128,24 @@ function applyStartupPriority(){
  paint();
 }
 function initializeStartupLocation(){
- if(!navigator.geolocation){
-  state.startupLocationPending=false;applyStartupPriority();return;
- }
- navigator.geolocation.getCurrentPosition(
-  fix=>{
-   const p=fix?.coords;
-   if(p && Number.isFinite(p.latitude) && Number.isFinite(p.longitude)){
-    state.startupGeo={lat:p.latitude,lon:p.longitude};
-   }
-   state.startupLocationPending=false;applyStartupPriority();
-   if(state.startupQueryDirty && !state.fetching && state.connected){
-    state.startupQueryDirty=false;refresh();
-   }
-  },
-  ()=>{state.startupLocationPending=false;applyStartupPriority();},
-  {enableHighAccuracy:false,timeout:6500,maximumAge:300000}
- );
+ const fallback=()=>{state.startupLocationPending=false;applyStartupPriority();};
+ if(!navigator.geolocation){fallback();return;}
+ // Match Satellite Center: no automatic GPS permission prompts.
+ // Existing browser consent may be used for initial camera preference.
+ if(!navigator.permissions?.query){fallback();return;}
+ navigator.permissions.query({name:"geolocation"}).then(permission=>{
+  if(permission.state!=="granted"){fallback();return;}
+  navigator.geolocation.getCurrentPosition(
+   fix=>{
+    const p=fix?.coords;
+    if(p && Number.isFinite(p.latitude) && Number.isFinite(p.longitude))
+     state.startupGeo={lat:p.latitude,lon:p.longitude};
+    fallback();
+    if(state.startupQueryDirty && !state.fetching && state.connected){
+     state.startupQueryDirty=false;refresh();
+    }
+   },fallback,{enableHighAccuracy:false,timeout:6500,maximumAge:300000});
+ }).catch(fallback);
 }
 function category(a){return a.sources?.length > 1 ? "both" : (a.sources?.[0] || "internet")}
 function visible(a){
@@ -1153,6 +1154,47 @@ function chooseRegion(point,label,zoom=8){
 }
 $("cologne").onclick=()=>chooseRegion(COLOGNE,"Cologne",9);
 $("germany").onclick=()=>chooseRegion(GERMANY,"Germany",7);
+
+// The Satellite Center's offline place directory and the radar share one
+// location model. A saved place is a SEARCH center, never receiver GPS.
+function applyPlaceToFlightRadar(place){
+ if(!place||!Number.isFinite(place.lat)||!Number.isFinite(place.lon))return;
+ if(Math.abs(place.lat)>90||Math.abs(place.lon)>180)return;
+ const radius=Number(place.radius);
+ if(![25,50,100,150,250].includes(radius))return;
+ state.queryRadius=radius;
+ state.tracks.clear(); // avoid carrying visible trails from an old area
+ state.selected=null;
+ chooseRegion({lat:place.lat,lon:place.lon},
+   place.label+" · "+radius+" NM search",Number(place.zoom)||9);
+ // The full original tar1090 iframe uses camera URL parameters at startup.
+ // Recreate only its view; no RF process or browser receiver is restarted.
+ if(tarFrameOpen){
+  const frame=$("fullTarFrame");
+  if(frame?.hasAttribute("src"))frame.removeAttribute("src");
+  void setBrowserTar(true);
+ }
+ notice("Map and Internet aircraft search: "+place.label+" · "+radius+
+   " NM. Physical receiver site unchanged.");
+}
+import("./flight_location_ui.mjs").then(mod=>{
+ mod.initFlightLocationUI({
+  onChoose:applyPlaceToFlightRadar,
+  getCurrent:()=>({lat:state.queryLat,lon:state.queryLon,radius:state.queryRadius})
+ });
+ const saved=mod.readSavedPlace();
+ if(saved){
+  applyPlaceToFlightRadar(saved);
+  $("mapLabel").textContent="Restored saved Internet search region: "+saved.label+
+   " · "+saved.radius+" NM";
+ }
+}).catch(err=>{
+ notice("Place chooser could not load: "+String(err.message||err)+
+  ". Cologne, Germany, Search here and GPS controls remain available.");
+ for(const id of ["placeOpen","placeTarOpen"]){
+  const btn=$(id);if(btn){btn.disabled=true;btn.title="Offline place selector unavailable";}
+ }
+});
 $("searchHere").onclick=()=>{
  state.queryLat=state.lat;state.queryLon=state.lon;
  state.moved=true;
