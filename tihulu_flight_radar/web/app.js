@@ -420,13 +420,15 @@ function renderTable(){
  for(const a of displayed.slice(0,400)){
   const tr=document.createElement("tr");
   if(state.selected && a.hex===state.selected)tr.className="selected";
-  for(const value of [
+  for(const [index,value] of [
    (a.flight||"—").trim()+" / "+(a.hex||"—"),
-   a.alt_baro??a.alt_geom??"—",a.gs??"—",category(a)
-  ]){
+   a.alt_baro??a.alt_geom??"—",a.gs??"—",
+   aircraftSourceBadge(a)+" · "+category(a)
+  ].entries()){
    const td=document.createElement("td");
    td.textContent=String(value);
-   if(value===category(a)){td.className="tag "+category(a)}
+   if(index===3)td.className="tag "+category(a);
+   if(index===1)td.style.color=altitudeColor(a);
    tr.append(td);
   }
   tr.onclick=()=>choose(a);
