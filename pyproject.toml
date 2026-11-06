@@ -30,7 +30,7 @@ tihulu-flight-bridge = "tihulu_flight_radar.bridge:main"
 include = ["tihulu_flight_radar*"]
 
 [tool.setuptools.package-data]
-tihulu_flight_radar = ["map.html", "map_focus.js", "web/*.html", "web/*.css", "web/*.js", "web/*.webmanifest", "web/*.svg"]
+tihulu_flight_radar = ["map.html", "map_focus.js", "web/*.html", "web/*.css", "web/*.js", "web/*.mjs", "web/*.webmanifest", "web/*.svg"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
