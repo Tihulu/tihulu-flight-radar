@@ -75,11 +75,18 @@ async function cleanup(){
 async function read(){
  try{
   while(!stopRequested && device){
-   const raw=await device.readSamples(65536);
+   // @jtarrio/webrtlsdr 3.0.7 returns SampleBlock {frequency,
+   // directSampling, data:ArrayBuffer}, NOT a bare ArrayBuffer.
+   // The previous reader rejected every successful sample transfer!
+   const sampleBlock=await device.readSamples(65536);
    if(stopRequested)break;
-   const view=raw instanceof ArrayBuffer?new Uint8Array(raw):
-     ArrayBuffer.isView(raw)?new Uint8Array(raw.buffer,raw.byteOffset,raw.byteLength):null;
-   if(!view || view.byteLength<2)throw Error("No usable unsigned 8-bit interleaved I/Q samples returned.");
+   const data=sampleBlock?.data ?? sampleBlock;
+   const view=data instanceof ArrayBuffer?new Uint8Array(data):
+     ArrayBuffer.isView(data)?new Uint8Array(data.buffer,data.byteOffset,data.byteLength):null;
+   if(!view || view.byteLength<2 || view.byteLength%2!==0)
+    throw Error("RTL-SDR returned an invalid SampleBlock (expected interleaved Uint8 I/Q pairs).");
+   if(sampleBlock?.frequency!=null && Number(sampleBlock.frequency)!==1090000000)
+    throw Error("RTL-SDR sample frequency changed unexpectedly; stopping 1090 MHz ADS-B decode.");
    if(view.byteLength>2*1024*1024)throw Error("WebUSB block exceeded safe 2 MiB bound.");
    const own=view.slice();
    bytes+=own.byteLength;
