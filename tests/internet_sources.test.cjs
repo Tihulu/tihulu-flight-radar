@@ -235,3 +235,18 @@ test("Static page selects general ADS-B as the explicit experimental default",()
  assert.match(html,/never raw USB IQ/);
  assert.match(js,/ADSBLOL_PUBLIC_RELAY/);
 });
+
+test("Hosted Pages automatically selects real Internet-only flights without claiming an antenna",()=>{
+ assert.match(js,/if\(location\.hostname==="tihulu\.github\.io"\)[\s\S]*?\$\("mode"\)\.value="internet";/);
+ assert.match(js,/const startPagesInternet=\(\)=>\{/);
+ assert.match(js,/if\(state\.connectionKind!=="none" \|\| \$\("onlinePreset"\)\.value==="off"\)return;/);
+ assert.match(js,/else startPagesInternet\(\);/);
+ assert.match(js,/document\.addEventListener\("visibilitychange"/);
+ assert.match(html,/load automatically without an antenna or local app/);
+});
+test("Internet relay outage preserves the live retry loop with honest diagnostics",()=>{
+ assert.match(js,/else if\(state\.connectionKind==="internet" && state\.onlineFeed\)\{/);
+ assert.match(js,/automatic retry while tab is visible/);
+ assert.match(js,/state\.timer=setInterval\(\(\)=>\{if\(!document\.hidden\)refresh\(\)\},15000\)/);
+ assert.match(js,/Showing only remaining fresh real observations, not new aircraft/);
+});
