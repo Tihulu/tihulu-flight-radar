@@ -42,6 +42,19 @@ MAP_CENTER_JS = r"""(() => {
   return {lon:p[0],lat:p[1]};
 })()"""
 
+# Even when tar1090 fails to initialize its OpenLayers map, show a visible
+# diagnostic instead of an invisible Internet layer. This does not modify tar.
+BOOTSTRAP_JS = r"""(() => {
+  if (document.getElementById('tihulu-tar-overlay-panel')) return;
+  const panel = document.createElement('div');
+  panel.id='tihulu-tar-overlay-panel';
+  panel.style.cssText='position:fixed;bottom:16px;right:15px;z-index:2147483000;'+
+    'background:#101d2aef;color:#eaf7ff;padding:9px;border:1px solid #407391;'+
+    'border-radius:8px;font:12px system-ui;max-width:260px';
+  panel.textContent='Internet overlay: waiting for tar1090 map…';
+  document.body.appendChild(panel);
+})()"""
+
 # Delivered from the native application into the local tar1090 WebEngine page.
 # It does NOT fetch remotely or expose a pairing token into tar1090.
 # Aircraft with matching ICAO already visible in tar1090 are skipped.
@@ -70,7 +83,9 @@ OVERLAY_JS = r"""(function(input){
       })
     });
     OLMap.addLayer(app.layer);
-    const panel = document.createElement('div');
+    const panel = document.getElementById('tihulu-tar-overlay-panel')
+       || document.createElement('div');
+    panel.replaceChildren();
     panel.id='tihulu-tar-overlay-panel';
     panel.style.cssText = 'position:fixed;bottom:16px;right:15px;z-index:2147483000;'+
       'background:#101d2aef;color:#eaf7ff;padding:9px;border:1px solid #407391;'+
@@ -87,7 +102,7 @@ OVERLAY_JS = r"""(function(input){
     status.id='tihulu-tar-overlay-status';
     status.style.cssText='color:#a5c4d8;margin-top:4px';
     panel.appendChild(status);
-    document.body.appendChild(panel);
+    if (!panel.isConnected) document.body.appendChild(panel);
     app.status=status;
     window.tihuluTarOverlay=app;
   }
@@ -146,6 +161,7 @@ class TarOverlayView(QWebEngineView):
                             and (self._assume_tar or "/tar1090" in self.url().path))
         self._generation += 1
         if self._active:
+            self.page().runJavaScript(BOOTSTRAP_JS)
             self._timer.start()
         else:
             self._timer.stop()
