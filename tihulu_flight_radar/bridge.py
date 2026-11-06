@@ -336,7 +336,7 @@ def make_handler(bridge: Bridge, port: int):
                     return
                 raw = file.read_bytes()
                 mime = ("text/html" if name.endswith(".html") else
-                        "application/javascript" if name.endswith(".js") else
+                        "application/javascript" if name.endswith((".js", ".mjs")) else
                         "text/css" if name.endswith(".css") else
                         "application/manifest+json" if name.endswith(".webmanifest") else
                         "image/svg+xml")
