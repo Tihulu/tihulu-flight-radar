@@ -8,7 +8,7 @@ version = "0.3.1"
 description = "Cross-platform local-first ADS-B aircraft monitor"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["PySide6>=6.8,<7"]
+dependencies = ["PySide6>=6.8,<7", "PySide6-WebEngine>=6.8,<7"]
 authors = [{name = "Tihulu"}]
 classifiers = [
   "Programming Language :: Python :: 3",
@@ -22,7 +22,8 @@ test = ["pytest>=8,<10"]
 build = ["pyinstaller>=6.12,<7"]
 
 [project.scripts]
-tihulu-flight-radar = "tihulu_flight_radar.app:main"
+tihulu-flight-radar = "tihulu_flight_radar.native:main"
+tihulu-flight-radar-classic = "tihulu_flight_radar.app:main"
 tihulu-flight-bridge = "tihulu_flight_radar.bridge:main"
 
 [tool.setuptools.packages.find]
