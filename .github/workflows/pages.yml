@@ -28,6 +28,12 @@ jobs:
           test -s tihulu_flight_radar/web/index.html
           test -s tihulu_flight_radar/web/style.css
           node --check tihulu_flight_radar/web/app.js
+          node --check tihulu_flight_radar/web/sw.js
+          node --check deploy/cloudflare-worker.mjs
+          node --test tests/web_bridge.test.cjs
+          python3 -m json.tool tihulu_flight_radar/web/manifest.webmanifest >/dev/null
+          test -s tihulu_flight_radar/web/icon.svg
+          test -s tihulu_flight_radar/web/sw.js
           grep -q 'app.js' tihulu_flight_radar/web/index.html
   deploy:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
