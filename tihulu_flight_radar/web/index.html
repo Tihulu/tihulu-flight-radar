@@ -35,8 +35,12 @@
    <p class="usb-hint">Verified Pop!_OS / Nooelec 0bda:2838 fix: if <code>readsb</code> is inactive but the USB tree shows <code>Driver=dvb_usb_rtl28xxu</code>, the Linux DVB driver may still own interface 0. <a href="https://github.com/Tihulu/tihulu-flight-radar/blob/feature/github-pages-local-bridge-2026-11-06/docs/RTL_SDR_WEBUSB_LINUX_OWNERSHIP.md" target="_blank" rel="noopener noreferrer">See the safe, device-verified release/restore guide</a>. Never assume every PC uses <code>1-4:1.0</code>. After an explicit unbind, keep the USB plugged in until the browser test; unplugging it may rebind the driver. This website cannot run sudo or modify kernel drivers.</p>
   </details>
  </section>
- <details class="bridge-advanced"><summary>Optional: paired receiver / Internet feed settings (advanced)</summary>
- <div class="toolbar">
+ <section class="internet-panel" aria-label="Internet aircraft source">
+  <div class="internet-panel-head">
+   <strong>Internet aircraft overlay</strong>
+   <span id="networkStatus" role="status" aria-live="polite">IntelSky available as a limited, keyless source; not a full commercial ADS-B feed.</span>
+  </div>
+  <div class="internet-controls">
   <label class="field">Internet source
    <select id="onlinePreset" aria-label="Internet aircraft source">
     <option value="intelsky" selected>IntelSky (public browser feed · limited coverage)</option>
@@ -49,6 +53,12 @@
   <label class="field" id="airlabsKeyField" hidden>AirLabs API key (this tab only)
    <input id="airlabsKey" type="password" autocomplete="off" placeholder="Your own AirLabs API key" aria-label="AirLabs personal API key">
   </label>
+   <button id="networkApply" type="button">Enable / refresh Internet layer</button>
+  </div>
+  <p class="usb-hint">Direct browser network data uses the selected provider's permitted HTTPS/CORS API. IntelSky may have zero aircraft in your region; AirLabs requires a personal key. This never stops your antenna or readsb. General network feeds without CORS require your own approved relay.</p>
+ </section>
+ <details class="bridge-advanced"><summary>Optional: paired receiver / Internet feed settings (advanced)</summary>
+ <div class="toolbar">
   <label class="field">Bridge URL <input id="bridgeUrl" value="http://127.0.0.1:8510" spellcheck="false" aria-label="Local bridge URL"></label>
   <label class="field token">Session pairing token <input id="token" type="password" placeholder="Paste token from local bridge terminal" autocomplete="off"></label>
   <button id="connect" class="primary">Connect source</button><button id="disconnect">Disconnect</button>
