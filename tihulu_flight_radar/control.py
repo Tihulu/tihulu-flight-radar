@@ -232,8 +232,8 @@ class ReceiverController:
             finally:
                 self.mode = mode
         if (platform.system() == "Linux"
-                and self.mode == "Linux services"
-                and (release_local_service or self._service_started_by_app)
+                and ((self.mode == "Linux services" and release_local_service)
+                     or self._service_started_by_app)
                 and _unit_active("readsb.service")[0]):
             try:
                 service_action("stop")
