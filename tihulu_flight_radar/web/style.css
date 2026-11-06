@@ -140,3 +140,41 @@ body.tar-open{overflow:hidden}
 #openTarPrimary:hover{background:#298173}
 .masthead .connection{gap:10px;flex-wrap:wrap;justify-content:flex-end}
 @media(max-width:660px){.masthead .connection{justify-content:flex-start}#openTarPrimary{white-space:normal}}
+
+/* Shared Satellite Center-style place chooser, with responsive DE/TR browsing.
+   Also shown above fullscreen tar1090 and native Qt WebEngine. */
+.location-picker[hidden],.location-results[hidden]{display:none!important}
+.location-picker{position:fixed;inset:0;z-index:21000;
+ background:rgba(3,12,22,.83);display:flex;align-items:center;justify-content:center;
+ padding:12px;overflow-y:auto}
+.location-dialog{width:min(720px,100%);max-height:min(92dvh,900px);overflow:auto;
+ background:#122235;border:1px solid #52708e;border-radius:13px;
+ box-shadow:0 20px 75px rgba(0,0,0,.55);padding:16px;color:#f0f7ff}
+.location-heading{display:flex;align-items:start;justify-content:space-between;
+ gap:15px;border-bottom:1px solid #38516a;padding-bottom:11px;margin-bottom:12px}
+.location-heading strong{font-size:17px}.location-heading p{margin:5px 0 0;
+ color:#b5d0e5;font-size:12px}
+.location-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}
+.location-fields label{display:flex;flex-direction:column;gap:5px;min-width:0;
+ color:#d0e3f1;font-size:12px}
+.location-fields input,.location-fields select{width:100%;min-width:0;max-width:100%;
+ min-height:36px;padding:7px 9px;border-radius:7px;
+ background:#0e1a2a;color:#f1f8ff;border:1px solid #47627e}
+.location-wide{grid-column:1/-1}
+.location-results{display:flex;flex-direction:column;gap:3px;max-height:245px;
+ overflow-y:auto;border:1px solid #486582;border-radius:8px;
+ background:#0a1929;padding:5px}
+.location-results button{width:100%;text-align:left;padding:7px 10px;
+ min-height:32px;background:#1a3249;border:1px solid transparent}
+.location-results button:focus-visible,.location-results button:hover{border-color:#80cce5}
+.location-selection{margin:1px 0;padding:7px 9px;background:#213850;
+ border-radius:7px;color:#d0ecff;font-size:12px;overflow-wrap:anywhere}
+.location-status{font-size:12px;color:#a8cbe7;margin:12px 0;line-height:1.45}
+.location-actions{display:flex;flex-wrap:wrap;gap:8px}
+.location-actions button{flex:1 1 140px;min-width:0;white-space:normal}
+.location-footnote{font-size:11px;color:#9fb8cd;line-height:1.55;margin:12px 0 0}
+.location-footnote a{color:#8fd9fa}
+@media(max-width:580px){.location-picker{padding:4px;align-items:start}
+ .location-dialog{border-radius:9px;padding:12px;max-height:97dvh}
+ .location-fields{grid-template-columns:1fr}
+ .location-wide{grid-column:auto}}
