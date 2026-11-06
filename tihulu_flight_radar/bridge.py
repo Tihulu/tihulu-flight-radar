@@ -18,6 +18,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlsplit
 from urllib.request import ProxyHandler, Request, build_opener
 
+from .network_sources import MultiNetworkProvider, parse_provider_selection
 from .control import ReceiverController
 from .core import DataError, position_is_fresh, recently_seen
 
@@ -60,6 +61,8 @@ def merge_aircraft(local: list[dict], online: list[dict]) -> list[dict]:
             if prior is not None:
                 prior["sources"].append(label)
                 prior["observations"][label] = aircraft
+                if label == "internet":
+                    prior["internet_providers"] = list(aircraft.get("internet_providers", []))
                 if not position_is_fresh(prior) and position_is_fresh(aircraft):
                     # The displayed position's source remains independently attributable.
                     prior["lat"], prior["lon"] = aircraft["lat"], aircraft["lon"]
@@ -199,9 +202,11 @@ class Bridge:
         self.receiver = ReceiverController()
         self.receiver_lock = threading.RLock()
         self.online = DataProvider()
+        self.multi_online = MultiNetworkProvider()
         self.last_start_error: str | None = None
 
-    def snapshot(self, mode: str, lat: float, lon: float, radius: int) -> dict:
+    def snapshot(self, mode: str, lat: float, lon: float, radius: int,
+                 networks: tuple[str, ...] | None = None) -> dict:
         if mode not in ("antenna", "internet", "hybrid", "auto"):
             raise DataError("Unknown source mode.")
         local: list[dict] = []
@@ -234,7 +239,10 @@ class Bridge:
         if mode == "auto" and not any(position_is_fresh(a) for a in local):
             want_online = True
         if want_online:
-            online, online_status = self.online.fetch(lat, lon, radius)
+            online, online_status = (
+                self.online.fetch(lat, lon, radius) if networks is None
+                else self.multi_online.fetch(lat, lon, radius, networks)
+            )
             online_status["state"] = "unavailable" if online_status.get("error") else "available"
         active_sources = (["antenna"] if want_local else []) + (["internet"] if want_online else [])
         return {"mode": mode, "active_sources": active_sources, "generated_at": time.time(),
@@ -385,7 +393,9 @@ def make_handler(bridge: Bridge, port: int):
                 radius = int(one("radius", "100"))
                 if not 10 <= radius <= 250:
                     raise DataError("Radius must be 10–250 nautical miles.")
-                self._send(HTTPStatus.OK, bridge.snapshot(mode, lat, lon, radius))
+                networks = (parse_provider_selection(one("net", ""))
+                            if "net" in query else None)
+                self._send(HTTPStatus.OK, bridge.snapshot(mode, lat, lon, radius, networks))
             except (DataError, ValueError) as exc:
                 self._send(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
 
