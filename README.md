@@ -1,6 +1,31 @@
 # Tihulu Flight Radar
 
-## Preview 0.3.2.dev3 — full tar1090 on web and desktop without an antenna (6 Nov 2026)
+## Location chooser — same as Satellite Center (0.3.2.dev4)
+
+From either the standard radar map **Choose place** or full original
+tar1090 **Choose place**, select Germany / Türkiye; browse one of 16 German
+Bundesländer or 81 Turkish provinces; then choose a city, town, municipality,
+or district locality. The same **ODbL-licensed 8,084-entry offline catalog**
+(7,104 Germany and 980 Türkiye) and accent-insensitive search from Satellite
+Center is bundled into web, PWA and native desktop builds. Examples: Köln,
+Hürth, İzmir, Karaburun and Bornova. Country/region selection does not
+change location until a specific place or manual coordinates are applied.
+Choose 25–250 NM Internet search radius, manual WGS84 coordinates, or
+explicit browser GPS. **Search worldwide online** uses opt-in Open-Meteo
+Geocoding only on click; typed offline names are never sent to a provider.
+
+The chosen place and search radius are saved in browser-local settings for
+the next launch. The UI never changes actual antenna/SDR location, starts
+or retunes readsb, or invents RF planes; it only changes the map camera and
+Internet ADS-B query center. The same selected map camera is applied when
+the tar1090 iframe is open. Browser Pages without an antenna still work.
+Offline place records are **approximate settlement coordinates**, not
+complete statutory district/Kreis boundaries: some smaller municipalities
+may be missing; use optional online search or manual coordinates instead.
+Full provenance: [CITY_DATA_LICENSE.md](tihulu_flight_radar/web/CITY_DATA_LICENSE.md).
+
+
+## Preview 0.3.2.dev4 — full tar1090 on web and desktop without an antenna (6 Nov 2026)
 
 Both web Pages mirrors and the installed Pop!_OS native Qt WebEngine use the same original upstream tar1090 aircraft map, right-hand aircraft table, advanced filters, OSM map, altitude colors and source badges. Use **Full tar1090 map** in the top bar, or append `?view=tar1090` to a radar URL. The original Internet stream remains selectable. All sources can be merged by ICAO24; real local RF is entirely optional. Browser Pages may be limited by third-party API CORS/quotas. The native app now exposes the independent Internet provider checkbox layers rather than hiding them.
 
@@ -25,7 +50,7 @@ The installer upgrades the **same pipx environment**, not a parallel app;
 users can always restore the 0.3.1 commit via the pinned version switcher.
 Read [the full tar1090 guide](docs/ANTENNA_OPTIONAL_TAR1090.md) and
 [the Pop!_OS version guide](docs/POP_OS_VERSION_SWITCH_AND_LEGACY.md).
-The optional 0.3.2.dev3 preview has not been physically certified on the
+The optional 0.3.2.dev4 preview has not been physically certified on the
 user's Nooelec receiver yet.
 
 ## Pop!_OS upgrade with preserved 0.3.1 legacy rollback
@@ -33,13 +58,13 @@ user's Nooelec receiver yet.
 The known-good **0.3.1** source snapshot is archived at
 [`legacy/v0.3.1`](https://github.com/Tihulu/tihulu-flight-radar/tree/legacy/v0.3.1)
 (exact commit `67280cd84feb89faec6a80f5fe2a55ce5f7b89e6`).
-The new opt-in **0.3.2.dev3** Internet-only original-tar1090 preview is archived at
-[`preview/v0.3.2-dev3`](https://github.com/Tihulu/tihulu-flight-radar/tree/preview/v0.3.2-dev3)
-(source commit `a73a12bf2706ecda88705d98e0e8595f631f5104`).
+The new opt-in **0.3.2.dev4** Internet-only original-tar1090 preview is archived at
+[`preview/v0.3.2-dev4`](https://github.com/Tihulu/tihulu-flight-radar/tree/preview/v0.3.2-dev4)
+(source commit `e56a0fc890327c6a3705dcb4bde9226b7bed19b6`).
 
 **Close the app before switching.** Download the version switcher once:
 ```bash
-curl -fLsS https://raw.githubusercontent.com/Tihulu/tihulu-flight-radar/preview/v0.3.2-dev3/scripts/popos-version-switch.sh -o "$HOME/tihulu-flight-switch.sh"
+curl -fLsS https://raw.githubusercontent.com/Tihulu/tihulu-flight-radar/preview/v0.3.2-dev4/scripts/popos-version-switch.sh -o "$HOME/tihulu-flight-switch.sh"
 ```
 Then replace the old installed pipx application with the preview:
 ```bash
@@ -59,7 +84,7 @@ prove the same source commit. Full details:
 [Pop!_OS version install and rollback](docs/POP_OS_VERSION_SWITCH_AND_LEGACY.md).
 
 
-## Multi-source base functionality (introduced in 0.3.2.dev0; retained in 0.3.2.dev3)
+## Multi-source base functionality (introduced in 0.3.2.dev0; retained in 0.3.2.dev4)
 
 **The existing installed Pop!_OS 0.3.1 is the user-verified stable baseline.
 Do not auto-upgrade or silently replace it.** The following features are in the
@@ -116,7 +141,7 @@ Browser Internet sources: built-in **IntelSky** (real CORS-enabled *limited mili
 
 English-language, local-first ADS-B / Mode S receiver desktop software.
 
-**Current development branch version 0.3.2.dev3; user's stable legacy baseline 0.3.1.** Uses real receiver data only. It never
+**Current development branch version 0.3.2.dev4; user's stable legacy baseline 0.3.1.** Uses real receiver data only. It never
 creates simulated aircraft or positions. ADS-B broadcasts may contain locations;
 Mode S does not guarantee location. MLAT positioning requires synchronized
 multiple receivers and is **not** calculated by this app.
