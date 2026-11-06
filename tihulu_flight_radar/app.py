@@ -313,6 +313,14 @@ class RadarWindow(QMainWindow):
         self.boot_checkbox.setVisible(platform.system() == "Linux")
         self.boot_checkbox.toggled.connect(self._toggle_boot)
         settings.addWidget(self.boot_checkbox)
+        self.release_checkbox = QCheckBox("Release local SDR when app closes")
+        self.release_checkbox.setChecked(
+            self.settings.value("release_sdr_on_exit", True, type=bool)
+        )
+        self.release_checkbox.toggled.connect(
+            lambda value: self.settings.setValue("release_sdr_on_exit", value)
+        )
+        settings.addWidget(self.release_checkbox)
         self.diagnostics_button = QPushButton("View receiver diagnostics")
         self.diagnostics_button.setVisible(platform.system() == "Linux")
         self.diagnostics_button.clicked.connect(self._show_diagnostics)
@@ -726,7 +734,12 @@ class RadarWindow(QMainWindow):
             dialog.close()
         self.map_server.close()
         if self._owns_receiver:
-            self.controller.close()
+            try:
+                self.controller.close(
+                    release_local_service=self.release_checkbox.isChecked()
+                )
+            except DataError as exc:
+                QMessageBox.warning(self, "Receiver release warning", str(exc))
         self.pool.shutdown(wait=False, cancel_futures=True)
         super().closeEvent(event)
 
