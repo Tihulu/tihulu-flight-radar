@@ -996,26 +996,67 @@ window.addEventListener("keydown",event=>{
 // Full original tar1090 browser frontend: it only displays aircraft coming
 // from this page. It never starts readsb or claims the USB a second time.
 let tarFrameOpen=false;
+const TRUSTED_HOSTED_TAR="https://tihulu.github.io/tihulu-flight-radar/tar1090/index.html";
+let tarTargetOrigin=location.origin;
+function tarIframeOrigin(){
+ const frame=$("fullTarFrame");
+ if(!frame?.getAttribute("src"))return null;
+ try{return new URL(frame.getAttribute("src"),location.href).origin;}
+ catch{return null;}
+}
 function publishTarBrowserSnapshot(){
  const frame=$("fullTarFrame");
  if(!tarFrameOpen||!frame?.contentWindow)return;
- const aircraft=(state.data||[]).filter(a=>a && Number.isFinite(a.seen) && a.seen>=0 && a.seen<=60)
-  .slice(0,1500).map(a=>({
-    hex:a.hex,flight:a.flight,lat:a.lat,lon:a.lon,track:a.track,
-    gs:a.gs,tas:a.tas,ias:a.ias,mach:a.mach,
-    alt_baro:a.alt_baro,alt_geom:a.alt_geom,baro_rate:a.baro_rate,
-    geom_rate:a.geom_rate,squawk:a.squawk,rssi:a.rssi,
-    seen:a.seen,seen_pos:a.seen_pos,messages:a.messages,
-    r:a.r,t:a.t,type:a.type,category:a.category,dbFlags:a.dbFlags,
-    sources:a.sources
-  }));
+ // Always age measurements, and never turn an unavailable local decoder
+ // into a claimed RF observation. Same ICAO24 from multiple Internet feeds
+ // is already one aircraft in state.data, with full provider provenance.
+ const elapsed=Math.max(0,(Date.now()-state.lastFreshAt)/1000);
+ const byId=new Map();
+ for(const a of state.data||[]){
+  if(!a||!Number.isFinite(a.seen)||a.seen+elapsed>60)continue;
+  const hex=String(a.hex||"").toLowerCase();
+  if(!/^[a-f0-9]{6}$/.test(hex))continue;
+  const isRf=Array.isArray(a.sources)&&a.sources.includes("antenna");
+  const prior=byId.get(hex);
+  if(prior && (!isRf||prior.sources?.includes("antenna")))continue;
+  byId.set(hex,{
+   hex,flight:a.flight,lat:a.lat,lon:a.lon,track:a.track,
+   gs:a.gs,tas:a.tas,ias:a.ias,mach:a.mach,
+   alt_baro:a.alt_baro,alt_geom:a.alt_geom,baro_rate:a.baro_rate,
+   geom_rate:a.geom_rate,squawk:a.squawk,rssi:isRf?a.rssi:undefined,
+   seen:a.seen+elapsed,
+   seen_pos:Number.isFinite(a.seen_pos)?a.seen_pos+elapsed:null,
+   messages:isRf?a.messages:undefined,
+   r:a.r,t:a.t,type:a.type,category:a.category,dbFlags:a.dbFlags,
+   sources:a.sources,internet_providers:a.internet_providers||[]
+  });
+ }
+ const target=tarIframeOrigin();
+ if(!target || ![location.origin,"https://tihulu.github.io"].includes(target))return;
  frame.contentWindow.postMessage({type:"tihulu:tar-aircraft",
   now:Date.now()/1000,
   messages:state.connectionKind==="usb"?state.usbMessageCount:
     (Number.isFinite(state.receiverMessages)?state.receiverMessages:0),
-  aircraft},location.origin);
+  aircraft:[...byId.values()].slice(0,1500)},target);
 }
-function setBrowserTar(open){
+async function resolveTarBrowserURL(){
+ // Prefer the same-origin full upstream tar1090, including on GitHub Pages.
+ // On native loopback it is served from the user-owned local tar1090 cache.
+ try{
+  const test=await fetch("./tar1090/tihulu-browser-bridge.js",
+   {credentials:"omit",cache:"no-store"});
+  if(test.ok)return new URL("./tar1090/index.html",location.href);
+ }catch{}
+ // Older native installs without the optional cache may use the exact
+ // audited GitHub Pages frontend. Parent-child data only travels via
+ // same-origin or the fixed HTTPS Pages origin; no receiver tokens are sent.
+ if(["127.0.0.1","localhost"].includes(location.hostname)){
+  notice("Local tar1090 assets unavailable; using HTTPS hosted full tar1090. Internet is required for this fallback.");
+  return new URL(TRUSTED_HOSTED_TAR);
+ }
+ throw Error("Full tar1090 bundle is unavailable here; the main observed aircraft map remains usable.");
+}
+async function setBrowserTar(open){
  const shell=$("tarBrowserShell");
  tarFrameOpen=!!open;
  shell.hidden=!tarFrameOpen;
@@ -1027,57 +1068,62 @@ function setBrowserTar(open){
     lat:state.lat.toFixed(5),lon:state.lon.toFixed(5),
     zoom:String(Math.max(3,Math.min(13,state.zoom)))
    });
-   frame.setAttribute("src","./tar1090/index.html?"+query.toString());
+   try{
+    const url=await resolveTarBrowserURL();
+    if(!tarFrameOpen)return;
+    url.search=query.toString();
+    tarTargetOrigin=url.origin;
+    frame.setAttribute("src",url.toString());
+   }catch(error){
+    tarFrameOpen=false;shell.hidden=true;document.body.classList.remove("tar-open");
+    notice("Full tar1090 is unavailable: "+String(error.message||error));
+    return;
+   }
   }
   publishTarBrowserSnapshot();
-  notice("Full upstream tar1090 frontend opened with this tab's real aircraft. No separate readsb service or USB claim.");
+  notice("Full upstream tar1090 opened. Internet-only aircraft work without an SDR or readsb; RF stays optional.");
  }else{
-  // Tear down upstream tar1090 intervals/map listeners when its window closes.
-  // The parent WebUSB receiver stays active and owns the dongle as before.
+  // Stop the nested map's timers and metadata requests on close; leave
+  // all parent source settings, antenna ownership and observations intact.
   const frame=$("fullTarFrame");
   if(frame?.hasAttribute("src"))frame.removeAttribute("src");
+  tarTargetOrigin=location.origin;
   $("fullTar1090").focus();
  }
 }
-$("fullTar1090").onclick=()=>setBrowserTar(true);
-$("closeFullTar").onclick=()=>setBrowserTar(false);
+$("fullTar1090").onclick=()=>void setBrowserTar(true);
+$("closeFullTar").onclick=()=>void setBrowserTar(false);
 $("fullTarFrame").addEventListener("load",()=>publishTarBrowserSnapshot());
 window.addEventListener("message",event=>{
- if(event.origin!==location.origin || event.source!==$("fullTarFrame").contentWindow)return;
+ if(!tarFrameOpen || event.origin!==tarTargetOrigin ||
+    event.source!==$("fullTarFrame").contentWindow)return;
  if(event.data?.type==="tihulu:tar-ready")publishTarBrowserSnapshot();
 });
 window.setInterval(()=>{if(tarFrameOpen && !document.hidden)publishTarBrowserSnapshot()},1200);
 window.addEventListener("keydown",event=>{
- if(event.key==="Escape" && tarFrameOpen)setBrowserTar(false);
+ if(event.key==="Escape" && tarFrameOpen)void setBrowserTar(false);
 });
 $("legacyTar").onclick=async()=>{
- if(state.connectionKind==="usb"){
-  // Do not direct a user with one USB dongle to a dead readsb JSON server.
-  setRadarExpanded(true);
-  notice("tar1090 needs a separate live readsb JSON backend. Your SDR is owned by this WebUSB tab, so use this full browser map. Stop WebUSB before switching the same antenna to readsb.");
-  return;
- }
- // A running readsb process is not proof that tar1090 has fresh JSON.
- // GitHub Pages cannot share this tab's WebUSB receiver with tar1090.
+ // Always offer the COMPLETE original tar1090 frontend even with no radio.
+ // The external readsb-backed variant is an OPTIONAL advanced path.
  if(state.connectionKind!=="bridge"){
-  setRadarExpanded(true);
-  notice("No independently verified tar1090 decoder. This full browser map retains genuine WebUSB aircraft and Internet layers.");
+  await setBrowserTar(true);
   return;
  }
  let live;
  try{live=await api("/api/tar-status");}
  catch(error){
-  setRadarExpanded(true);
-  notice("Unable to verify tar1090 aircraft.json: "+String(error.message||error)+". Showing the working integrated radar.");
+  await setBrowserTar(true);
+  notice("Local decoder not available; using original tar1090 with Internet-only data.");
   return;
  }
  if(!live.available || !live.url){
-  setRadarExpanded(true);
-  notice(live.reason||"tar1090 has no fresh readsb aircraft.json; use this full radar.");
+  await setBrowserTar(true);
+  notice("No live readsb backend; original tar1090 is using Internet-only aircraft. No antenna required.");
   return;
  }
- const raw=prompt("Verified separate tar1090 receiver URL:",live.url);
- if(raw===null)return;
+ const raw=prompt("Verified separate tar1090 receiver URL (Cancel opens integrated full tar1090):",live.url);
+ if(raw===null){await setBrowserTar(true);return;}
  try{window.open(tarFocusURL(raw),"_blank","noopener,noreferrer");}
  catch(error){notice("Invalid tar1090 URL: "+error.message);}
 };

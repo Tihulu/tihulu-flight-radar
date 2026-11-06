@@ -7,11 +7,85 @@
   "use strict";
   const origin = location.origin;
   const isEmbedded = window.parent !== window;
+  // A packaged native Qt parent uses private localhost while its fallback
+  // full tar1090 iframe can be hosted on official HTTPS Pages. Only these
+  // two explicitly verified origins may send aircraft, never arbitrary sites.
+  const allowedParent = raw => {
+    try{
+      const url=new URL(raw);
+      return url.origin===origin || (url.protocol==="http:" &&
+        ["localhost","127.0.0.1"].includes(url.hostname) &&
+        Number.isInteger(Number(url.port)) && Number(url.port)>0);
+    }catch{return false;}
+  };
+  let parentOrigin = null;
+  const show = {internet:true,antenna:true,matched:true};
   let snapshot = {now: Date.now()/1000, messages:0, aircraft:[]};
   let sources = new Map();
   let updatedAt = 0;
   let connected = false;
   const MAX_AIRCRAFT = 1500;
+  function visibleAircraft(){
+    const elapsed=Math.max(0,(Date.now()-updatedAt)/1000);
+    return snapshot.aircraft.filter(a=>{
+      const src=sources.get(a.hex)||[];
+      if(src.includes("antenna")&&src.includes("internet"))return show.matched;
+      return src.includes("antenna")?show.antenna:show.internet;
+    }).map(a=>{
+      const row={...a};
+      if(Number.isFinite(row.seen))row.seen+=elapsed;
+      if(Number.isFinite(row.seen_pos))row.seen_pos+=elapsed;
+      if(!Number.isFinite(row.seen_pos)||row.seen_pos>60){
+        delete row.lat;delete row.lon;
+      }
+      return row;
+    }).filter(a=>Number.isFinite(a.seen)&&a.seen<=60);
+  }
+  function liveSnapshot(){
+    // A static browser page is NOT a radio decoder: only actual radio
+    // counters reported by the parent can be sent as such.
+    return {now:Date.now()/1000,messages:snapshot.messages,
+      aircraft:visibleAircraft()};
+  }
+  function mountSourceLayers(){
+    if(typeof document.getElementById!=="function")return;
+    const map=document.getElementById("map_container");
+    if(!map || document.getElementById("tihulu-source-layers"))return;
+    const panel=document.createElement("div");
+    panel.id="tihulu-source-layers";
+    panel.style.cssText="position:absolute;top:64px;left:12px;z-index:20010;"+
+      "background:#101c2be9;color:#edf7ff;border:1px solid #496983;"+
+      "border-radius:8px;padding:9px 12px;font:12px/1.4 system-ui;"+
+      "box-shadow:0 4px 14px #08162799;max-width:min(360px,90%);";
+    const header=document.createElement("div");
+    header.textContent="TIHULU aircraft sources — original tar1090";
+    header.style.cssText="font-weight:700;margin-bottom:6px";
+    panel.appendChild(header);
+    for(const [key,name] of [
+      ["internet","Internet planes (I)"],["antenna","Local radio (R)"],
+      ["matched","Both Internet + radio (I/R)"]
+    ]){
+      const label=document.createElement("label");
+      label.style.cssText="display:block;margin:3px 0;cursor:pointer";
+      const checkbox=document.createElement("input");
+      checkbox.type="checkbox";checkbox.checked=show[key];
+      checkbox.setAttribute("aria-label","Show "+name);
+      checkbox.onchange=()=>{
+        show[key]=checkbox.checked;
+        refreshBadges(); // upstream reads fresh filtered JSON on next poll
+      };
+      label.appendChild(checkbox);
+      label.appendChild(document.createTextNode(" "+name));
+      panel.appendChild(label);
+    }
+    const message=document.createElement("div");
+    message.id="tihulu-sources-detail";
+    message.style.cssText="color:#a8cddd;margin-top:6px;font-size:11px";
+    panel.appendChild(message);
+    map.appendChild(panel);
+    window.tihuluTarSourcePanel=panel;
+    mountStatus();
+  }
   const status = document.createElement("div");
   status.id = "tihulu-browser-source-status";
   status.setAttribute("role","status");
@@ -21,13 +95,22 @@
     "pointer-events:none;max-width:75vw;text-align:center;";
   function mountStatus(){
     if(document.body && !status.isConnected)document.body.appendChild(status);
-    status.textContent = !connected
-      ? "tar1090 full interface · waiting for real browser RF/Internet data"
-      : "tar1090 · TIHULU WebUSB + Internet · R "+[...sources.values()].filter(s=>s.includes("antenna")).length+
-        " · I "+[...sources.values()].filter(s=>s.includes("internet")).length+
-        " · receiver data "+Math.round((Date.now()-updatedAt)/1000)+" s ago";
+    const radio=[...sources.values()].filter(s=>s.includes("antenna")).length;
+    const internet=[...sources.values()].filter(s=>s.includes("internet")).length;
+    const matched=[...sources.values()].filter(s=>s.includes("antenna")&&s.includes("internet")).length;
+    const age=Math.round((Date.now()-updatedAt)/1000);
+    const descriptor=connected?(radio?"Antenna + Internet":"Internet-only · no antenna required"):
+      "Awaiting real Internet or antenna observations";
+    status.textContent="tar1090 · "+descriptor+" · R "+radio+" · I "+internet+
+      " · I/R "+matched+(connected?" · update "+age+"s ago":"");
+    const detail=document.getElementById?.("tihulu-sources-detail");
+    if(detail)detail.textContent=internet+" Internet · "+radio+" radio · "+matched+
+      " matched (single ICAO marker) · "+Math.max(0,age)+"s ago";
   }
-  window.addEventListener("DOMContentLoaded",mountStatus);
+  window.addEventListener("DOMContentLoaded",()=>{
+    mountStatus();
+    mountSourceLayers();
+  });
   function sanitizeAircraft(raw){
     if(!raw || typeof raw !== "object")return null;
     const hex=String(raw.hex||"").toLowerCase();
@@ -53,25 +136,40 @@
     return rec;
   }
   window.addEventListener("message",event=>{
-    if(!isEmbedded || event.origin!==origin || event.source!==window.parent)return;
+    if(!isEmbedded || !allowedParent(event.origin) || event.source!==window.parent)return;
     const m=event.data;
     if(!m || m.type!=="tihulu:tar-aircraft" || !Array.isArray(m.aircraft))return;
-    const aircraft=m.aircraft.slice(0,MAX_AIRCRAFT).map(sanitizeAircraft).filter(Boolean);
+    if(!allowedParent(event.origin))return;
+    if(parentOrigin && event.origin!==parentOrigin)return;
+    parentOrigin=event.origin;
+    const unique=new Map(),observations=new Map();
+    for(const raw of m.aircraft.slice(0,MAX_AIRCRAFT)){
+      const a=sanitizeAircraft(raw);
+      if(!a)continue;
+      const src=Array.isArray(raw?.sources)?
+        raw.sources.filter(x=>x==="antenna"||x==="internet"):[];
+      const previous=unique.get(a.hex);
+      const oldSources=observations.get(a.hex)||[];
+      observations.set(a.hex,[...new Set([...oldSources,...src])]);
+      if(!previous || (src.includes("antenna")&&!oldSources.includes("antenna")) ||
+          (Number.isFinite(a.seen_pos)&&a.seen_pos<(previous.seen_pos??Infinity)))
+        unique.set(a.hex,a);
+    }
+    const aircraft=[...unique.values()];
     const now=Number(m.now);
     if(!Number.isFinite(now) || Math.abs(Date.now()/1000-now)>120)return;
     // Distinct radio and internet records were already provenance-merged
     // by the same app that renders the regular radar.
     snapshot={now,messages:Number.isFinite(m.messages)?m.messages:0,aircraft};
-    sources=new Map(aircraft.map((a,i)=>{
-      const raw=m.aircraft.find(x=>String(x?.hex||"").toLowerCase()===a.hex);
-      const src=Array.isArray(raw?.sources)?raw.sources.filter(x=>x==="antenna"||x==="internet"):[];
-      return [a.hex,src];
-    }));
+    sources=observations;
     connected=true;updatedAt=Date.now();mountStatus();
     refreshBadges();
   });
   function reply(){
-    if(isEmbedded)window.parent.postMessage({type:"tihulu:tar-ready"},origin);
+    // The greeting contains no aircraft, secrets or personal coordinates.
+    // Parent will authenticate this iframe by event.source + event.origin.
+    if(isEmbedded)window.parent.postMessage(
+      {type:"tihulu:tar-ready"},parentOrigin||"*");
     else {connected=false;mountStatus();}
   }
   document.addEventListener("DOMContentLoaded",reply);
@@ -97,7 +195,7 @@
             response={now:Date.now()/1000,total:{messages:snapshot.messages}};
           else if(base.startsWith("data/history_"))
             response={now:Date.now()/1000,messages:0,aircraft:[]};
-          else response=snapshot;
+          else response=liveSnapshot();
           complete(200,"success",{json:response},"Content-Type: application/json");
         });
       },
@@ -124,7 +222,7 @@
       map.addLayer(tagLayer);
     }
     tagSource.clear();
-    for(const a of snapshot.aircraft){
+    for(const a of visibleAircraft()){
       if(!Number.isFinite(a.lat)||!Number.isFinite(a.lon))continue;
       const src=sources.get(a.hex)||[];
       const badge=src.includes("antenna")&&src.includes("internet")?"I/R":
