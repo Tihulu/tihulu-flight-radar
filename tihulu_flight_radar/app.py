@@ -11,16 +11,15 @@ import platform
 import subprocess
 import sys
 import time
-import webbrowser
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.parse import quote
 
-from PySide6.QtCore import QSettings, Qt, QTimer
+from PySide6.QtCore import QSettings, Qt, QTimer, QUrl
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import (
     QApplication, QAbstractItemView, QCheckBox, QComboBox, QFileDialog,
-    QFrame, QGridLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
+    QFrame, QGridLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QDialog,
     QMainWindow, QMessageBox, QPushButton, QScrollArea, QTableWidget,
     QTableWidgetItem, QToolButton, QVBoxLayout, QWidget,
 )
@@ -138,9 +137,11 @@ def aircraft_fields(aircraft: dict) -> list[str]:
 
 
 class RadarWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, controller=None, owns_receiver=True):
         super().__init__()
-        self.controller = ReceiverController()
+        self.controller = controller if controller is not None else ReceiverController()
+        self._owns_receiver = owns_receiver
+        self._map_dialogs = []
         self.pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="tihulu-radar")
         self.snapshot_future = None
         self.action_future = None
@@ -435,8 +436,8 @@ class RadarWindow(QMainWindow):
             try:
                 url = self.map_future.result()
                 if url:
-                    webbrowser.open(url)
-                    self.info.setText("Full tar1090 aircraft map opened.")
+                    self._show_embedded_map(url, "Full tar1090 aircraft map")
+                    self.info.setText("Full tar1090 aircraft map opened inside Tihulu.")
                 else:
                     QMessageBox.information(
                         self, "Full map unavailable",
@@ -611,8 +612,27 @@ class RadarWindow(QMainWindow):
         dialog.setDetailedText(json.dumps(aircraft, indent=2, ensure_ascii=False))
         dialog.exec()
 
+    def _show_embedded_map(self, url: str, title: str):
+        """Render the radar inside the Qt application, not a system browser."""
+        from PySide6.QtWebEngineWidgets import QWebEngineView
+        dialog = QDialog(self)
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
+        dialog.setWindowTitle(title)
+        dialog.resize(1170, 800)
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(0, 0, 0, 0)
+        view = QWebEngineView(dialog)
+        layout.addWidget(view)
+        view.setUrl(QUrl(url))
+        self._map_dialogs.append(dialog)
+        dialog.destroyed.connect(
+            lambda *_: self._map_dialogs.remove(dialog)
+            if dialog in self._map_dialogs else None
+        )
+        dialog.show()
+
     def _open_map(self):
-        webbrowser.open(self.map_server.url)
+        self._show_embedded_map(self.map_server.url, "Built-in ADS-B aircraft map")
 
     def _open_tar1090(self):
         if self.map_future is None:
@@ -635,7 +655,10 @@ class RadarWindow(QMainWindow):
         if not icao:
             self._open_map()
             return
-        webbrowser.open(self.map_server.url + "?aircraft=" + quote(icao, safe=""))
+        self._show_embedded_map(
+            self.map_server.url + "?aircraft=" + quote(icao, safe=""),
+            "Selected ADS-B aircraft map",
+        )
 
     def _show_diagnostics(self):
         if platform.system() != "Linux":
@@ -699,8 +722,11 @@ class RadarWindow(QMainWindow):
 
     def closeEvent(self, event):
         self.timer.stop()
+        for dialog in list(self._map_dialogs):
+            dialog.close()
         self.map_server.close()
-        self.controller.close()
+        if self._owns_receiver:
+            self.controller.close()
         self.pool.shutdown(wait=False, cancel_futures=True)
         super().closeEvent(event)
 
