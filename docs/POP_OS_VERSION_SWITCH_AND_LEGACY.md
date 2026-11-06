@@ -5,7 +5,7 @@
 | Version | GitHub ref | Pinned source SHA | Role |
 | --- | --- | --- | --- |
 | **0.3.1** | [`legacy/v0.3.1`](https://github.com/Tihulu/tihulu-flight-radar/tree/legacy/v0.3.1) | `67280cd84feb89faec6a80f5fe2a55ce5f7b89e6` | Last archived 0.3.1 code snapshot **before** multi-provider enhancement |
-| **0.3.2.dev3** | [`preview/v0.3.2-dev3`](https://github.com/Tihulu/tihulu-flight-radar/tree/preview/v0.3.2-dev3) | `a73a12bf2706ecda88705d98e0e8595f631f5104` | Current full tar1090 + Internet-only, optional local SDR preview |
+| **0.3.2.dev4** | [`preview/v0.3.2-dev4`](https://github.com/Tihulu/tihulu-flight-radar/tree/preview/v0.3.2-dev4) | `e56a0fc890327c6a3705dcb4bde9226b7bed19b6` | Current full tar1090 + Internet-only, optional local SDR preview |
 | 0.3.2.dev0 | [`preview/v0.3.2-dev0`](https://github.com/Tihulu/tihulu-flight-radar/tree/preview/v0.3.2-dev0) | `c1e9c2c849cab681c863d4f63d538c1a940397f9` | Historical multi-provider preview, also preserved |
 
 The user physically verified a `0.3.1` installation on Pop!_OS with RF (R),
@@ -33,14 +33,14 @@ service-control permissions.
 ## Download the reusable switching script from GitHub once
 
 ```bash
-curl -fLsS https://raw.githubusercontent.com/Tihulu/tihulu-flight-radar/preview/v0.3.2-dev3/scripts/popos-version-switch.sh -o "$HOME/tihulu-flight-switch.sh"
+curl -fLsS https://raw.githubusercontent.com/Tihulu/tihulu-flight-radar/preview/v0.3.2-dev4/scripts/popos-version-switch.sh -o "$HOME/tihulu-flight-switch.sh"
 ```
 
 Review the [switching script](../scripts/popos-version-switch.sh)
 and the [installer](../scripts/install-linux.sh) before running shell code
 downloaded from GitHub.
 
-### Replace 0.3.1 with the new 0.3.2.dev3 preview
+### Replace 0.3.1 with the new 0.3.2.dev4 preview
 
 ```bash
 bash "$HOME/tihulu-flight-switch.sh" preview
@@ -53,7 +53,7 @@ bash "$HOME/tihulu-flight-switch.sh" legacy
 ```
 
 Both commands are **pinned to exact commit SHAs**, not a moving `main`,
-`feature`, `preview` or `legacy` branch head. The 0.3.2.dev3 installer also caches the **complete upstream tar1090** HTML,
+`feature`, `preview` or `legacy` branch head. The 0.3.2.dev4 installer also caches the **complete upstream tar1090** HTML,
 JavaScript and aircraft metadata into
 `~/.local/share/tihulu-flight-radar/tar1090/`.
 The full original tar1090 interface can then display real Internet-only flights
@@ -78,7 +78,7 @@ after restoring legacy. Do not claim native multi-network support exists in
 pipx list
 ```
 
-Expected output is `0.3.2.dev3` after preview or `0.3.1` after legacy.
+Expected output is `0.3.2.dev4` after preview or `0.3.1` after legacy.
 GitHub source links provide a stable rollback path even if a later version
 has different dependencies or network APIs.
 
