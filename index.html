@@ -43,20 +43,30 @@
   <div class="internet-controls">
   <label class="field">Internet source
    <select id="onlinePreset" aria-label="Internet aircraft source">
-    <option value="adsblol-relay" selected>adsb.lol — general aircraft via public CORS relay (experimental)</option>
+    <option value="multi" selected>Combine selected public networks (one marker per aircraft)</option>
+     <option value="adsblol-relay">adsb.lol — original working source (single)</option>
     <option value="intelsky">IntelSky — direct browser API (military/government only)</option>
     <option value="airlabs">AirLabs (optional personal API key · broader flights)</option>
     <option value="custom">Custom HTTPS/CORS ADS-B feed (full network if supplied)</option>
     <option value="off">Off — radio only</option>
    </select>
   </label>
-  <label class="field feed">Custom feed (HTTPS, optional) <input id="onlineFeedUrl" type="url" placeholder="https://your-feed.example/api/aircraft" spellcheck="false" aria-label="CORS-enabled Internet feed endpoint" disabled></label>
+  <div id="multiProviderLayers" class="multi-provider-layers" role="group" aria-label="Individual Internet source layers">
+    <span class="layer-heading">Internet layers — select individually or combine</span>
+    <label><input type="checkbox" id="netAdsbLol" checked> adsb.lol <small id="statusAdsbLol">Original feed</small></label>
+    <label><input type="checkbox" id="netAdsbFi" checked> adsb.fi <small id="statusAdsbFi">Personal/non-commercial</small></label>
+    <label><input type="checkbox" id="netOpenSky"> OpenSky <small id="statusOpenSky">Quota-limited · 5 min refresh</small></label>
+    <label><input type="checkbox" id="netIntelSky"> IntelSky <small id="statusIntelSky">Limited military/government coverage</small></label>
+    <label class="unavailable"><input type="checkbox" disabled> Airplanes.live <small>Public API restricted to feeders; not queried</small></label>
+    <button type="button" id="allOnlineLayers">Select all available</button>
+   </div>
+   <label class="field feed">Custom feed (HTTPS, optional) <input id="onlineFeedUrl" type="url" placeholder="https://your-feed.example/api/aircraft" spellcheck="false" aria-label="CORS-enabled Internet feed endpoint" disabled></label>
   <label class="field" id="airlabsKeyField" hidden>AirLabs API key (this tab only)
    <input id="airlabsKey" type="password" autocomplete="off" placeholder="Your own AirLabs API key" aria-label="AirLabs personal API key">
   </label>
    <button id="networkApply" type="button">Enable / refresh Internet layer</button>
   </div>
-  <p class="usb-hint"><strong>General flights:</strong> On GitHub Pages, real adsb.lol aircraft load automatically without an antenna or local app, through an independent public cors.dev relay because its API does not permit direct GitHub Pages requests. The relay receives your browser IP and an approximately 10 km-rounded map center, <strong>never raw USB IQ</strong>; it may be rate-limited or unavailable. Data © adsb.lol (ODbL 1.0). Select IntelSky for direct, keyless but limited military/government coverage; AirLabs requires your own key. Your SDR continues independently if any Internet service fails.</p>
+  <p class="usb-hint"><strong>General flights:</strong> Combine mode queries selected networks, then removes duplicate ICAO24 aircraft. OpenSky is subject to daily API quotas and adsb.fi is for personal, non-commercial use. Other providers may temporarily be blocked by CORS or rate limits. On GitHub Pages, real adsb.lol aircraft load automatically without an antenna or local app, through an independent public cors.dev relay because its API does not permit direct GitHub Pages requests. The relay receives your browser IP and an approximately 10 km-rounded map center, <strong>never raw USB IQ</strong>; it may be rate-limited or unavailable. Data © adsb.lol (ODbL 1.0). Select IntelSky for direct, keyless but limited military/government coverage; AirLabs requires your own key. Your SDR continues independently if any Internet service fails.</p>
  </section>
  <details class="bridge-advanced"><summary>Optional: paired receiver / Internet feed settings (advanced)</summary>
  <div class="toolbar">
@@ -124,6 +134,7 @@
 </section>
 <footer><span id="message" role="status">Ready — choose USB above or configure an Internet feed. No artificial flights are generated.</span><span>Offline-first · <a href="https://github.com/Tihulu/tihulu-flight-radar" target="_blank" rel="noopener noreferrer">GitHub source</a></span></footer>
 </main>
+<script src="./multi_sources.js" defer></script>
 <script src="./app.js" defer></script>
 <script type="module" src="./browser_usb.mjs"></script>
 </body></html>
