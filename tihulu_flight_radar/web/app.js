@@ -61,7 +61,7 @@ function paintAircraft(ctx,a,x,y){
 }
 const canvas = $("map"), ctx = canvas.getContext("2d");
 const state = {
-  base:"", token:"", onlineFeed:"", onlineProvider:"intelsky", internetBackoffUntil:0, connectionKind:"none", connected:false, data:[], mode:"auto", selected:null, 
+  base:"", token:"", onlineFeed:"", onlineProvider:"intelsky", internetBackoffUntil:0, airlabsLastFetch:0, connectionKind:"none", connected:false, data:[], mode:"auto", selected:null, 
   lat:initialCenter.lat, lon:initialCenter.lon, zoom:9, moved:false, autoFocused:false,
   startupLocationPending:true, startupGeo:null, startupRank:1, startupSource:"cologne",
   startupQueryDirty:false,
@@ -239,6 +239,10 @@ async function fetchInternetFeed(){
  if(Date.now()<state.internetBackoffUntil)
   throw Error("Internet feed cooling down after rate limit or outage; retry later.");
  const limited=state.onlineProvider==="intelsky",airlabs=state.onlineProvider==="airlabs";
+ // User-owned free API keys have quotas; avoid spending one every 15 seconds.
+ // Old provider snapshots age out naturally in browserSourceResult.
+ if(airlabs && state.internetSnapshot && Date.now()-state.airlabsLastFetch<60000)
+  return state.internetSnapshot;
  const u=new URL(state.onlineFeed);
  if(airlabs){
   u.searchParams.set("api_key",String($("airlabsKey").value).trim());
@@ -267,8 +271,10 @@ async function fetchInternetFeed(){
   }
   const text=await response.text();
   if(text.length>4*1024*1024)throw Error("Internet response exceeds 4 MiB.");
-  return normalizeInternetPayload(JSON.parse(text),limited?"intelsky":airlabs?"airlabs":"custom",
+  const normalized=normalizeInternetPayload(JSON.parse(text),limited?"intelsky":airlabs?"airlabs":"custom",
     state.queryLat,state.queryLon,state.queryRadius);
+  if(airlabs)state.airlabsLastFetch=Date.now();
+  return normalized;
  }catch(error){
   if(error?.name==="AbortError")throw Error("Internet feed timeout (10 seconds).");
   if(error instanceof TypeError)
@@ -362,7 +368,7 @@ window.tihuluUsbStarted=()=>{
  state.usbSnapshot={aircraft:[],messages:0,updatedAt:Date.now()};
  state.usbMessageCount=0;state.connectionKind="usb";state.connected=true;
  state.onlineFeed=configuredOnlineFeed();
-   state.internetBackoffUntil=0;
+   state.internetBackoffUntil=0;state.airlabsLastFetch=0;
  $("mode").value=state.onlineFeed?"hybrid":"antenna";
  connection(true,"Direct browser WebUSB · 1090 MHz");
  for(const id of ["start","stop","restart"])$(id).disabled=true;
@@ -439,7 +445,7 @@ async function connect(){
    // The Connect button is for optional Internet feed configuration when the
    // USB receiver is already running — never launch a second RF process.
    state.onlineFeed=configuredOnlineFeed();
-   state.internetBackoffUntil=0;
+   state.internetBackoffUntil=0;state.airlabsLastFetch=0;
    state.internetSnapshot=null;
    $("mode").value=state.onlineFeed?"hybrid":"antenna";
    await refresh(true);
@@ -447,7 +453,7 @@ async function connect(){
    return;
   }
   state.onlineFeed=configuredOnlineFeed();
-   state.internetBackoffUntil=0;
+   state.internetBackoffUntil=0;state.airlabsLastFetch=0;
   const token=$("token").value.trim();
   if(token){
    state.base=getBase($("bridgeUrl").value.trim());
@@ -807,7 +813,7 @@ function showProviderChoice(){
 preset.onchange=()=>{
  showProviderChoice();
  if(state.connectionKind==="usb"||state.connectionKind==="internet"){
-  state.internetSnapshot=null;state.internetBackoffUntil=0;
+  state.internetSnapshot=null;state.internetBackoffUntil=0;state.airlabsLastFetch=0;
   if(preset.value==="off"&&state.connectionKind==="internet")disconnect();
   else void connect();
  }
@@ -815,7 +821,11 @@ preset.onchange=()=>{
 showProviderChoice();
 $("connect").onclick=connect;
 $("disconnect").onclick=disconnect;
-$("refresh").onclick=refresh;
+$("refresh").onclick=()=>{
+ // Explicit refresh may spend one more call from a personal AirLabs quota.
+ state.airlabsLastFetch=0;
+ void refresh(true);
+};
 function tarFocusURL(raw){
  const url=new URL(raw);
  if(!["http:","https:"].includes(url.protocol) || url.username || url.password)
