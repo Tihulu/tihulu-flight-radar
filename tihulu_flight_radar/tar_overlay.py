@@ -89,8 +89,10 @@ OVERLAY_JS = r"""(function(input){
     app.source.addFeature(f);
     plotted++;
   }
+  const when=Number.isFinite(input.updated_at)
+    ? (' · updated '+new Date(input.updated_at*1000).toLocaleTimeString()) : '';
   app.status.textContent=plotted+' online · '+overlapped+' also local | '+input.provider+
-    (input.error ? ' | '+input.error : '');
+    when+(input.error ? ' | '+input.error : '');
   return {online:plotted,alsoLocal:overlapped};
 })"""  # supplied data is serialized separately below; not interpolated from URLs
 
@@ -151,6 +153,7 @@ class TarOverlayView(QWebEngineView):
                         payload=json.dumps({
                             "aircraft":actual[:1200],
                             "provider":status.get("provider") or "Internet",
+                            "updated_at":status.get("updated_at"),
                             "error":status.get("error") or ""
                         }, ensure_ascii=False)
                         self.page().runJavaScript(OVERLAY_JS+"("+payload+")")
