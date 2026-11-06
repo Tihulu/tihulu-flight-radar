@@ -14,8 +14,8 @@ function extract(name){
 }
 
 test("Full tar1090 map starts near genuine local aircraft and retains other planes",()=>{
- const state={lat:51.1657,lon:10.4515,data:[
-  {hex:"3c1234",lat:50.9,lon:7.1,seen:1,seen_pos:1,sources:["antenna"]},
+ const state={lat:50.9,lon:7.1,zoom:10,startupSource:"antenna",moved:false,data:[
+  {hex:"3c1234",lat:50.9,lon:7.1,seen:1,seen_pos:1,sources:["antenna"],position_source:"antenna"},
   {hex:"abcdef",lat:36.2,lon:-100,seen:1,seen_pos:1,sources:["internet"]}
  ]};
  const sandbox={URL,state,visible:()=>true,isPositioned:a=>a.seen_pos<=60};
@@ -32,15 +32,15 @@ test("Full tar1090 map starts near genuine local aircraft and retains other plan
 });
 
 test("Tar1090 defaults Germany if no live aircraft, no imposed USA coordinates",()=>{
- const state={lat:51.1657,lon:10.4515,data:[]};
+ const state={lat:50.938,lon:6.960,zoom:9,startupSource:"cologne",moved:false,data:[]};
  const sandbox={URL,state,visible:()=>true,isPositioned:()=>false};
  const fn=vm.runInNewContext(extract("tarFocusURL")+"\ntarFocusURL",sandbox);
  const p=new URL(fn("http://localhost:8504/?zoom=5&SiteLon=-98&SiteLat=37"));
- assert.equal(p.searchParams.get("tihuluFocusLat"),"51.165700");
+ assert.equal(p.searchParams.get("tihuluFocusLat"),"50.938000");
  assert.equal(p.searchParams.has("SiteLat"),false);
- assert.equal(p.searchParams.get("tihuluFocusLon"),"10.451500");
+ assert.equal(p.searchParams.get("tihuluFocusLon"),"6.960000");
  assert.equal(p.searchParams.has("SiteLon"),false);
- assert.equal(p.searchParams.get("zoom"),"7");
+ assert.equal(p.searchParams.get("zoom"),"9");
 });
 
 test("Pages PWA has standalone manifest, scoped worker and no aircraft API caching",()=>{
@@ -213,4 +213,19 @@ test("Location requires explicit Qt permission, and never silently asks for a re
  assert.match(native,/permission\.deny\(\)/);
  assert.match(js,/navigator\.geolocation\.getCurrentPosition/);
  assert.match(js,/position_source==="antenna"/);
+});
+
+
+test("tar1090 inherits permitted location over a nearby radio plane",()=>{
+ const state={lat:38.4,lon:27.1,zoom:10,moved:false,startupSource:"location",
+   selected:null,data:[
+    {hex:"3c1234",lat:50.9,lon:7.1,seen:1,seen_pos:1,
+     sources:["antenna"],position_source:"antenna"}
+   ]};
+ const sandbox={URL,state,visible:()=>true,isPositioned:a=>a.seen_pos<=60};
+ const fn=vm.runInNewContext(extract("tarFocusURL")+"\ntarFocusURL",sandbox);
+ const params=new URL(fn("http://localhost/tar1090/")).searchParams;
+ assert.equal(params.get("tihuluFocusLat"),"38.400000");
+ assert.equal(params.get("tihuluFocusLon"),"27.100000");
+ assert.equal(params.has("icao"),false);
 });
