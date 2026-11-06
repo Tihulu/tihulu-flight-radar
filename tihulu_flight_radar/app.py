@@ -625,13 +625,15 @@ class RadarWindow(QMainWindow):
     def _show_embedded_map(self, url: str, title: str):
         """Render the radar inside the Qt application, not a system browser."""
         from PySide6.QtWebEngineWidgets import QWebEngineView
+        from .tar_overlay import TarOverlayView
         dialog = QDialog(self)
         dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
         dialog.setWindowTitle(title)
         dialog.resize(1170, 800)
         layout = QVBoxLayout(dialog)
         layout.setContentsMargins(0, 0, 0, 0)
-        view = QWebEngineView(dialog)
+        view = (TarOverlayView(dialog) if "/tar1090" in url
+                else QWebEngineView(dialog))
         layout.addWidget(view)
         view.setUrl(QUrl(url))
         self._map_dialogs.append(dialog)
