@@ -66,6 +66,55 @@ export function explainUsbError(error,platform=platformFamily()){
   note.push("Original error: "+name+": "+message+(cause?" (cause: "+cause+")":""));
   return note.join("\n");
 }
+/** Explicit user-initiated USB claim probe. Opens interface 0 on an
+ * already-permitted RTL2832U, then releases it without RF tuning or sampling.
+ * Does not stop services, unbind drivers or alter OS permissions. */
+export async function probeUsbInterface(usb) {
+  if(!usb?.getDevices)return {ok:false,stage:"capability",
+    errorName:"NotSupportedError",errorMessage:"WebUSB unavailable"};
+  let device=null,opened=false,claimed=false,stage="permission";
+  let failure=null;
+  const cleanupErrors=[];
+  try {
+    const grants=await usb.getDevices();
+    const candidates=grants.filter(d=>d.vendorId===0x0bda &&
+      [0x2838,0x2832].includes(d.productId));
+    if(candidates.length!==1)
+      throw Error(candidates.length===0
+        ? "No previously permitted RTL2832U; choose the receiver first."
+        : "Multiple RTL2832U receivers permitted; disconnect the others before probing.");
+    device=candidates[0];
+    if(device.opened)throw Error("Receiver already open in this browser tab; use Hard stop first.");
+    stage="USBDevice.open";
+    await device.open();
+    opened=true;
+    if(device.configuration===null){
+      stage="USBDevice.selectConfiguration(1)";
+      await device.selectConfiguration(1);
+    }
+    stage="USBDevice.claimInterface(0)";
+    await device.claimInterface(0);
+    claimed=true;
+  }catch(e){
+    failure={ok:false,stage,errorName:String(e?.name||"Error"),
+      errorMessage:String(e?.message||e)};
+  }finally{
+    if(claimed){
+      try{await device.releaseInterface(0)}
+      catch(e){cleanupErrors.push("releaseInterface(0): "+String(e?.message||e));}
+    }
+    if(opened){
+      try{await device.close()}
+      catch(e){cleanupErrors.push("USBDevice.close: "+String(e?.message||e));}
+    }
+  }
+  if(failure)return {...failure,cleanupErrors};
+  if(cleanupErrors.length)return {ok:false,stage:"release",
+    errorName:"USBReleaseError",errorMessage:"USB opened but release had errors",cleanupErrors};
+  return {ok:true,stage:"USBDevice.claimInterface(0)",cleanupErrors,
+    summary:"USB interface 0 opened, claimed and released. This is NOT an RF reception test."};
+}
+
 export async function readOnlyUsbReport(usb,platform="unknown"){
   if(!usb || typeof usb.getDevices!=="function")
     return "WebUSB unavailable: try HTTPS in desktop Brave/Chrome/Edge.";
