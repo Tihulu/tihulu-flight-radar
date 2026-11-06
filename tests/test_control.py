@@ -78,11 +78,13 @@ def test_owned_linux_receiver_released_on_close(monkeypatch):
     monkeypatch.setattr(control, "_unit_active", lambda _: (state["active"],"active" if state["active"] else "inactive"))
     calls=[]
     monkeypatch.setattr(control, "service_action", lambda op: calls.append(op) or action(op))
+    monkeypatch.setattr(control, "_stop_only_app_owned_readsb",
+                        lambda: calls.append("stop-readsb") or action("stop"))
     receiver=ReceiverController()
     receiver.start()
     assert receiver._started_service_in_app
     receiver.close()
-    assert calls==["start","stop"]
+    assert calls==["start","stop-readsb"]
     assert not state["active"]
 
 
@@ -110,7 +112,7 @@ def test_close_failure_is_reported_and_not_silently_cleared(monkeypatch):
     monkeypatch.setattr(control,"_unit_active",lambda _: (True,"active"))
     def failing(_):
         raise DataError("restricted sudo permission missing")
-    monkeypatch.setattr(control,"service_action",failing)
+    monkeypatch.setattr(control,"_stop_only_app_owned_readsb",failing)
     receiver=ReceiverController()
     receiver._started_service_in_app=True
     with pytest.raises(DataError,match="restricted sudo"):
