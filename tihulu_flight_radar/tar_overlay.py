@@ -16,7 +16,7 @@ from .bridge import DataProvider
 from .core import recently_seen, position_is_fresh
 
 # tar1090 (wiedehopf) defines the lexical OLMap map in html/script.js.
-MAP_CENTER_JS = r"""(() => {
+MAP_CENTER_JS = r"""JSON.stringify((() => {
   // Run in Qt WebEngine's MainWorld: tar1090 defines OLMap with top-level let.
   // This routine does not change receiver coordinates, configurations or data.
   try {
@@ -52,7 +52,7 @@ MAP_CENTER_JS = r"""(() => {
   } catch(error) {
     return {ready:false,reason:'OpenLayers initialization: ' + String(error).slice(0,180)};
   }
-})()"""
+})())"""
 
 # Even when tar1090 fails to initialize its OpenLayers map, show a visible
 # diagnostic instead of an invisible Internet layer. This does not modify tar.
@@ -232,9 +232,17 @@ class TarOverlayView(QWebEngineView):
         self._probe_busy = False
         if not self._active:
             return
+        # Qt WebEngine can return None for JS Object values on some GPU/
+        # Qt runtimes even though the script executed. A JSON string is a
+        # reliably supported primitive result type on all Qt WebEngine builds.
+        if isinstance(value, str):
+            try:
+                value = json.loads(value)
+            except (ValueError, TypeError):
+                value = {"ready": False, "reason": "Invalid map probe JSON"}
         if not isinstance(value,dict) or not value.get("ready"):
             reason = (value.get("reason") if isinstance(value, dict)
-                      else "tar1090 page did not return a map probe")
+                      else "tar1090 JS callback unavailable — using initial map region")
             if reason != self._last_reason:
                 self._last_reason = reason
                 self._set_status(str(reason))
