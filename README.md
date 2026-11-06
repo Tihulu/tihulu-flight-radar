@@ -17,7 +17,8 @@ Geocoding only on click; typed offline names are never sent to a provider.
 The chosen place and search radius are stored in browser-local settings on the
 web. On native Qt/Pop!_OS, a token-protected loopback endpoint stores the
 selection in an owner-private configuration file (Qt ports change on restart).
-the next launch. The UI never changes actual antenna/SDR location, starts
+These preferences survive the next launch. The UI never changes actual
+antenna/SDR location, starts
 or retunes readsb, or invents RF planes; it only changes the map camera and
 Internet ADS-B query center. The same selected map camera is applied when
 the tar1090 iframe is open. Browser Pages without an antenna still work.
