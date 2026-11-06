@@ -327,6 +327,16 @@ canvas.addEventListener("wheel",e=>{
 $("connect").onclick=connect;
 $("disconnect").onclick=disconnect;
 $("refresh").onclick=refresh;
+$("fullMap").onclick=()=>{
+ const raw=prompt("Full tar1090 URL (receiver must host tar1090):","http://127.0.0.1/tar1090/");
+ if(raw===null)return;
+ try{
+  const u=new URL(raw);
+  if(!["http:","https:"].includes(u.protocol) || u.username || u.password)
+   throw Error("Use a valid HTTP(S) tar1090 URL without embedded credentials.");
+  window.open(u.href,"_blank","noopener,noreferrer");
+ }catch(e){notice("Cannot open tar1090: "+e.message)}
+};
 $("start").onclick=()=>control("start");
 $("stop").onclick=()=>control("stop");
 $("restart").onclick=()=>control("restart");
