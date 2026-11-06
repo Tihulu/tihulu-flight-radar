@@ -50,8 +50,12 @@ export function explainUsbError(error,platform=platformFamily()){
       "If still blocked, inspect (read-only):",
       "  lsusb -d 0bda:2838",
       "  lsusb -t",
-      "Driver=dvb_usb_rtl28xxu can indicate a Linux kernel-driver conflict.",
-      "A missing udev rule may require one-time OS configuration. The website cannot perform it."
+      "Verified Nooelec 0bda:2838 case: readsb inactive but Driver=dvb_usb_rtl28xxu owned interface 0. Explicitly unbinding only that interface made Brave work.",
+      "If this driver is bound, follow the opt-in, per-device Linux recovery guide; never assume every computer uses USB path 1-4:1.0.",
+      "Use the optional downloaded repository helper: bash scripts/rtl-sdr-usb-interface.sh status, then release only if you choose.",
+      "After release, DO NOT unplug/replug before WebUSB: Linux may immediately bind dvb_usb_rtl28xxu again.",
+      "Release the WebUSB handle with Hard stop before re-binding DVB. No website can run sudo, unbind a kernel driver, or change permissions.",
+      "If Driver=[none] but claim still fails, inspect separate USB permissions/udev rules. Do not chmod 777."
     );
   }else if(platform==="windows"){
     note.push("Windows may require a one-time WinUSB-compatible driver; WebUSB cannot install drivers.");
