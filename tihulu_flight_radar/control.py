@@ -98,6 +98,28 @@ def service_action(action: str) -> str:
     return f"Receiver boot setting: {action} completed."
 
 
+def _stop_only_app_owned_readsb() -> str:
+    """Release only the USB receiver, never an unrelated tar1090 viewer.
+
+    Requires the exact stop-readsb command in the restricted sudoers policy.
+    Older installations must update that policy using the normal installer.
+    """
+    cmd=["/usr/bin/sudo","-n",SYSTEMCTL,"stop","readsb.service"]
+    try:
+        result=subprocess.run(cmd,capture_output=True,text=True,
+                              timeout=30,check=False)
+    except (OSError,subprocess.TimeoutExpired) as exc:
+        raise DataError("Cannot stop owned readsb service: "+str(exc)) from exc
+    if result.returncode:
+        raise DataError(
+            "Cannot release app-owned readsb; update the restricted Flight "
+            "Radar sudo policy using the official installer. "+
+            (result.stderr or result.stdout).strip()[:300]
+        )
+    _verify_transition("stop")
+    return "App-owned readsb stopped; tar1090 and external services untouched."
+
+
 class ReceiverController:
     def __init__(self):
         self.mode = "Linux services" if platform.system() == "Linux" else "Direct readsb"
@@ -233,5 +255,5 @@ class ReceiverController:
             if _unit_active("readsb.service")[0]:
                 # Uses the existing narrowly scoped sudoers service permission.
                 # Never pkill unrelated SDR processes or disable service units.
-                service_action("stop")
+                _stop_only_app_owned_readsb()
             self._started_service_in_app=False
