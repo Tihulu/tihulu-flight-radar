@@ -25,7 +25,7 @@ jobs:
       - name: Bridge unit tests
         run: |
           python -m pip install pytest
-          python -m pytest -q tests/test_bridge.py
+          python -m pytest -q tests/test_bridge.py tests/test_multi_sources.py
       - name: Build Raspberry Pi bridge source distribution
         run: |
           tar -czf tihulu-flight-radar-pi-arm64-source.tar.gz \
