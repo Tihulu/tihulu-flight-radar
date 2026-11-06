@@ -7,6 +7,51 @@ creates simulated aircraft or positions. ADS-B broadcasts may contain locations;
 Mode S does not guarantee location. MLAT positioning requires synchronized
 multiple receivers and is **not** calculated by this app.
 
+## Browser-first GitHub Pages (experimental, no desktop installation)
+
+**Intended URL after release:** https://tihulu.github.io/tihulu-flight-radar/
+
+The current **draft PR #6** adds a static, install-free aircraft radar that runs
+inside Chromium-based browsers (Brave, Chrome, Edge). No Python, readsb,
+local service, npm or pairing token is required for the **direct USB** path:
+
+1. Open the HTTPS page in Brave/Chrome/Edge. Permit current location if you
+   want the map to start there; otherwise the first valid radio-positioned
+   aircraft is chosen, or Cologne if none exists.
+2. Click **Choose RTL-SDR & start**, and explicitly select the Nooelec
+   RTL2832U USB receiver. It tunes to 1090 MHz at 2 MSps.
+3. The browser decodes genuine Mode S/ADS-B DF17/18 frames with CRC
+   verification in a Web Worker, and plots airborne positions only after
+   valid recent even+odd CPR frames are received. Source badges are Antenna,
+   Internet and Both; Internet-only positions are never labeled as RF.
+4. Click **Hard stop / release USB** before another SDR application needs
+   the device. The page also releases its USB handle when hidden/closed.
+
+The JavaScript RTL-SDR driver is pinned to version 3.0.7 and **bundled into
+the GitHub Pages artifact during CI**. Nothing is installed on the viewer's
+computer, and a third-party runtime JavaScript CDN is not required.
+
+**Internet aircraft without USB:** use the advanced settings to enter a
+trusted HTTPS endpoint with an accessible browser CORS policy. Public
+adsb.lol/adsb.fi endpoints do **not** support third-party browser CORS; an
+authorized Internet feed or optional user-operated relay is still needed
+for this *different* source. GitHub Pages itself has no server backend.
+
+**Hardware limitations:** WebUSB only works in compatible browsers; Linux
+USB permissions and conflicting readsb, Gqrx or DVB drivers may need
+manual OS-level attention, and Windows may need a compatible WinUSB driver.
+The website cannot stop a process or change privileged OS settings.
+Firefox and Safari can use the map with Internet/paired sources but do not
+support direct WebUSB.
+
+**Status:** Static protocol tests pass on synthetic IQ/known real Mode S
+frames; actual RTL-SDR hardware/WebUSB streaming, CPU cost, OS driver
+compatibility, and independent tar1090 parity need physical acceptance tests.
+The Pages workflow deploys only from the reviewed `main` branch after
+a successful GitHub Actions release, **not from this draft PR**.
+
+See [browser-only implementation and release gates](docs/PAGES_TAR1090_SDR_HANDOFF.md).
+
 ## Targets and current limitations
 
 | OS | Desktop UI | Direct RTL-SDR | Remote receiver |
