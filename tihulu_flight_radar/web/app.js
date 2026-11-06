@@ -334,7 +334,8 @@ window.tihuluUsbStarted=()=>{
  for(const id of ["start","stop","restart"])$(id).disabled=true;
  if(!state.timer)state.timer=setInterval(()=>{if(!document.hidden)refresh()},15000);
  displayUsbSnapshot();
- notice("Browser SDR connected. Only CRC-verified RF messages and real positions will appear.");
+ void refresh();
+ notice("Browser SDR connected. Loading the selected Internet network alongside real RF.");
 };
 window.tihuluUsbSnapshot=packet=>{
  if(state.connectionKind!=="usb")return;
@@ -508,7 +509,8 @@ function feedSummary(feed){
   "Internet: "+(i.state||"unknown")+(i.error?" ("+i.error+")":"")+
   (i.updated_at?" · observed "+formatTime(i.updated_at):"")+
   (i.provider?" · "+i.provider:"")+
-  (i.attribution?" · "+i.attribution:"")
+  (i.attribution?" · "+i.attribution:"")+
+  (i.limited_coverage?" · Limited network coverage; 0 nearby does not mean the antenna failed.":"")
  ];
  $("feedStatus").textContent=details.join("\n");
  $("feedStatus").style.whiteSpace="pre-line";
@@ -771,7 +773,8 @@ preset.onchange=()=>{
  showProviderChoice();
  if(state.connectionKind==="usb"||state.connectionKind==="internet"){
   state.internetSnapshot=null;state.internetBackoffUntil=0;
-  void connect();
+  if(preset.value==="off"&&state.connectionKind==="internet")disconnect();
+  else void connect();
  }
 };
 showProviderChoice();
