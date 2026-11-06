@@ -134,3 +134,28 @@ Changes on Draft PR #6:
 tar1090 OpenLayers overlay positioning on the user's Pop!_OS COSMIC Qt
 runtime. Cross-platform CI verifies source/logic but cannot substitute for
 live RF hardware.
+
+
+## 2026-11-06 — Startup camera hierarchy (requested)
+
+Both native Qt and GitHub Pages/browser radar share the following **startup
+camera priority**:
+
+1. **Current location**, only if the user explicitly grants browser
+   geolocation. Qt WebEngine displays a Yes/No dialog for its trusted
+   loopback origin; no background location permissions are granted.
+2. If not available or denied, **nearest fresh, genuinely radio-positioned
+   aircraft**, choosing the nearest to Cologne as reference when there is no
+   location. A plane received by the SDR but positioned solely using
+   Internet data does NOT qualify as a radio-positioned plane.
+3. If neither is available, **Cologne (50.938 N, 6.960 E)**, a fixed
+   fallback center, never asserted as the physical antenna position.
+
+Manual pan/zoom or explicitly selecting/focusing an aircraft overrides
+startup automation. Geolocation may upgrade the radio fallback while
+permission is resolving but never overrides a manual choice.
+
+Opening tar1090 from the main radar preserves the selected startup camera
+instead of jumping to a random Internet plane. Classic tar1090 uses
+authorized location, nearest fresh local aircraft, and Cologne. None of
+these camera operations overwrites tar1090 physical receiver coordinates.
