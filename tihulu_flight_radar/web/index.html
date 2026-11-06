@@ -40,11 +40,15 @@
   <label class="field">Internet source
    <select id="onlinePreset" aria-label="Internet aircraft source">
     <option value="intelsky" selected>IntelSky (public browser feed · limited coverage)</option>
+    <option value="airlabs">AirLabs (optional personal API key · broader flights)</option>
     <option value="custom">Custom HTTPS/CORS ADS-B feed (full network if supplied)</option>
     <option value="off">Off — radio only</option>
    </select>
   </label>
   <label class="field feed">Custom feed (HTTPS, optional) <input id="onlineFeedUrl" type="url" placeholder="https://your-feed.example/api/aircraft" spellcheck="false" aria-label="CORS-enabled Internet feed endpoint" disabled></label>
+  <label class="field" id="airlabsKeyField" hidden>AirLabs API key (this tab only)
+   <input id="airlabsKey" type="password" autocomplete="off" placeholder="Your own AirLabs API key" aria-label="AirLabs personal API key">
+  </label>
   <label class="field">Bridge URL <input id="bridgeUrl" value="http://127.0.0.1:8510" spellcheck="false" aria-label="Local bridge URL"></label>
   <label class="field token">Session pairing token <input id="token" type="password" placeholder="Paste token from local bridge terminal" autocomplete="off"></label>
   <button id="connect" class="primary">Connect source</button><button id="disconnect">Disconnect</button>
@@ -52,6 +56,7 @@
    <option value="auto">Auto (local first)</option><option value="antenna">Antenna only</option>
    <option value="internet">Internet only</option><option value="hybrid">Hybrid</option>
   </select></label>
+  <p class="source-key-warning">AirLabs keys are sent to AirLabs in a request URL and are visible in browser developer tools. Never embed a shared key in GitHub Pages. Free API plans have limited quotas; this app retains no key after the tab closes.</p>
   <button id="refresh">Refresh now</button><button id="installApp" hidden>Install web app</button><button id="legacyTar" title="Only works with an independent live readsb JSON backend">External tar1090 (readsb required)</button>
  </div>
  </details>
