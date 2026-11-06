@@ -14,7 +14,7 @@ usage() {
 }
 case "${1:-}" in
   preview)
-    ref="e56a0fc890327c6a3705dcb4bde9226b7bed19b6"
+    ref="def7a62ff6951951bc3a432b93da3251c7ea4162"
     expected="0.3.2.dev4"
     ;;
   legacy)
