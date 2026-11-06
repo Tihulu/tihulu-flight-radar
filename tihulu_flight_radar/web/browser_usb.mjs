@@ -113,6 +113,9 @@ async function start(){
     }
   }});
   device=await provider.get();
+  if(document.hidden || stopRequested){
+   throw Error("Tab was hidden or stopped while opening USB; releasing this tab's device.");
+  }
   // Never tune to a frequency other than the public ADS-B receive channel.
   await device.setSampleRate(2000000);
   await device.setCenterFrequency(1090000000);
