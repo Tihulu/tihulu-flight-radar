@@ -91,6 +91,10 @@ async function read(){
 }
 async function start(){
  if(!Driver || device || readLoop || !isUsable())return;
+ if(window.tihuluUsbCanStart && !window.tihuluUsbCanStart()){
+  tell("Disconnect the paired readsb bridge before choosing direct WebUSB. One SDR cannot be owned by two receivers.",true);
+  return;
+ }
  stopRequested=false;alreadyReported=false;
  $("usbStart").disabled=true;$("usbStop").disabled=false;
  try{
