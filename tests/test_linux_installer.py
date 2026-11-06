@@ -27,7 +27,8 @@ def test_one_line_upgrade_creates_both_application_shortcuts(tmp_path):
 mkdir -p "$HOME/.local/bin"
 printf '#!/bin/sh\\nexit 0\\n' > "$HOME/.local/bin/tihulu-flight-radar"
 printf '#!/bin/sh\\nexit 0\\n' > "$HOME/.local/bin/tihulu-flight-bridge"
-chmod +x "$HOME/.local/bin/tihulu-flight-radar" "$HOME/.local/bin/tihulu-flight-bridge"
+printf '#!/bin/sh\\nexit 0\\n' > "$HOME/.local/bin/tihulu-flight-radar-classic"
+chmod +x "$HOME/.local/bin/tihulu-flight-radar" "$HOME/.local/bin/tihulu-flight-bridge" "$HOME/.local/bin/tihulu-flight-radar-classic"
 exit 0
 """)
     _stub(tools / "curl", """
@@ -60,8 +61,10 @@ exit 1
     assert 'Exec="'+str(home)+"/.local/bin/tihulu-flight-radar"+'"' in qt
     assert "Terminal=false" in qt
     assert "Name=Tihulu Flight Radar Web" in web
-    assert 'Exec="'+str(home)+"/.local/bin/tihulu-flight-bridge"+'" --open-browser' in web
-    assert "Terminal=true" in web
+    assert 'Exec="'+str(home)+"/.local/bin/tihulu-flight-radar"+'"' in web
+    assert "Terminal=false" in web
+    classic = (appdir / "tihulu-flight-radar-classic.desktop").read_text()
+    assert 'Exec="'+str(home)+"/.local/bin/tihulu-flight-radar-classic"+'"' in classic
     assert preserved.read_text() == "do not remove"
     assert not (appdir / "tihulu-adsb-radar.desktop").exists()
     assert (home / ".local/share/icons/hicolor/scalable/apps/tihulu-flight-radar.svg").exists()
