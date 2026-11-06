@@ -101,6 +101,6 @@ jobs:
           name: tihulu-flight-radar-debian12-x64
           path: |
             dist/TihuluFlightRadar/
-            dist/tihulu-flight-radar_0.3.2.dev3_amd64.deb
+            dist/tihulu-flight-radar_0.3.2.dev4_amd64.deb
           if-no-files-found: error
           retention-days: 14
