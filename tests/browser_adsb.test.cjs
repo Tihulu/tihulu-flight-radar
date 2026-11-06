@@ -88,5 +88,5 @@ test("GitHub Pages includes an explicit direct WebUSB hard stop and browser work
  assert.match(usb,/pagehide/);
  assert.match(app,/window\.tihuluUsbSnapshot/);
  assert.match(app,/browserSourceResult/);
- assert.match(app,/position_source:"antenna"/);
+ assert.match(app,/position_source:isPositioned\(a\)\?"antenna":null/);
 });
