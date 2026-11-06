@@ -116,6 +116,7 @@ async function checkReceiver(){
  const r=await api("/api/status");
  $("receiverStatus").textContent=(r.active?"Decoder active — ":"Decoder inactive — ")+r.detail+
    (r.control_enabled?" · controls enabled":" · controls read-only")+
+   (r.startup_error ? " · START FAILED: "+r.startup_error : "")+
    ". An active decoder does not prove RF reception.";
  for(const id of ["start","stop","restart"])$(id).disabled=!r.control_enabled;
 }
@@ -207,7 +208,8 @@ function feedSummary(feed){
   (l.messages!=null?" · "+l.messages+" receiver messages":""),
   "Internet: "+(i.state||"unknown")+(i.error?" ("+i.error+")":"")+
   (i.updated_at?" · observed "+formatTime(i.updated_at):"")+
-  (i.provider?" · "+i.provider+" (ODbL)":"")
+  (i.provider?" · "+i.provider:"")+
+  (i.attribution?" · "+i.attribution:"")
  ];
  $("feedStatus").textContent=details.join("\n");
  $("feedStatus").style.whiteSpace="pre-line";
