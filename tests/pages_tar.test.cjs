@@ -1,0 +1,65 @@
+"use strict";
+const fs=require("node:fs");
+const path=require("node:path");
+const test=require("node:test");
+const assert=require("node:assert/strict");
+const vm=require("node:vm");
+
+const root=path.join(__dirname,"..");
+const js=fs.readFileSync(path.join(root,"tihulu_flight_radar/web/app.js"),"utf8");
+function extract(name){
+ const m=js.match(new RegExp("function "+name+"\\([^)]*\\)\\{[\\s\\S]*?\\n\\}"));
+ if(!m)throw Error("missing "+name);
+ return m[0];
+}
+
+test("Full tar1090 map starts near genuine local aircraft and retains other planes",()=>{
+ const state={lat:51.1657,lon:10.4515,data:[
+  {hex:"3c1234",lat:50.9,lon:7.1,seen:1,seen_pos:1,sources:["antenna"]},
+  {hex:"abcdef",lat:36.2,lon:-100,seen:1,seen_pos:1,sources:["internet"]}
+ ]};
+ const sandbox={URL,state,visible:()=>true,isPositioned:a=>a.seen_pos<=60};
+ const fn=vm.runInNewContext(extract("tarFocusURL")+"\ntarFocusURL",sandbox);
+ const parsed=new URL(fn("http://127.0.0.1/tar1090/"));
+ assert.equal(parsed.searchParams.get("icao"),"3c1234");
+ assert.equal(parsed.searchParams.get("SiteLat"),"50.900000");
+ assert.equal(parsed.searchParams.get("SiteLon"),"7.100000");
+ assert.equal(parsed.searchParams.get("centerReceiver"),"");
+ assert.equal(parsed.searchParams.get("noIsolation"),"");
+});
+
+test("Tar1090 defaults Germany if no live aircraft, no imposed USA coordinates",()=>{
+ const state={lat:51.1657,lon:10.4515,data:[]};
+ const sandbox={URL,state,visible:()=>true,isPositioned:()=>false};
+ const fn=vm.runInNewContext(extract("tarFocusURL")+"\ntarFocusURL",sandbox);
+ const p=new URL(fn("http://localhost:8504/?zoom=5&SiteLon=-98&SiteLat=37"));
+ assert.equal(p.searchParams.get("SiteLat"),"51.165700");
+ assert.equal(p.searchParams.get("SiteLon"),"10.451500");
+ assert.equal(p.searchParams.get("zoom"),"7");
+});
+
+test("Pages PWA has standalone manifest, scoped worker and no aircraft API caching",()=>{
+ const manifest=JSON.parse(fs.readFileSync(path.join(root,"tihulu_flight_radar/web/manifest.webmanifest"),"utf8"));
+ const sw=fs.readFileSync(path.join(root,"tihulu_flight_radar/web/sw.js"),"utf8");
+ assert.equal(manifest.display,"standalone");
+ assert.equal(manifest.start_url,"./");
+ assert.ok(!sw.includes("/api/aircraft"));
+ assert.ok(!sw.includes("tile.openstreetmap.org"));
+});
+
+test("Embedded tar overlay uses OpenLayers source and exposes a source-specific toggle",()=>{
+ const py=fs.readFileSync(path.join(root,"tihulu_flight_radar/tar_overlay.py"),"utf8");
+ const m=py.match(/OVERLAY_JS = r"""([\s\S]*?)"""/);
+ assert.ok(m,"tar JavaScript not present");
+ assert.match(m[1],/ol\.layer\.Vector/);
+ assert.match(m[1],/source:'internet'/);
+ assert.match(m[1],/Show Internet aircraft overlay/);
+ new vm.Script(m[1]+"({aircraft:[],provider:'test'})");
+});
+
+test("Internet feed URL requires trusted HTTPS endpoint without keys in query",()=>{
+ const fn=vm.runInNewContext(extract("getFeedURL")+"\ngetFeedURL",{URL});
+ assert.equal(fn("https://feed.example/api/aircraft"),"https://feed.example/api/aircraft");
+ assert.throws(()=>fn("http://feed.example/api/aircraft"),/HTTPS/);
+ assert.throws(()=>fn("https://feed.example/api/aircraft?key=foo"),/without embedded keys/);
+});
