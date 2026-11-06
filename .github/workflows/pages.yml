@@ -1,0 +1,54 @@
+name: Publish Flight Radar GitHub Pages
+on:
+  push:
+    branches: [main]
+    paths:
+      - "tihulu_flight_radar/web/**"
+      - ".github/workflows/pages.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "tihulu_flight_radar/web/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  web-check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Validate standalone app JavaScript and static assets
+        run: |
+          test -s tihulu_flight_radar/web/index.html
+          test -s tihulu_flight_radar/web/style.css
+          node --check tihulu_flight_radar/web/app.js
+          grep -q 'app.js' tihulu_flight_radar/web/index.html
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: web-check
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: flight-radar-pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: tihulu_flight_radar/web
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
