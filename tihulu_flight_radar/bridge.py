@@ -319,6 +319,8 @@ def main(argv: list[str] | None = None):
     parser.add_argument("--port", type=int, default=8510)
     parser.add_argument("--allow-control", action="store_true",
                         help="Explicitly permit authenticated Start/Stop/Restart from the browser")
+    parser.add_argument("--open-browser", action="store_true",
+                        help="Open the local web UI automatically after launching the bridge")
     args = parser.parse_args(argv)
     if not 1024 <= args.port <= 65535:
         parser.error("--port must be between 1024 and 65535")
@@ -329,6 +331,14 @@ def main(argv: list[str] | None = None):
     print(f"Session pairing token: {bridge.token}", flush=True)
     print("Keep this token private. Bridge is loopback-only; receiver controls:",
           "enabled" if args.allow_control else "disabled", flush=True)
+    if args.open_browser:
+        import webbrowser
+        # The desktop launcher uses Terminal=true so the pairing token remains
+        # visible to the owner. Never encode a token into a URL.
+        threading.Thread(
+            target=lambda: webbrowser.open(f"http://127.0.0.1:{args.port}/"),
+            daemon=True,
+        ).start()
     try:
         server.serve_forever(poll_interval=0.5)
     except KeyboardInterrupt:
