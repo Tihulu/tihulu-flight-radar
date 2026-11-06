@@ -36,7 +36,7 @@ jobs:
           node --check tihulu_flight_radar/web/usb_tools.mjs
           bash -n scripts/rtl-sdr-usb-interface.sh
           node --check deploy/cloudflare-worker.mjs
-          node --test tests/web_bridge.test.cjs tests/pages_tar.test.cjs tests/browser_adsb.test.cjs tests/browser_source.test.cjs tests/aircraft_visuals.test.cjs tests/webusb_sampleblock.test.cjs
+          node --test tests/web_bridge.test.cjs tests/pages_tar.test.cjs tests/browser_adsb.test.cjs tests/browser_source.test.cjs tests/aircraft_visuals.test.cjs tests/webusb_sampleblock.test.cjs tests/internet_sources.test.cjs
           python3 -m json.tool tihulu_flight_radar/web/manifest.webmanifest >/dev/null
           test -s tihulu_flight_radar/web/icon.svg
           test -s tihulu_flight_radar/web/sw.js
