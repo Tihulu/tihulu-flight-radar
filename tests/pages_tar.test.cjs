@@ -129,9 +129,10 @@ test("Qt's tar1090 MainWorld script probes OpenLayers and hides receiver overlay
  assert.equal(ctx.window.tihuluTarCameraApplied,true);
 });
 
+
 test("Tar1090 probe returns a JSON string even before OpenLayers is ready",()=>{
  const py=fs.readFileSync(path.join(root,"tihulu_flight_radar/tar_overlay.py"),"utf8");
- const m=py.match(/MAP_CENTER_JS = r"""([\\s\\S]*?)"""/);
+ const m=py.match(/MAP_CENTER_JS = r"""([\s\S]*?)"""/);
  assert.ok(m);
  const result=vm.runInNewContext(m[1],{
   URLSearchParams, location:{search:""}, window:{}
@@ -139,16 +140,16 @@ test("Tar1090 probe returns a JSON string even before OpenLayers is ready",()=>{
  const value=JSON.parse(result);
  assert.equal(value.ready,false);
  assert.match(value.reason,/OpenLayers/);
- assert.match(py,/isinstance\\(value, str\\)/);
- assert.match(py,/self\\._initial_focus\\(\\)/);
- assert.match(py,/runJavaScript\\(MAP_CENTER_JS, 0/);
+ assert.match(py,/isinstance\(value, str\)/);
+ assert.match(py,/self\._initial_focus\(\)/);
+ assert.match(py,/runJavaScript\(MAP_CENTER_JS, 0/);
 });
 
 test("Embedded tar Internet map overlays report OpenLayers drawing errors",()=>{
  const py=fs.readFileSync(path.join(root,"tihulu_flight_radar/tar_overlay.py"),"utf8");
- const m=py.match(/OVERLAY_JS = r"""([\\s\\S]*?)"""/);
+ const m=py.match(/OVERLAY_JS = r"""([\s\S]*?)"""/);
  assert.ok(m);
- assert.match(py,/def _overlay_result\\(self, value\\)/);
- assert.match(py,/JSON\\.stringify\\(/);
- assert.match(m[1],/Internet aircraft \\(blue\\)/);
+ assert.match(py,/def _overlay_result\(self, value\)/);
+ assert.match(py,/JSON\.stringify\(/);
+ assert.match(m[1],/Internet aircraft \(blue\)/);
 });
