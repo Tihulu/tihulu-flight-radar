@@ -110,7 +110,8 @@ OVERLAY_JS = r"""(function(input){
   const when=Number.isFinite(input.updated_at)
     ? (' · updated '+new Date(input.updated_at*1000).toLocaleTimeString()) : '';
   app.status.textContent=plotted+' online · '+overlapped+' also local | '+input.provider+
-    when+(input.error ? ' | '+input.error : '');
+    when+(input.error ? ' | ERROR: '+input.error : '');
+  app.status.style.color=input.error?'#ffb3a5':'#a5c4d8';
   return {online:plotted,alsoLocal:overlapped};
 })"""  # supplied data is serialized separately below; not interpolated from URLs
 
@@ -168,22 +169,19 @@ class TarOverlayView(QWebEngineView):
                                 "flight":str(a.get("flight") or "").strip()[:12]
                             })
                     if self._active and generation==self._generation:
-                        payload=json.dumps({
-                            "aircraft":actual[:1200],
-                            "provider":status.get("provider") or "Internet",
-                            "updated_at":status.get("updated_at"),
-                            "error":status.get("error") or ""
-                        }, ensure_ascii=False)
-                        self.page().runJavaScript(OVERLAY_JS+"("+payload+")")
-                except Exception:
-                    pass
+                        self._draw_overlay(
+                            actual[:1200], status.get("provider") or "Internet",
+                            status.get("error") or "", status.get("updated_at")
+                        )
+                except Exception as exc:
+                    if self._active:
+                        self._draw_overlay([], "Internet", str(exc)[:160])
             return
         # Fetch only every ~15 seconds; DataProvider also enforces a shared
         # cooldown, including provider backoff after HTTP 429.
         from time import monotonic
         if monotonic()<getattr(self, "_next_poll", 0):
             return
-        self._next_poll=monotonic()+16
         self.page().runJavaScript(MAP_CENTER_JS,self._got_center)
 
     def _got_center(self, value):
@@ -194,7 +192,23 @@ class TarOverlayView(QWebEngineView):
                 and math.isfinite(lat) and math.isfinite(lon)
                 and -90<=lat<=90 and -180<=lon<=180):
             return
+        from time import monotonic
+        self._next_poll=monotonic()+16
         self._pending=self._pool.submit(self._provider.fetch,float(lat),float(lon),100)
+        if not getattr(self, "_overlay_bootstrapped", False):
+            self._overlay_bootstrapped=True
+            self._draw_overlay([], "Connecting to Internet feed", "")
+
+    def _draw_overlay(self, aircraft, provider, error="", updated_at=None):
+        if not self._active:
+            return
+        payload=json.dumps({
+            "aircraft":aircraft,
+            "provider":provider,
+            "error":error,
+            "updated_at":updated_at
+        }, ensure_ascii=False)
+        self.page().runJavaScript(OVERLAY_JS+"("+payload+")")
 
     def closeEvent(self, event):
         self._timer.stop()
