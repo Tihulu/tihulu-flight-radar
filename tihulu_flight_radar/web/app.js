@@ -981,6 +981,10 @@ function setBrowserTar(open){
   publishTarBrowserSnapshot();
   notice("Full upstream tar1090 frontend opened with this tab's real aircraft. No separate readsb service or USB claim.");
  }else{
+  // Tear down upstream tar1090 intervals/map listeners when its window closes.
+  // The parent WebUSB receiver stays active and owns the dongle as before.
+  const frame=$("fullTarFrame");
+  if(frame?.hasAttribute("src"))frame.removeAttribute("src");
   $("fullTar1090").focus();
  }
 }
