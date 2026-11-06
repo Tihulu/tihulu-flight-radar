@@ -23,6 +23,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Build pinned same-origin WebUSB driver (CI only)
+        run: bash scripts/build-browser-assets.sh
       - name: Validate standalone app JavaScript and static assets
         run: |
           test -s tihulu_flight_radar/web/index.html
@@ -38,6 +40,8 @@ jobs:
           test -s tihulu_flight_radar/web/sw.js
           test -s tihulu_flight_radar/web/browser_usb.mjs
           test -s tihulu_flight_radar/web/adsb_worker.mjs
+          test -s tihulu_flight_radar/web/vendor/rtlsdr.mjs
+          test -s tihulu_flight_radar/web/vendor/RTLSDR-LICENSE.txt
           grep -q 'app.js' tihulu_flight_radar/web/index.html
   deploy:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
@@ -55,6 +59,11 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Build pinned browser WebUSB assets for deployment
+        run: bash scripts/build-browser-assets.sh
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
