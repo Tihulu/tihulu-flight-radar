@@ -142,6 +142,7 @@ test("AirLabs request uses only the user's chosen key and regional bbox",async()
  assert.ok(url.searchParams.has("bbox"));
  assert.equal(first.aircraft.length,1);
  const unchangedUrl=url.href;
+ state.internetSnapshot=first;
  const again=await fn();
  assert.equal(again,first,"cached feed must not spend API quota every 15 seconds");
  assert.equal(url.href,unchangedUrl);
