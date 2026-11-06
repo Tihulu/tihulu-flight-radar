@@ -266,6 +266,7 @@ window.tihuluUsbStopped=()=>{
 // page is loaded. The token is never placed in a URL, cookies or storage.
 window.tihuluNativeConnect=async function(base, token){
  document.documentElement.classList.add("native");
+ document.querySelector(".bridge-advanced").open=true;
  // Desktop explicitly opts into both observed RF and public online layers.
  $("mode").value="hybrid";
  $("bridgeUrl").value=base;
@@ -332,9 +333,15 @@ async function connect(){
   $("token").value="";
   state.timer=setInterval(()=>{if(!document.hidden)refresh()},15000);
  }catch(e){
-  state.connected=false;state.token="";state.connectionKind="none";
-  connection(false,"Not connected");
-  notice("Connection failed: "+e.message+". Check bridge pairing or feed CORS/availability.");
+  if(state.connectionKind==="usb"){
+   // A failed network feed cannot disconnect a healthy in-browser RTL-SDR.
+   state.connected=true;displayUsbSnapshot();
+   notice("Optional Internet feed failed, but direct USB remains connected: "+e.message);
+  }else{
+   state.connected=false;state.token="";state.connectionKind="none";
+   connection(false,"Not connected");
+   notice("Connection failed: "+e.message+". Check bridge pairing or feed CORS/availability.");
+  }
  }
 }
 function disconnect(){
@@ -753,8 +760,8 @@ if("serviceWorker" in navigator && location.protocol==="https:"){
  window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js",{scope:"./"}).catch(()=>{}));
 }
 if(location.hostname==="tihulu.github.io"){
- $("mode").value="internet";
- notice("GitHub Pages ready. Enter a trusted HTTPS Internet feed URL or pair a local bridge for antenna data.");
+ $("mode").value="auto";
+ notice("GitHub Pages ready. Start Direct WebUSB for actual 1090 MHz ADS-B, or configure an Internet feed. No local app is required.");
 }
 
 initializeStartupLocation();
