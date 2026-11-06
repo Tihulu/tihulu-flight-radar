@@ -100,7 +100,7 @@
     </div>
     <div class="maptools">
       <button id="fullTar1090" type="button" title="Open the complete bundled upstream tar1090 with live in-browser RF and Internet data">Full tar1090 · Internet or Radio</button><button id="expandMap" aria-pressed="false" title="Expand this independent browser radar map, even with readsb stopped">Full radar map</button><button id="focus">Focus aircraft</button><button id="cologne">Cologne</button>
-      <button id="germany">Germany</button><button id="locate">Use my location</button>
+      <button id="germany">Germany</button><button id="placeOpen" type="button" title="Choose country, state or province, city/district, or coordinates">Choose place</button><button id="locate">Use my location</button>
       <button id="searchHere" title="Fetch Internet aircraft around the current map view, without changing your receiver location">Search here</button>
       <button id="zoomIn" aria-label="Zoom in">+</button><button id="zoomOut" aria-label="Zoom out">−</button>
     </div>
@@ -128,11 +128,59 @@
  <div class="tar-browser-title">
   <strong>tar1090 — complete aircraft map, search, filters and details</strong>
   <span>Full original tar1090 — Internet-only, radio-only or combined · antenna optional · photos require Internet</span>
-  <button id="closeFullTar" type="button" aria-label="Close full tar1090 and return to Flight Radar">Close full tar1090</button>
+  <button id="placeTarOpen" type="button" title="Change the aircraft search region without requiring an antenna">Choose place</button>
+   <button id="closeFullTar" type="button" aria-label="Close full tar1090 and return to Flight Radar">Close full tar1090</button>
  </div>
  <iframe id="fullTarFrame" title="Original tar1090 aircraft map, photo, registration, airline and aircraft information" referrerpolicy="same-origin" loading="lazy"></iframe>
 </section>
-<footer><span id="message" role="status">Ready — choose USB above or configure an Internet feed. No artificial flights are generated.</span><span>Offline-first · <a href="https://github.com/Tihulu/tihulu-flight-radar" target="_blank" rel="noopener noreferrer">GitHub source</a></span></footer>
+<section id="locationPicker" class="location-picker" role="dialog" aria-modal="true" aria-labelledby="locationPickerTitle" hidden>
+  <div class="location-dialog">
+   <header class="location-heading">
+    <div><strong id="locationPickerTitle">Choose aircraft search location</strong>
+     <p>Same offline Germany / Türkiye directory as Satellite Center · no antenna required</p>
+    </div>
+    <button id="placeClose" type="button" aria-label="Close location chooser">Close</button>
+   </header>
+   <div class="location-fields">
+    <label>Country
+     <select id="placeCountry"><option value="DE">Germany</option><option value="TR">Türkiye</option></select>
+    </label>
+    <label>State / Province (Bundesland / İl)
+     <select id="placeRegion"><option value="">Choose a state / province</option></select>
+    </label>
+    <label class="location-wide">City / town / district / municipality
+     <select id="placeTown"><option value="">Choose state first</option></select>
+    </label>
+    <label class="location-wide">Search place (offline, accented or accent-free)
+     <input id="placeQuery" type="search" autocomplete="off" spellcheck="false"
+      placeholder="Köln, Hürth, İzmir, Karaburun, Bornova…" aria-controls="placeSuggestions">
+    </label>
+    <div id="placeSuggestions" class="location-results location-wide" role="listbox" aria-label="Place matches" hidden></div>
+    <p id="placeSelection" class="location-wide location-selection">Choose a place to change the Internet search center.</p>
+    <label>Latitude (WGS84)
+     <input id="placeLatitude" type="number" min="-90" max="90" step="any" inputmode="decimal" placeholder="50.938">
+    </label>
+    <label>Longitude (WGS84)
+     <input id="placeLongitude" type="number" min="-180" max="180" step="any" inputmode="decimal" placeholder="6.960">
+    </label>
+    <label>Internet search radius
+     <select id="placeRadius">
+      <option value="25">25 NM · 46 km</option><option value="50">50 NM · 93 km</option>
+      <option value="100" selected>100 NM · 185 km</option><option value="150">150 NM · 278 km</option>
+      <option value="250">250 NM · 463 km</option>
+     </select>
+    </label>
+   </div>
+   <p id="placeStatus" class="location-status" role="status" aria-live="polite">Loading offline places…</p>
+   <div class="location-actions">
+    <button id="placeApply" class="primary" type="button">Use selected place</button>
+    <button id="placeGps" type="button">Use device location (GPS)</button>
+    <button id="placeOnline" type="button">Search worldwide online</button>
+   </div>
+   <p class="location-footnote">Selecting a place changes only the map view and Internet aircraft query, never the physical SDR receiver location. Offline catalog: 8,084 approximate settlement points, not an exhaustive administrative boundary registry. GPS and online geocoding run only when requested. <a href="./CITY_DATA_LICENSE.md" target="_blank" rel="noopener noreferrer">Data license / ODbL</a>.</p>
+  </div>
+ </section>
+ <footer><span id="message" role="status">Ready — choose USB above or configure an Internet feed. No artificial flights are generated.</span><span>Offline-first · <a href="https://github.com/Tihulu/tihulu-flight-radar" target="_blank" rel="noopener noreferrer">GitHub source</a></span></footer>
 </main>
 <script src="./multi_sources.js" defer></script>
 <script src="./app.js" defer></script>
