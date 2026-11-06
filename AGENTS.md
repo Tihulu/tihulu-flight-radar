@@ -1,8 +1,38 @@
 # TIHULU FLIGHT RADAR — TWO PAGES CONTRACT (read before every change)
 
+## Full upstream tar1090 without an antenna — 0.3.2.dev1 contract
+
+- New preview is pinned at source SHA `ff934a67f0c4b93e23997d01307ad89bc9fbdb95`
+  via `preview/v0.3.2-dev1`; legacy 0.3.1 stays frozen at
+  `67280cd84feb89faec6a80f5fe2a55ce5f7b89e6`. Never delete/replace
+  that legacy branch or make a rollback script silently install from `main`.
+- Original tar1090 interface **must open with Internet-only aircraft and zero
+  readsb messages**, showing genuine original map/details, and also support
+  RF-only and same-ICAO I/R without duplicate planes.
+- On Pop!_OS, `scripts/install-linux.sh` installs into the existing pipx
+  environment using `--force`, caches original GPL tar1090 assets to the
+  user-owned static data directory, and preserves readsb/tar1090/services.
+  The `scripts/popos-version-switch.sh` preview/legacy commands use exact
+  pinned commit SHAs and verify the imported package version.
+- Never auto-start or auto-claim the SDR just to show Internet flights; on
+  fresh native install `auto_start_receiver` defaults OFF, and explicit
+  user settings are honored. No invented RF counts/positions or permanent
+  storage of pairing tokens. Internet access is still necessary to obtain
+  real online observations even if the original tar1090 UI itself is cached.
+- Share and synchronize the same revised `web/app.js`, `web/tar1090-adapter.js`,
+  `web/index.html` and PWA assets in BOTH canonical Pages deployments;
+  source-specific display layers must be toggleable and stale data expired.
+- Gates: `tests/tar_full_browser.test.cjs`,
+  `tests/test_tar_static_internet_only.py`,
+  `tests/test_version_switch.py`, original RF provenance, static URL safety,
+  and platform build checks. Fixtures alone do not prove the live provider
+  / user's physical Nooelec hardware.
+
+
+
 ## User-verified 0.3.1 stable baseline and optional multi-provider preview (Nov 6, 2026)
 
-Preserve the user's installed Pop!_OS `0.3.1` binary; the native `0.3.2.dev0`
+Preserve the user's installed Pop!_OS `0.3.1` binary; the native `0.3.2.dev1`
 branch is **opt-in only**. On actual user hardware, antenna (R) and Internet
 (I) planes already work, and the same ICAO shows once as I/R. This is a hard
 regression gate across Linux, macOS, Windows, Pi and both Pages origins.
