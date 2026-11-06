@@ -30,6 +30,24 @@ def _unit_active(unit: str) -> tuple[bool, str]:
         return False, f"unknown ({exc})"
 
 
+def linux_readsb_unit_installed() -> bool:
+    """Detect whether the configured local systemd decoder unit exists.
+
+    An absent service is not evidence that the RTL-SDR or a direct readsb
+    decoder is unavailable. Native UI may instead use Direct readsb.
+    """
+    if platform.system() != "Linux":
+        return False
+    try:
+        result = subprocess.run(
+            [SYSTEMCTL, "show", "-p", "LoadState", "--value", "readsb.service"],
+            capture_output=True, text=True, timeout=4, check=False,
+        )
+        return result.returncode == 0 and result.stdout.strip() == "loaded"
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
 def linux_service_state() -> tuple[bool, str]:
     if platform.system() != "Linux":
         return False, "Linux service mode is available only on Linux."
