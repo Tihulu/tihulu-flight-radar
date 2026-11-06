@@ -26,7 +26,7 @@ Section: hamradio
 Priority: optional
 Architecture: amd64
 Maintainer: Tihulu Project
-Depends: sudo, libegl1, libgl1, libglib2.0-0, libxkbcommon0, libxcb-cursor0, libdbus-1-3, libnss3, libnspr4, libxcomposite1, libxdamage1, libxrandr2, libgbm1
+Depends: sudo, libegl1, libgl1, libglib2.0-0, libxkbcommon0, libxcb-cursor0, libdbus-1-3, libnss3, libnspr4, libxcomposite1, libxdamage1, libxrandr2, libgbm1, libxtst6
 Description: Local-first ADS-B and Mode S aircraft monitor
  English-language receiver dashboard with local map and real JSON export.
  The ADS-B decoder and RTL-SDR drivers are installed separately.
