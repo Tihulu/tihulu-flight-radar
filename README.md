@@ -14,7 +14,9 @@ Choose 25–250 NM Internet search radius, manual WGS84 coordinates, or
 explicit browser GPS. **Search worldwide online** uses opt-in Open-Meteo
 Geocoding only on click; typed offline names are never sent to a provider.
 
-The chosen place and search radius are saved in browser-local settings for
+The chosen place and search radius are stored in browser-local settings on the
+web. On native Qt/Pop!_OS, a token-protected loopback endpoint stores the
+selection in an owner-private configuration file (Qt ports change on restart).
 the next launch. The UI never changes actual antenna/SDR location, starts
 or retunes readsb, or invents RF planes; it only changes the map camera and
 Internet ADS-B query center. The same selected map camera is applied when
@@ -60,7 +62,7 @@ The known-good **0.3.1** source snapshot is archived at
 (exact commit `67280cd84feb89faec6a80f5fe2a55ce5f7b89e6`).
 The new opt-in **0.3.2.dev4** Internet-only original-tar1090 preview is archived at
 [`preview/v0.3.2-dev4`](https://github.com/Tihulu/tihulu-flight-radar/tree/preview/v0.3.2-dev4)
-(source commit `e56a0fc890327c6a3705dcb4bde9226b7bed19b6`).
+(source commit `def7a62ff6951951bc3a432b93da3251c7ea4162`).
 
 **Close the app before switching.** Download the version switcher once:
 ```bash
