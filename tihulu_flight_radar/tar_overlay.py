@@ -16,9 +16,27 @@ from .bridge import DataProvider
 from .core import recently_seen, position_is_fresh
 
 # tar1090 (wiedehopf) defines the lexical OLMap map in html/script.js.
-MAP_CENTER_JS = """(() => {
+MAP_CENTER_JS = r"""(() => {
   if (typeof OLMap === 'undefined' || !OLMap || typeof ol === 'undefined')
     return null;
+  // These are view-only changes. Do not mutate SiteLat/SiteLon or tar1090's
+  // receiver location: doing so produces a fake center dot and range rings.
+  if (typeof siteCircleLayer !== 'undefined' && siteCircleLayer)
+    siteCircleLayer.setVisible(false);
+  if (typeof locationDotLayer !== 'undefined' && locationDotLayer)
+    locationDotLayer.setVisible(false);
+  if (!window.tihuluTarCameraApplied) {
+    const params = new URLSearchParams(location.search);
+    const a = Number(params.get('tihuluFocusLat'));
+    const b = Number(params.get('tihuluFocusLon'));
+    if (params.has('tihuluFocusLat') && params.has('tihuluFocusLon') &&
+        Number.isFinite(a) && Number.isFinite(b) &&
+        Math.abs(a)<=90 && Math.abs(b)<=180) {
+      OLMap.getView().setCenter(ol.proj.fromLonLat([b,a]));
+      OLMap.getView().setZoom(Number(params.get('zoom')) || 9);
+    }
+    window.tihuluTarCameraApplied = true;
+  }
   const p = ol.proj.toLonLat(OLMap.getView().getCenter());
   if (!p || !isFinite(p[0]) || !isFinite(p[1])) return null;
   return {lon:p[0],lat:p[1]};
