@@ -59,6 +59,45 @@ for binary in "$app_binary" "$bridge_binary" "$classic_binary"; do
   fi
 done
 
+py="$HOME/.local/share/pipx/venvs/tihulu-flight-radar/bin/python"
+# Cache the complete original tar1090 frontend locally for no-antenna operation.
+# The desktop's 127.0.0.1 bridge serves these read-only static assets, while
+# the parent supplies real Internet/RF data. No readsb, USB or systemd needed.
+# If GitHub's optional assets are unavailable, keep the app installed and
+# its hosted HTTPS tar1090 fallback remains available.
+cache_parent="$HOME/.local/share/tihulu-flight-radar"
+mkdir -p "$cache_parent"
+tar_cache="$cache_parent/tar1090"
+stage="$(mktemp -d "$cache_parent/.tar1090-install.XXXXXXXX")"
+if git clone -q --depth 1 --single-branch --branch gh-pages --filter=blob:none --sparse \
+  "https://github.com/Tihulu/tihulu-flight-radar.git" "$stage/pages" \
+  && git -C "$stage/pages" sparse-checkout set tar1090 \
+  && [[ -s "$stage/pages/tar1090/index.html" ]] \
+  && [[ -s "$stage/pages/tar1090/planeObject.js" ]] \
+  && [[ -s "$stage/pages/tar1090/db2/operators.js" ]]; then
+  mkdir -p "$stage/cache"
+  cp -a "$stage/pages/tar1090/." "$stage/cache/"
+  # Never rely on an earlier gh-pages adapter revision: use the source that
+  # pipx just installed, so the desktop's tar1090 matches current app logic.
+  adapter_path="$("$py" -c 'import pathlib,tihulu_flight_radar; print(pathlib.Path(tihulu_flight_radar.__file__).parent / "web/tar1090-adapter.js")')" 
+  if [[ -s "$adapter_path" ]] && grep -q 'tihulu-browser-bridge.js' "$stage/cache/index.html"; then
+    cp "$adapter_path" "$stage/cache/tihulu-browser-bridge.js"
+    old_cache="$stage/old-cache"
+    if [[ -d "$tar_cache" ]]; then mv "$tar_cache" "$old_cache"; fi
+    if mv "$stage/cache" "$tar_cache"; then
+      echo "Cached full tar1090 interface locally; Internet-only works without readsb."
+    else
+      [[ ! -d "$old_cache" ]] || mv "$old_cache" "$tar_cache"
+      echo "Warning: could not replace tar1090 cache; hosted fallback remains available." >&2
+    fi
+  else
+    echo "Warning: tar1090 frontend metadata/adapter mismatch; old cache preserved." >&2
+  fi
+else
+  echo "Warning: unable to cache full tar1090; HTTPS-hosted Internet-only map is the fallback." >&2
+fi
+rm -rf "$stage"
+
 app_dir="$HOME/.local/share/applications"
 icon_dir="$HOME/.local/share/icons/hicolor/scalable/apps"
 mkdir -p "$app_dir" "$icon_dir"
