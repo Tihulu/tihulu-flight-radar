@@ -43,6 +43,9 @@ done
 exit 1
 """)
     _stub(tools / "dpkg", "exit 1\n")
+    # The optional tar1090 static cache is not necessary to validate base
+    # pipx replacement, and must not make mocked CI download 40 MiB.
+    _stub(tools / "git", "exit 1\n")
     # Installer must preserve the user's unrelated local resources.
     preserved = home / ".local/share/important-data"
     preserved.parent.mkdir(parents=True)
