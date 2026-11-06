@@ -77,7 +77,7 @@ jobs:
         run: bash scripts/build-browser-assets.sh
       - name: Record the exact browser source revision
         run: |
-          printf '{"repo":"Tihulu/tihulu-flight-radar","source_ref":"%s","source_sha":"%s","published_by":"standalone"}\n' \
+          printf '{"repo":"Tihulu/tihulu-flight-radar","source_ref":"%s","source_sha":"%s"}\n' \
             "$GITHUB_REF_NAME" "$GITHUB_SHA" > tihulu_flight_radar/web/source-revision.json
           printf '%s\n' 'https://tihulu.github.io/tihulu-flight-radar/' > "$RUNNER_TEMP/standalone-url.txt"
       - uses: actions/configure-pages@v5
