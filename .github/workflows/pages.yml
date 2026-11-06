@@ -33,6 +33,8 @@ jobs:
           node-version: "22"
       - name: Build pinned same-origin WebUSB driver (CI only)
         run: bash scripts/build-browser-assets.sh
+      - name: Bundle complete original tar1090 browser frontend
+        run: bash scripts/build-web-tar1090.sh
       - name: Validate standalone app JavaScript and static assets
         run: |
           test -s tihulu_flight_radar/web/index.html
@@ -42,9 +44,13 @@ jobs:
           node --check tihulu_flight_radar/web/browser_usb.mjs
           node --check tihulu_flight_radar/web/adsb_worker.mjs
           node --check tihulu_flight_radar/web/usb_tools.mjs
+          node --check tihulu_flight_radar/web/tar1090-adapter.js
+          node --check tihulu_flight_radar/web/tar1090/tihulu-browser-bridge.js
+          test -s tihulu_flight_radar/web/tar1090/index.html
+          test -s tihulu_flight_radar/web/tar1090/UPSTREAM-GPL-LICENSE.txt
           bash -n scripts/rtl-sdr-usb-interface.sh
           node --check deploy/cloudflare-worker.mjs
-          node --test tests/web_bridge.test.cjs tests/pages_tar.test.cjs tests/browser_adsb.test.cjs tests/browser_source.test.cjs tests/aircraft_visuals.test.cjs tests/webusb_sampleblock.test.cjs tests/internet_sources.test.cjs
+          node --test tests/web_bridge.test.cjs tests/pages_tar.test.cjs tests/browser_adsb.test.cjs tests/browser_source.test.cjs tests/aircraft_visuals.test.cjs tests/webusb_sampleblock.test.cjs tests/internet_sources.test.cjs tests/tar_full_browser.test.cjs
           python3 -m json.tool tihulu_flight_radar/web/manifest.webmanifest >/dev/null
           test -s tihulu_flight_radar/web/icon.svg
           test -s tihulu_flight_radar/web/sw.js
@@ -75,6 +81,8 @@ jobs:
           node-version: "22"
       - name: Build pinned browser WebUSB assets for deployment
         run: bash scripts/build-browser-assets.sh
+      - name: Bundle complete tar1090 browser UI for deployment
+        run: bash scripts/build-web-tar1090.sh
       - name: Record the exact browser source revision
         run: |
           printf '{"repo":"Tihulu/tihulu-flight-radar","source_ref":"%s","source_sha":"%s"}\n' \
