@@ -159,3 +159,63 @@ Opening tar1090 from the main radar preserves the selected startup camera
 instead of jumping to a random Internet plane. Classic tar1090 uses
 authorized location, nearest fresh local aircraft, and Cologne. None of
 these camera operations overwrites tar1090 physical receiver coordinates.
+
+
+## Browser-only direct RF radar — 6 November 2026
+
+The user explicitly requires the **GitHub Pages** Flight Radar to function
+directly in Brave/Chrome/Edge without installing Python, readsb, or a native
+program on the viewing computer.
+
+The draft web app now offers **Choose RTL-SDR & start** and
+**Hard stop / release USB** above its optional advanced bridge configuration.
+Uses a statically bundled version-pinned Apache-2.0
+@jtarrio/webrtlsdr 3.0.7 WebUSB client, built in GitHub Actions and
+served by the same Pages origin (not from a runtime CDN).
+
+The browser's real 1090 MHz RTL-SDR unsigned IQ samples are transferred to
+a local JavaScript Web Worker. The **experimental 2 MSps** receiver attempts
+Mode S DF17/DF18 preamble detection, verifies the Mode S CRC before counting
+messages, and computes airborne positions only from valid fresh even+odd
+CPR frames for the same ICAO. It does not fabricate positions, does not
+make readsb claims and does not upload raw IQ. Memory and queue sizes are
+bounded. It is not yet a full readsb sensitivity/features replacement;
+real Nooelec/Brave/Pop!_OS RF validation and performance measurement are
+the release gate.
+
+The existing browser map's Antenna, Internet, Both and Tracks controls
+now consume live WebUSB frames and optionally merge them with a trusted,
+CORS-enabled HTTPS Internet feed. Per-ICAO records preserve separate
+antenna/internet provenance and do not attribute an Internet-only position
+to the radio. A local bridge is **optional**, not needed for direct WebUSB.
+The in-browser radar map remains functional without tar1090. Opening a
+separately installed tar1090 server from the browser is an optional,
+legacy link and cannot receive injected cross-origin JS overlays.
+
+The initial camera priority remains **permitted current location → nearest
+genuinely RF-positioned plane → Cologne fallback**. Manual map movement and
+plane selection always override startup automation; no receiver-site
+coordinate is spoofed. Geolocation may be unavailable on some devices.
+
+**Important limitations**:
+- Firefox/Safari have no WebUSB, so no direct USB SDR mode; Internet feeds
+  and map UI still work when a permitted CORS endpoint is configured.
+- Windows can require a one-time WinUSB driver; Linux can require OS-level
+  udev permissions or release of dvb_usb_rtl28xxu. If readsb/Gqrx/welle.io
+  already owns the same RTL2832U stick, the browser cannot seize it. The
+  website cannot run privileged OS commands, silently modify drivers, or
+  start/stop someone else's systemd service.
+- When hidden/closed, browser USB capture stops and releases its own handle.
+  Browsers may suspend or crash without executing pagehide, so users should
+  verify USB is free when switching between applications.
+- adsb.lol/adsb.fi do not support arbitrary browser CORS; **Internet-only**
+  is supported through a trusted CORS-enabled feed URL or an *optional*
+  user-operated proxy, not by a magical workaround. GitHub Pages is static
+  and cannot proxy itself. No third-party API key is embedded.
+- RF receive/Mode S positions are experimental until real hardware
+  acceptance; synthetic IQ tests and independently documented position
+  examples verify protocol logic but do not prove physical compatibility.
+- Current Pages deployment workflow intentionally publishes from **main
+  only**, never draft PRs. A green PR web-check does NOT mean the public
+  Pages URL contains these changes. Do not advertise a live site before
+  main merge and deployment verification.
