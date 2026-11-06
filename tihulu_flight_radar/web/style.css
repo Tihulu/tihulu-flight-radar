@@ -83,3 +83,7 @@ body.radar-expanded{overflow:hidden}
  .radar-expanded .layout{grid-template-columns:1fr;grid-template-rows:minmax(0,1fr) 175px}
  .radar-expanded .side{height:175px;max-height:175px}
 }
+
+#airlabsKeyField[hidden]{display:none!important}
+.source-key-warning{flex:1 1 100%;font-size:11px;color:#b2cadd;
+ line-height:1.4;margin:0 0 4px}
