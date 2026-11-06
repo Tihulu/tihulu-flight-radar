@@ -74,6 +74,19 @@ const state = {
   centerLabel:"Cologne startup fallback · awaiting location permission / radio aircraft"
 };
 const selectors = ["showAntenna","showInternet","showBoth","showTracks","showTiles"];
+const multiInternet = TihuluMultiSources.createManager();
+const multiIds = ["adsblol","adsbfi","opensky","intelsky"];
+const layerFields = {adsblol:"netAdsbLol",adsbfi:"netAdsbFi",opensky:"netOpenSky",intelsky:"netIntelSky"};
+const statusFields = {adsblol:"statusAdsbLol",adsbfi:"statusAdsbFi",opensky:"statusOpenSky",intelsky:"statusIntelSky"};
+function enabledInternetNetworks(){return multiIds.filter(id=>$(layerFields[id]).checked);}
+function sourceLayerStatus(result){
+ const statuses=result?.sources?.internet?.providers||{};
+ for(const id of multiIds){
+  const el=$(statusFields[id]),status=statuses[id];
+  el.textContent=status?(status.count??0)+" observed · "+status.state+
+    (status.error?" ("+status.error+")":""):TihuluMultiSources.META[id].credit;
+ }
+}
 function notice(s){$("message").textContent=s}
 function isPositioned(a){
  return a && Number.isFinite(a.lat) && Number.isFinite(a.lon) &&
@@ -171,7 +184,11 @@ function configuredOnlineFeed(){
  const provider=$("onlinePreset")?.value||"intelsky";
  let url="";
  if(provider==="intelsky")url=INTELSKY_URL;
- else if(provider==="adsblol-relay")url=ADSBLOL_PUBLIC_RELAY;
+ else if(provider==="adsblol-relay"||provider==="multi"){
+  if(provider==="multi"&&!enabledInternetNetworks().length)
+   throw Error("Select at least one Internet layer.");
+  url=ADSBLOL_PUBLIC_RELAY;
+ }
  else if(provider==="airlabs"){
   if(!String($("airlabsKey")?.value||"").trim())
    throw Error("AirLabs needs your personal API key (session only).");
@@ -245,6 +262,10 @@ function normalizeInternetPayload(raw,provider,lat,lon,radius,now=Date.now()/100
 }
 async function fetchInternetFeed(){
  if(!state.onlineFeed)throw Error("No Internet source is configured.");
+ if(state.onlineProvider==="multi"){
+  return multiInternet.poll(enabledInternetNetworks(),state.queryLat,
+   state.queryLon,state.queryRadius);
+ }
  if(Date.now()<state.internetBackoffUntil)
   throw Error("Internet feed cooling down after rate limit or outage; retry later.");
  const limited=state.onlineProvider==="intelsky",airlabs=state.onlineProvider==="airlabs";
@@ -350,6 +371,7 @@ function browserSourceResult(mode=String($("mode").value),internetError=null){
   if(exists){
    exists.sources=["antenna","internet"];
    exists.observations.internet=a;
+   exists.internet_providers=[...(a.internet_providers||[])];
    if(!isPositioned(exists)&&isPositioned(a)){
     exists.lat=a.lat;exists.lon=a.lon;exists.seen_pos=a.seen_pos;
     exists.position_source="internet";
@@ -358,6 +380,7 @@ function browserSourceResult(mode=String($("mode").value),internetError=null){
    if(!Number.isFinite(exists.alt_baro)&&Number.isFinite(a.alt_baro))exists.alt_baro=a.alt_baro;
   }else{
    const row={...a,hex:id,sources:["internet"],
+     internet_providers:[...(a.internet_providers||[])],
      position_source:isPositioned(a)?"internet":null,
      observations:{internet:a}};
    rows.push(row);byId.set(id,row);
@@ -382,6 +405,7 @@ function browserSourceResult(mode=String($("mode").value),internetError=null){
        state.onlineProvider==="adsblol-relay"?"adsb.lol (ODbL 1.0) via public CORS relay":
         "Network provider attribution not yet available"),
       limited_coverage:state.onlineProvider==="intelsky",
+      providers:state.internetSnapshot?.sources?.internet?.providers,
       updated_at:state.internetSnapshot?.sources?.internet?.updated_at}
   }
  };
@@ -565,7 +589,9 @@ function renderTable(){
   for(const [index,value] of [
    (a.flight||"—").trim()+" / "+(a.hex||"—"),
    a.alt_baro??a.alt_geom??"—",a.gs??"—",
-   aircraftSourceBadge(a)+" · "+category(a)
+   aircraftSourceBadge(a)+" · "+category(a)+
+     (a.internet_providers?.length?" · "+a.internet_providers.map(id=>
+       TihuluMultiSources.META[id]?.name||id).join(", "):"")
   ].entries()){
    const td=document.createElement("td");
    td.textContent=String(value);
@@ -585,6 +611,7 @@ function choose(a){
  state.selected=a.hex||null;
  $("details").textContent=JSON.stringify({
   callsign:a.flight||null,icao24:a.hex||null,sources:a.sources,
+  internet_providers:a.internet_providers||[],
   displayed_position_source:a.position_source,observations:a.observations
  },null,2);
  if(isPositioned(a)){
@@ -659,6 +686,7 @@ async function refresh(raise=false){
   if(state.connectionKind==="internet" && mode==="antenna")
    throw Error("Antenna-only mode requires a paired bridge or direct WebUSB.");
   const args=new URLSearchParams({mode,lat:state.queryLat.toFixed(3),lon:state.queryLon.toFixed(3),radius:String(state.queryRadius)});
+  if(state.onlineProvider==="multi")args.set("net",enabledInternetNetworks().join(","));
   let result;
   if(state.connectionKind==="bridge"){
    result=await api("/api/aircraft?"+args.toString());
@@ -682,6 +710,7 @@ async function refresh(raise=false){
   $("sourceCredits").textContent=result.sources?.internet?.attribution ||
      "Antenna only (no Internet source)";
   renderTable();paint();
+  sourceLayerStatus(result);
   const internetError=result.sources?.internet?.error;
   notice((internetError
     ? "Internet feed issue: "+internetError+". Any visible aircraft are age-verified real observations."
@@ -875,6 +904,7 @@ canvas.addEventListener("wheel",e=>{
 const preset=$("onlinePreset");
 const customFeed=$("onlineFeedUrl");
 function showProviderChoice(){
+ $("multiProviderLayers").hidden=preset.value!=="multi";
  customFeed.disabled=preset.value!=="custom";
  $("airlabsKeyField").hidden=preset.value!=="airlabs";
  customFeed.title=customFeed.disabled
@@ -890,6 +920,13 @@ preset.onchange=()=>{
  }
 };
 showProviderChoice();
+$("allOnlineLayers").onclick=()=>{
+ for(const id of multiIds)$(layerFields[id]).checked=true;
+ if(preset.value==="multi"&&state.connected)void refresh();
+};
+for(const id of multiIds)$(layerFields[id]).onchange=()=>{
+ if(preset.value==="multi"&&state.connected)void refresh();
+};
 $("networkApply").onclick=()=>{
  if(state.connectionKind==="bridge"){
   notice("The paired readsb bridge manages its own network source. To configure a browser Internet provider, disconnect the bridge first; this will not stop your readsb service.");
