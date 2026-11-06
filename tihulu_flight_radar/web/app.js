@@ -18,6 +18,8 @@ const state = {
   // Camera movement must not change the API search key during feed cooldown.
   queryLat:initialCenter.lat, queryLon:initialCenter.lon, queryRadius:100,
   lastFreshAt:0, lastData:[],
+  usbSnapshot:{aircraft:[],messages:0,updatedAt:0},internetSnapshot:null,
+  usbMessageCount:0,
   pointer:null, tracks:new Map(), tiles:new Map(), tileFailures:0, fetching:false, timer:null,
   centerLabel:"Cologne startup fallback · awaiting location permission / radio aircraft"
 };
@@ -145,6 +147,121 @@ async function fetchInternetFeed(){
   };
  }finally{clearTimeout(timeout)}
 }
+// Browser-direct RF (from adsb_worker.mjs) is a distinct proven observation
+// source. Never replace RF positions with a network position silently.
+function browserSourceResult(mode=String($("mode").value),internetError=null){
+ const now=Date.now();
+ const age=Math.max(0,(now-(state.usbSnapshot.updatedAt||now))/1000);
+ const local=(state.usbSnapshot.aircraft||[]).map(a=>{
+  const row={...a};
+  if(Number.isFinite(row.seen))row.seen+=age;
+  if(Number.isFinite(row.seen_pos))row.seen_pos+=age;
+  return row;
+ }).filter(a=>Number.isFinite(a.seen)&&a.seen<=60);
+ const netAge=state.internetSnapshot?.generated_at
+   ? Math.max(0,now/1000-state.internetSnapshot.generated_at):Infinity;
+ const remote=(state.internetSnapshot?.aircraft||[]).map(a=>{
+  const row={...a};
+  if(Number.isFinite(row.seen))row.seen+=netAge;
+  if(Number.isFinite(row.seen_pos))row.seen_pos+=netAge;
+  return row;
+ }).filter(a=>Number.isFinite(a.seen)&&a.seen<=60);
+ const wantLocal=mode!=="internet",wantOnline=mode!=="antenna"&&
+   (mode!=="auto"||local.length===0);
+ const byId=new Map(),rows=[];
+ if(wantLocal)for(const a of local){
+  const id=String(a.hex||"").toLowerCase();
+  if(!/^[0-9a-f]{6}$/.test(id))continue;
+  const row={...a,hex:id,sources:["antenna"],
+    position_source:isPositioned(a)?"antenna":null,
+    observations:{antenna:{...a}}};
+  rows.push(row);byId.set(id,row);
+ }
+ if(wantOnline)for(const a of remote){
+  const id=String(a.hex||"").toLowerCase();
+  if(!/^[0-9a-f]{6}$/.test(id))continue;
+  const exists=byId.get(id);
+  if(exists){
+   exists.sources=["antenna","internet"];
+   exists.observations.internet=a;
+   if(!isPositioned(exists)&&isPositioned(a)){
+    exists.lat=a.lat;exists.lon=a.lon;exists.seen_pos=a.seen_pos;
+    exists.position_source="internet";
+   }
+   if(!exists.flight&&a.flight)exists.flight=a.flight;
+   if(!Number.isFinite(exists.alt_baro)&&Number.isFinite(a.alt_baro))exists.alt_baro=a.alt_baro;
+  }else{
+   const row={...a,hex:id,sources:["internet"],
+     position_source:isPositioned(a)?"internet":null,
+     observations:{internet:a}};
+   rows.push(row);byId.set(id,row);
+  }
+ }
+ const attribution=state.internetSnapshot?.sources?.internet?.attribution;
+ return {
+  generated_at:now/1000,
+  active_sources:[...(wantLocal?["antenna"]:[]),...(wantOnline&&state.onlineFeed?["internet"]:[])],
+  aircraft:rows,
+  counts:{antenna:wantLocal?local.length:0,
+    internet:wantOnline?remote.length:0,combined:rows.length},
+  sources:{
+   antenna:{state:local.length?"receiving":state.usbSnapshot.updatedAt?"no_recent_aircraft":"starting",
+     messages:state.usbMessageCount,
+     note:"Direct WebUSB 1090 MHz / CRC-verified Mode S; no readsb service."},
+   internet:{state:!state.onlineFeed?"not_configured":
+       internetError?"error":state.internetSnapshot?"available":"not_yet_loaded",
+      error:internetError,provider:state.internetSnapshot?.sources?.internet?.provider,
+      attribution:attribution||"Network provider attribution not yet available",
+      updated_at:state.internetSnapshot?.sources?.internet?.updated_at}
+  }
+ };
+}
+function displayUsbSnapshot(){
+ if(state.connectionKind!=="usb")return;
+ const result=browserSourceResult();
+ state.data=result.aircraft;
+ updateCounters(result.counts);feedSummary(result.sources);recordTracks();
+ applyStartupPriority();
+ renderTable();paint();
+ $("receiverStatus").textContent="Direct WebUSB 1090 MHz receiver · "+
+   state.usbMessageCount+" CRC-verified Mode S messages. RF access is held only by this browser tab.";
+ $("lastUpdate").textContent=formatTime(result.generated_at);
+ $("sourceCredits").textContent=result.sources.internet.attribution;
+}
+window.tihuluUsbCanStart=()=>state.connectionKind!=="bridge";
+window.tihuluUsbStarted=()=>{
+ state.usbSnapshot={aircraft:[],messages:0,updatedAt:Date.now()};
+ state.usbMessageCount=0;state.connectionKind="usb";state.connected=true;
+ state.onlineFeed=getFeedURL($("onlineFeedUrl").value);
+ $("mode").value=state.onlineFeed?"hybrid":"antenna";
+ connection(true,"Direct browser WebUSB · 1090 MHz");
+ for(const id of ["start","stop","restart"])$(id).disabled=true;
+ if(!state.timer)state.timer=setInterval(()=>{if(!document.hidden)refresh()},15000);
+ displayUsbSnapshot();
+ notice("Browser SDR connected. Only CRC-verified RF messages and real positions will appear.");
+};
+window.tihuluUsbSnapshot=packet=>{
+ if(state.connectionKind!=="usb")return;
+ state.usbSnapshot=packet;
+ state.usbMessageCount=packet.messages||0;
+ displayUsbSnapshot();
+};
+window.tihuluUsbError=message=>notice("Direct USB: "+message);
+window.tihuluUsbStopped=()=>{
+ if(state.connectionKind!=="usb")return;
+ state.usbSnapshot={aircraft:[],messages:0,updatedAt:0};
+ state.usbMessageCount=0;state.data=[];state.lastData=[];
+ if(state.onlineFeed){
+  state.connectionKind="internet";state.connected=true;$("mode").value="internet";
+  connection(true,"Internet feed only · USB released");
+  refresh();
+ }else{
+  if(state.timer)clearInterval(state.timer);
+  state.timer=null;state.connected=false;state.connectionKind="none";
+  updateCounters();renderTable();paint();connection(false,"USB released");
+  $("receiverStatus").textContent="Direct WebUSB stopped; this tab released its SDR.";
+ }
+};
 // Called only by our packaged Qt WebEngine wrapper after the trusted local
 // page is loaded. The token is never placed in a URL, cookies or storage.
 window.tihuluNativeConnect=async function(base, token){
@@ -186,6 +303,16 @@ async function checkReceiver(){
 async function connect(){
  if(state.timer){clearInterval(state.timer);state.timer=null;}
  try{
+  if(state.connectionKind==="usb"){
+   // The Connect button is for optional Internet feed configuration when the
+   // USB receiver is already running — never launch a second RF process.
+   state.onlineFeed=getFeedURL($("onlineFeedUrl").value);
+   state.internetSnapshot=null;
+   $("mode").value=state.onlineFeed?"hybrid":"antenna";
+   await refresh(true);
+   state.timer=setInterval(()=>{if(!document.hidden)refresh()},15000);
+   return;
+  }
   state.onlineFeed=getFeedURL($("onlineFeedUrl").value);
   const token=$("token").value.trim();
   if(token){
@@ -211,6 +338,7 @@ async function connect(){
  }
 }
 function disconnect(){
+ if(state.connectionKind==="usb")void window.tihuluStopUsb?.();
  if(state.timer)clearInterval(state.timer);
  state.timer=null;state.token="";state.base="";state.onlineFeed="";state.connectionKind="none";state.data=[];state.lastData=[];state.lastFreshAt=0;
  state.tracks.clear();state.autoFocused=false;
@@ -314,11 +442,21 @@ async function refresh(raise=false){
  try{
   const mode=$("mode").value;
   if(state.connectionKind==="internet" && mode==="antenna")
-   throw Error("Antenna-only mode requires a paired local bridge.");
+   throw Error("Antenna-only mode requires a paired bridge or direct WebUSB.");
   const args=new URLSearchParams({mode,lat:state.queryLat.toFixed(3),lon:state.queryLon.toFixed(3),radius:String(state.queryRadius)});
-  const result=state.connectionKind==="bridge"
-    ? await api("/api/aircraft?"+args.toString())
-    : await fetchInternetFeed();
+  let result;
+  if(state.connectionKind==="bridge"){
+   result=await api("/api/aircraft?"+args.toString());
+  }else if(state.connectionKind==="usb"){
+   let onlineError=null;
+   if(state.onlineFeed && mode!=="antenna"){
+    try{state.internetSnapshot=await fetchInternetFeed();}
+    catch(error){onlineError=String(error.message||error);}
+   }
+   result=browserSourceResult(mode,onlineError);
+  }else{
+   result=await fetchInternetFeed();
+  }
   state.data=Array.isArray(result.aircraft)?result.aircraft:[];
   state.lastData=state.data.map(a=>({...a}));
   state.lastFreshAt=Date.now();
