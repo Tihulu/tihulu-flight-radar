@@ -159,3 +159,78 @@ test("Internet source setup is visible and usable without the advanced bridge pa
  assert.match(js,/Internet error/);
  assert.match(js,/limited_coverage:state\.onlineProvider==="intelsky"/);
 });
+
+
+test("General-network adsb.lol relay honors true aircraft positions and source provenance",()=>{
+ const now=Date.now()/1000;
+ const payload={now,ac:[
+  {hex:"3C1234",lat:50.95,lon:6.97,seen:2,seen_pos:3,flight:"DLH123",alt_baro:25000},
+  {hex:"aabbcc",lat:50.9,lon:6.9,seen:5,seen_pos:80},
+  {hex:"abcdef",lat:38.4,lon:27.1,seen:1,seen_pos:1}
+ ]};
+ const rows=mk().normalizeInternetPayload(payload,"adsblol-relay",50.938,6.960,100);
+ assert.equal(rows.aircraft.length,1);
+ assert.equal(rows.aircraft[0].hex,"3c1234");
+ assert.equal(rows.aircraft[0].seen,2);
+ assert.equal(rows.aircraft[0].seen_pos,3);
+ assert.equal(rows.aircraft[0].position_source,"internet");
+ assert.deepEqual(Array.from(rows.aircraft[0].sources),["internet"]);
+ assert.equal(rows.counts.internet,1);
+ assert.equal(rows.sources.internet.limited_coverage,false);
+ assert.match(rows.sources.internet.attribution,/adsb\.lol.*ODbL 1\.0/);
+ assert.throws(()=>mk().normalizeInternetPayload({...payload,now:now-180},"adsblol-relay",50.938,6.960,100),/stale/i);
+});
+
+test("Public CORS relay uses fixed adsb.lol endpoint, rounds location and caches same region",async()=>{
+ let calls=[],now=Date.now()/1000;
+ const state={onlineFeed:"https://proxy.cors.dev/",onlineProvider:"adsblol-relay",
+   queryLat:50.93831,queryLon:6.96027,queryRadius:100,relayLastFetch:0,
+   relayLastQueryKey:"",internetBackoffUntil:0,internetSnapshot:null};
+ const fn=vm.runInNewContext(segment+"\nfetchInternetFeed",{
+  state,$:()=>({value:""}),Date,Math,Number,URL,AbortController,
+  setTimeout,clearTimeout,fetch:async(u,options)=>{
+   calls.push({url:u,options});
+   return {ok:true,headers:{get:()=>null},async text(){
+    return JSON.stringify({now,ac:[
+     {hex:"3c1234",lat:50.94,lon:6.97,seen:2,seen_pos:2}
+    ]});
+   }};
+  }
+ });
+ const first=await fn();
+ assert.equal(calls.length,1);
+ assert.equal(calls[0].url,"https://proxy.cors.dev/https://api.adsb.lol/v2/point/50.9/7.0/100");
+ assert.equal(calls[0].options.credentials,"omit");
+ assert.equal(first.counts.internet,1);
+ const same=await fn();
+ assert.equal(same,first);
+ assert.equal(calls.length,1);
+ state.queryLat=51.1;
+ now=Date.now()/1000;
+ const next=await fn();
+ assert.equal(calls.length,2,"new map region requires independent real network query");
+ assert.equal(next.counts.internet,1);
+});
+test("Relay HTTP 429 and CORS errors show as unavailable, never invent a network plane",async()=>{
+ const state={onlineFeed:"https://proxy.cors.dev/",onlineProvider:"adsblol-relay",
+  queryLat:50.938,queryLon:6.96,queryRadius:100,relayLastFetch:0,
+  relayLastQueryKey:"",internetBackoffUntil:0,internetSnapshot:null};
+ let fail=false;
+ const fn=vm.runInNewContext(segment+"\nfetchInternetFeed",{
+  state,$:()=>({value:""}),Date,Math,Number,URL,AbortController,
+  setTimeout,clearTimeout,fetch:async()=>{
+   if(fail)throw new TypeError("Blocked by CORS");
+   return {ok:false,status:429,headers:{get:()=>null}};
+  }
+ });
+ await assert.rejects(()=>fn(),/rate limited/i);
+ assert.ok(state.internetBackoffUntil>Date.now());
+ state.internetBackoffUntil=0;fail=true;
+ await assert.rejects(()=>fn(),/Network or CORS blocked/);
+});
+test("Static page selects general ADS-B as the explicit experimental default",()=>{
+ assert.match(html,/value="adsblol-relay" selected/);
+ assert.match(html,/independent public cors\.dev relay/);
+ assert.match(html,/never raw USB IQ/);
+ assert.match(js,/ADSBLOL_PUBLIC_RELAY/);
+});
