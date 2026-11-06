@@ -211,7 +211,8 @@ function feedSummary(feed){
  const l=feed?.antenna||{},i=feed?.internet||{};
  const details=[
   "Antenna: "+(l.state||"unknown")+(l.error?" ("+l.error+")":"")+
-  (l.messages!=null?" · "+l.messages+" receiver messages":""),
+  (l.messages!=null?" · "+l.messages+" receiver messages":"")+
+  (l.note?" · "+l.note:""),
   "Internet: "+(i.state||"unknown")+(i.error?" ("+i.error+")":"")+
   (i.updated_at?" · observed "+formatTime(i.updated_at):"")+
   (i.provider?" · "+i.provider:"")+
@@ -266,10 +267,17 @@ async function refresh(raise=false){
   state.lastFreshAt=Date.now();
   updateCounters(result.counts);feedSummary(result.sources);recordTracks();
   if(!state.autoFocused&&!state.moved)focusAir();
-  $("lastUpdate").textContent=formatTime(result.generated_at);
+  const providerTime=result.sources?.internet?.updated_at;
+  $("lastUpdate").textContent=formatTime(providerTime ?? result.generated_at);
+  $("sourceCredits").textContent=result.sources?.internet?.attribution ||
+     "Antenna only (no Internet source)";
   renderTable();paint();
-  notice("Updated genuine "+(result.active_sources||[]).join(" + ")+" observations."+
+  const internetError=result.sources?.internet?.error;
+  notice((internetError
+    ? "Internet feed issue: "+internetError+". Any visible aircraft are age-verified real observations."
+    : "Updated observed "+(result.active_sources||[]).join(" + ")+" sources.")+
      (state.connectionKind==="internet"&&mode==="hybrid"?" Antenna layer requires a local bridge.":""));
+  if(state.connectionKind==="bridge")checkReceiver().catch(()=>{});
   return true;
  }catch(e){
   const elapsed=Math.max(0,(Date.now()-state.lastFreshAt)/1000);
