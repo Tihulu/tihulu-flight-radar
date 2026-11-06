@@ -105,6 +105,7 @@ class ReceiverController:
         self.decoder_path = ""
         self.process: subprocess.Popen | None = None
         self._directory: tempfile.TemporaryDirectory | None = None
+        self._service_started_by_app = False
 
     def configure(self, mode: str, remote_url: str = "", decoder_path: str = ""):
         if mode not in MODES:
@@ -138,7 +139,11 @@ class ReceiverController:
         if self.mode == "Remote JSON":
             raise DataError("Remote receiver must be started on its own computer.")
         if self.mode == "Linux services":
-            return service_action("start")
+            preexisting = _unit_active("readsb.service")[0]
+            outcome = service_action("start")
+            if not preexisting:
+                self._service_started_by_app = True
+            return outcome
         if self.process is not None and self.process.poll() is None:
             return "Direct receiver is already running."
         if platform.system() == "Linux" and _unit_active("readsb.service")[0]:
@@ -183,7 +188,9 @@ class ReceiverController:
         if self.mode == "Remote JSON":
             raise DataError("Remote receiver must be stopped on its own computer.")
         if self.mode == "Linux services":
-            return service_action("stop")
+            result = service_action("stop")
+            self._service_started_by_app = False
+            return result
         if self.process is not None and self.process.poll() is None:
             self.process.terminate()
             try:
@@ -206,12 +213,32 @@ class ReceiverController:
             raise DataError("Start the direct receiver first.")
         return read_local(Path(self._directory.name) / "aircraft.json")
 
-    def close(self):
-        # App owns only direct child processes, never existing systemd services.
+    def close(self, release_local_service: bool = False):
+        """Release a direct child and, if requested, local readsb on exit.
+
+        Background systemd services are shared. The desktop "Release SDR on
+        exit" policy is explicitly ON by default, but remote JSON mode never
+        manages services on another device. Service permissions remain narrow;
+        a failed stop must be reported to the caller, not hidden.
+        """
+        error = None
         if self.process is not None:
             mode = self.mode
             self.mode = "Direct readsb"
             try:
                 self.stop()
+            except (DataError, OSError) as exc:
+                error = exc
             finally:
                 self.mode = mode
+        if (platform.system() == "Linux"
+                and self.mode == "Linux services"
+                and (release_local_service or self._service_started_by_app)
+                and _unit_active("readsb.service")[0]):
+            try:
+                service_action("stop")
+                self._service_started_by_app = False
+            except DataError as exc:
+                error = exc
+        if error:
+            raise DataError(f"SDR release on exit was incomplete: {error}") from error
