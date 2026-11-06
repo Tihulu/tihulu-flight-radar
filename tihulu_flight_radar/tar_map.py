@@ -11,7 +11,8 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from .core import position_is_fresh, recently_seen
 
-GERMANY = (51.1657, 10.4515)
+COLOGNE = (50.938, 6.960)
+GERMANY = (51.1657, 10.4515)  # legacy constant for compatibility only
 
 
 def _coordinates(value):
@@ -34,7 +35,11 @@ def _distance_sq(a: dict, origin: tuple[float, float]) -> float:
 
 def choose_tar_focus(snapshot: dict | None, receiver: tuple | None = None):
     """Return observed local target, authorized reference or Germany viewport."""
-    anchor = _coordinates(receiver) or GERMANY
+    explicit_location = _coordinates(receiver)
+    if explicit_location:
+        return {"lat": explicit_location[0], "lon": explicit_location[1],
+                "zoom": 10, "icao": None, "focus": "authorized-location"}
+    anchor = COLOGNE
     aircraft = (snapshot or {}).get("aircraft", [])
     eligible = [a for a in aircraft
                 if isinstance(a, dict) and recently_seen(a) and position_is_fresh(a)]
@@ -46,11 +51,8 @@ def choose_tar_focus(snapshot: dict | None, receiver: tuple | None = None):
                 and all(c in "0123456789abcdefABCDEF" for c in hexid) else None)
         return {"lat": chosen["lat"], "lon": chosen["lon"], "zoom": 10,
                 "icao": icao, "focus": "local-aircraft"}
-    if _coordinates(receiver):
-        return {"lat": anchor[0], "lon": anchor[1], "zoom": 10,
-                "icao": None, "focus": "authorized-receiver"}
-    return {"lat": GERMANY[0], "lon": GERMANY[1], "zoom": 7,
-            "icao": None, "focus": "germany-default"}
+    return {"lat": COLOGNE[0], "lon": COLOGNE[1], "zoom": 9,
+            "icao": None, "focus": "cologne-default"}
 
 
 def focused_tar_url(base: str, snapshot: dict | None = None,
