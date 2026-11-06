@@ -17,6 +17,7 @@ const CALL_CHARS="#ABCDEFGHIJKLMNOPQRSTUVWXYZ#####_###############0123456789####
 
 export function crcValid(frame){
  if(!(frame instanceof Uint8Array) || frame.length!==14) return false;
+ if(![17,18].includes(frame[0]>>3))return false;
  let crc=0;
  for(let i=0;i<112;i++){
   const bit=(frame[i>>3]>>(7-(i&7)))&1;
