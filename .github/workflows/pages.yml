@@ -4,6 +4,9 @@ on:
     branches: [feature/github-pages-local-bridge-2026-11-06]
     paths:
       - "tihulu_flight_radar/web/**"
+      - "tihulu_flight_radar/network_sources.py"
+      - "tihulu_flight_radar/bridge.py"
+      - "pyproject.toml"
       - ".github/workflows/pages.yml"
       - "AGENTS.md"
       - "scripts/build-web-tar1090.sh"
