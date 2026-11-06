@@ -328,7 +328,7 @@ def make_handler(bridge: Bridge, port: int):
             if not self._guard():
                 return
             path = urlsplit(self.path)
-            if path.path in ("/", "/index.html", "/app.js", "/style.css", "/manifest.webmanifest", "/icon.svg", "/sw.js", "/browser_usb.mjs", "/adsb_worker.mjs"):
+            if path.path in ("/", "/index.html", "/app.js", "/style.css", "/manifest.webmanifest", "/icon.svg", "/sw.js", "/browser_usb.mjs", "/adsb_worker.mjs", "/usb_tools.mjs"):
                 name = "index.html" if path.path == "/" else path.path[1:]
                 file = STATIC_DIR / name
                 if not file.is_file():
