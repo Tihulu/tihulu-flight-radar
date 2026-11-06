@@ -913,7 +913,10 @@ function showProviderChoice(){
 }
 preset.onchange=()=>{
  showProviderChoice();
- if(state.connectionKind==="usb"||state.connectionKind==="internet"){
+ if(state.connectionKind==="bridge"){
+  try{state.onlineFeed=configuredOnlineFeed();state.internetSnapshot=null;void refresh();}
+  catch(error){notice("Internet layers: "+error.message);}
+ }else if(state.connectionKind==="usb"||state.connectionKind==="internet"){
   state.internetSnapshot=null;state.internetBackoffUntil=0;state.airlabsLastFetch=0;
   if(preset.value==="off"&&state.connectionKind==="internet")disconnect();
   else void connect();
@@ -929,7 +932,14 @@ for(const id of multiIds)$(layerFields[id]).onchange=()=>{
 };
 $("networkApply").onclick=()=>{
  if(state.connectionKind==="bridge"){
-  notice("The paired readsb bridge manages its own network source. To configure a browser Internet provider, disconnect the bridge first; this will not stop your readsb service.");
+  if($("onlinePreset").value==="off"){
+   state.onlineFeed="";$("mode").value="antenna";void refresh();return;
+  }
+  try{
+   state.onlineFeed=configuredOnlineFeed();
+   if($("mode").value==="antenna")$("mode").value="hybrid";
+   void refresh();
+  }catch(error){notice("Internet layers: "+error.message);}
   return;
  }
  if($("onlinePreset").value==="off"){
