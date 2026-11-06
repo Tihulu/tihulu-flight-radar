@@ -98,9 +98,10 @@ OVERLAY_JS = r"""(function(input){
 class TarOverlayView(QWebEngineView):
     """Native Qt tar1090 viewer with an independent blue network data layer."""
 
-    def __init__(self, parent=None, provider=None):
+    def __init__(self, parent=None, provider=None, assume_tar=False):
         super().__init__(parent)
         self._provider = provider if provider is not None else DataProvider()
+        self._assume_tar = bool(assume_tar)
         self._pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="tihulu-tar")
         self._pending = None
         self._active = False
@@ -112,7 +113,16 @@ class TarOverlayView(QWebEngineView):
         self.destroyed.connect(lambda *_: self._pool.shutdown(wait=False, cancel_futures=True))
 
     def _loaded(self, ok):
-        self._active = bool(ok and "/tar1090" in self.url().path)
+        from ipaddress import ip_address
+        host=self.url().host().lower()
+        allowed=host in ("localhost", "127.0.0.1") or host.endswith((".lan", ".local"))
+        if not allowed:
+            try:
+                allowed=ip_address(host).is_private
+            except ValueError:
+                allowed=False
+        self._active = bool(ok and allowed
+                            and (self._assume_tar or "/tar1090" in self.url().path))
         self._generation += 1
         if self._active:
             self._timer.start()
