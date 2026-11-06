@@ -34,24 +34,32 @@ password prompts after the one-time package installation. Review
 packaging/linux/sudoers.conf before installation. The app does not install
 a decoder or RTL-SDR driver by itself.
 
-## Linux installation (Pop!_OS, Ubuntu, Debian)
+## One-line Linux install / upgrade (Pop!_OS, Ubuntu, Debian)
 
-Install or upgrade from GitHub **main** with the
-[interactive Linux installer](scripts/install-linux.sh). It installs the
-Python application through pipx, adds a COSMIC/XDG Applications launcher
-and icon, removes only the obsolete `tihulu-adsb-radar` and duplicate
-`tihulu-flight-radar` Debian packages if present, and grants the current
-Linux account narrowly scoped `readsb`/`tar1090` service controls.
+The installer installs or **replaces your old Tihulu ADS-B/Flight Radar desktop version** using pipx and creates two COSMIC/XDG Applications shortcuts:
 
-The ADS-B receiver services are **not removed**. Run as your normal user:
+- **Tihulu Flight Radar** — existing full Qt desktop dashboard and advanced tar1090 access.
+- **Tihulu Flight Radar Web** — starts the loopback-only browser companion, opens the local web dashboard and prints a temporary pairing token to the terminal.
+
+It preserves `readsb`/`tar1090` services, receiver settings and recordings; removes only identified obsolete Tihulu desktop *packages* (with `apt-get remove`, not purge) and the former `tihulu-adsb-radar.desktop` launcher. The new bridge's hardware controls are off by default.
+
+**Preview installer for this unmerged development branch** (one line, as your normal user, without `sudo` in front):
 
 ```bash
-f="$(mktemp)" && curl -fLsS https://raw.githubusercontent.com/Tihulu/tihulu-flight-radar/main/scripts/install-linux.sh -o "$f" && bash "$f"; rm -f "$f"
+bash -c 'set -euo pipefail; f=$(mktemp); trap "rm -f \"$f\"" EXIT; curl -fLsS https://raw.githubusercontent.com/Tihulu/tihulu-flight-radar/feature/github-pages-local-bridge-2026-11-06/scripts/install-linux.sh -o "$f"; TIHULU_REF=feature/github-pages-local-bridge-2026-11-06 bash "$f"'
 ```
 
-Review the installer source before running scripts that request sudo.
-Afterward launch from **COSMIC Applications → Tihulu Flight Radar**
-or use `~/.local/bin/tihulu-flight-radar`.
+After the reviewed changes reach `main`, the stable one-line updater will be:
+
+```bash
+bash -c 'set -euo pipefail; f=$(mktemp); trap "rm -f \"$f\"" EXIT; curl -fLsS https://raw.githubusercontent.com/Tihulu/tihulu-flight-radar/main/scripts/install-linux.sh -o "$f"; bash "$f"'
+```
+
+**Do not use the stable updater to request the preview features until they are actually merged.** This script needs an Internet connection and will ask for sudo permission for distro packages, cleanup of old Debian app packages, and narrowly scoped readsb/tar1090 service rules. Review [the script](scripts/install-linux.sh) before execution, especially on a machine with customized packages.
+
+The same command can be run again to update the pipx installation and application entries. The terminal shown when opening **Tihulu Flight Radar Web** contains the short-lived pairing token that must be pasted into the web page; do not publish it. If Applications has not refreshed immediately, sign out and back in. For manual launch, use `~/.local/bin/tihulu-flight-radar` or `~/.local/bin/tihulu-flight-bridge --open-browser` (the second should be run in a visible terminal).
+
+**Limitations:** This is still a draft implementation, not a released site. The local bridge requires the existing readsb decoder and correct RTL-SDR driver for actual RF reception. It does not provide insecure public LAN control.
 ## Development run
 
 Requires Python 3.11+ (3.12 recommended).
