@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import mimetypes
 import secrets
 import threading
 import time
@@ -15,7 +16,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, urlsplit, unquote
 from urllib.request import ProxyHandler, Request, build_opener
 
 from .network_sources import MultiNetworkProvider, parse_provider_selection
@@ -27,6 +28,34 @@ MAX_BODY = 2048
 MAX_ONLINE_BYTES = 4_194_304
 ONLINE_CACHE_SECONDS = 35
 STATIC_DIR = Path(__file__).resolve().parent / "web"
+# The bundled upstream tar1090 frontend is installed into a user-owned cache.
+# This lets the complete map work offline and with no SDR/readsb service.
+# Never mutate that directory in a request handler or start an SDR from it.
+TAR_CACHE_DIR = Path.home() / ".local/share/tihulu-flight-radar/tar1090"
+
+
+def tar_asset_path(raw_path: str, roots: tuple[Path, ...] | None = None) -> Path | None:
+    """Resolve ONLY regular files below an installed tar1090 static directory.
+
+    Reject traversal, encoded separators, symlink escapes, absolute paths and
+    unknown paths; only user-local static files are served, never arbitrary
+    home-directory contents or bridge pairing secrets.
+    """
+    if not raw_path.startswith("/tar1090/"):
+        return None
+    relative = unquote(raw_path[len("/tar1090/"):])
+    if not relative or relative.endswith("/"):
+        relative += "index.html"
+    if (relative.startswith("/") or "\\" in relative or "\x00" in relative
+            or any(part in ("", ".", "..") for part in relative.split("/"))):
+        return None
+    for root in roots or (TAR_CACHE_DIR, STATIC_DIR / "tar1090"):
+        root = root.resolve()
+        candidate = (root / relative).resolve()
+        if candidate.is_relative_to(root) and candidate.is_file():
+            return candidate
+    return None
+
 
 
 def _coord(value: str | None, fallback: float, low: float, high: float) -> float:
@@ -375,6 +404,27 @@ def make_handler(bridge: Bridge, port: int):
                         "application/manifest+json" if name.endswith(".webmanifest") else
                         "image/svg+xml")
                 self._headers(HTTPStatus.OK, mime + "; charset=utf-8", len(raw))
+                self.wfile.write(raw)
+                return
+            if path.path == "/tar1090":
+                self.send_response(HTTPStatus.PERMANENT_REDIRECT)
+                self.send_header("Location", "/tar1090/")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            if path.path.startswith("/tar1090/"):
+                asset = tar_asset_path(path.path)
+                if asset is None:
+                    self._send(HTTPStatus.NOT_FOUND, {
+                        "error": "Local tar1090 static assets are not installed. "
+                                 "Open the Internet-enabled hosted tar1090 or "
+                                 "run the Pop!_OS installer to cache the frontend."})
+                    return
+                raw = asset.read_bytes()
+                mime = mimetypes.guess_type(str(asset))[0] or "application/octet-stream"
+                # GIS/aircraft static databases can be big but are never remote
+                # proxy endpoints. Browser cache is safe for these read-only assets.
+                self._headers(HTTPStatus.OK, mime, len(raw))
                 self.wfile.write(raw)
                 return
             if not path.path.startswith("/api/"):
