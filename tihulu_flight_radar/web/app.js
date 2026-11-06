@@ -437,12 +437,15 @@ function tarFocusURL(raw){
  });
  const best=visibleFresh[0]||null;
  const center=best||ref;
- for(const param of ["icao","noIsolation","SiteLat","SiteLon","centerReceiver","zoom"])
+ for(const param of ["icao","noIsolation","SiteLat","SiteLon","centerReceiver",
+                      "lockDotCentered","zoom","rangeRings",
+                      "tihuluFocusLat","tihuluFocusLon"])
   url.searchParams.delete(param);
- url.searchParams.set("SiteLat",center.lat.toFixed(6));
- url.searchParams.set("SiteLon",center.lon.toFixed(6));
+ // The camera focus must not masquerade as the physical receiver location.
+ url.searchParams.set("tihuluFocusLat",center.lat.toFixed(6));
+ url.searchParams.set("tihuluFocusLon",center.lon.toFixed(6));
+ url.searchParams.set("rangeRings","0");
  url.searchParams.set("zoom",best?"10":"7");
- url.searchParams.set("centerReceiver","");
  // ICAO selection only if the aircraft really came from our antenna.
  if(best && best.sources?.includes("antenna") && /^[0-9a-f]{6}$/i.test(best.hex||"")){
   url.searchParams.set("icao",best.hex);
