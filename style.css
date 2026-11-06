@@ -99,7 +99,8 @@ body.radar-expanded{overflow:hidden}
 .internet-controls>.field{max-width:100%;min-width:145px}
 .internet-controls>.field select,.internet-controls>.field input{width:100%;max-width:100%}
 .internet-controls #networkApply{white-space:normal;font-size:12px}
-html.native .internet-panel .internet-controls{display:none}
+/* Desktop uses the SAME network layer picker as Pages; never hide it. */
+html.native .internet-panel .internet-controls{display:flex}
 html.native .internet-panel>.usb-hint{display:none}
 @media(max-width:650px){
  .internet-controls>.field,.internet-controls #networkApply{flex:1 1 100%}
@@ -132,3 +133,10 @@ body.tar-open{overflow:hidden}
 .multi-provider-layers .unavailable{opacity:.57;cursor:not-allowed}
 .multi-provider-layers button{min-height:2rem}
 @media(max-width:750px){.multi-provider-layers label{width:100%;flex-wrap:wrap}}
+
+/* The complete original tar1090 (aircraft side panel, search, filters,
+   altitude colours) is a first-class map mode, not an SDR-only viewer. */
+#openTarPrimary{font-weight:700;background:#206a60;border-color:#328c7c}
+#openTarPrimary:hover{background:#298173}
+.masthead .connection{gap:10px;flex-wrap:wrap;justify-content:flex-end}
+@media(max-width:660px){.masthead .connection{justify-content:flex-start}#openTarPrimary{white-space:normal}}
