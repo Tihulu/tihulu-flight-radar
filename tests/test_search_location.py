@@ -58,3 +58,45 @@ def test_coordinates_accept_global_manual_entries():
         "lat": -33.8688, "lon": 151.2093, "country": "",
         "region": "", "name": "Sydney", "provider": "manual"}
     assert validate_search_place(p)["lat"] == -33.8688
+
+
+def test_private_location_api_requires_pairing_and_never_touches_receiver(tmp_path):
+    """A save must be a bounded authenticated local setting, not a radio command."""
+    import threading
+    from http.server import ThreadingHTTPServer
+    from urllib.error import HTTPError
+    from urllib.request import Request, urlopen
+    from tihulu_flight_radar.bridge import make_handler
+
+    bridge = Bridge(token="known-test-token", allow_control=False)
+    bridge._place_path = tmp_path / "location.json"
+    # make_handler's port parameter is only CORS/host policy input; bind
+    # a matching socket port to ensure Host and Origin guards work.
+    server = ThreadingHTTPServer(("127.0.0.1", 0), None)
+    server.RequestHandlerClass = make_handler(bridge, server.server_port)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    url = f"http://127.0.0.1:{server.server_port}/api/search-location"
+    try:
+        with pytest.raises(HTTPError) as err:
+            urlopen(url, timeout=3)
+        assert err.value.code == 401
+
+        body = json.dumps(sample_location()).encode("utf-8")
+        request = Request(url, data=body, method="POST",
+                          headers={"Authorization": "Bearer known-test-token",
+                                   "Content-Type": "application/json"})
+        with urlopen(request, timeout=3) as response:
+            saved = json.load(response)
+        assert saved["place"]["name"] == "Karaburun"
+
+        request = Request(url, headers={"Authorization": "Bearer known-test-token"})
+        with urlopen(request, timeout=3) as response:
+            restored = json.load(response)
+        assert restored["place"]["lat"] == sample_location()["lat"]
+        assert restored["place"]["region"] == "İzmir"
+        assert bridge.allow_control is False
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=3)
