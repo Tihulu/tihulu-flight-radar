@@ -61,7 +61,7 @@ function paintAircraft(ctx,a,x,y){
 }
 const canvas = $("map"), ctx = canvas.getContext("2d");
 const state = {
-  base:"", token:"", onlineFeed:"", onlineProvider:"adsblol-relay", internetBackoffUntil:0, airlabsLastFetch:0, relayLastFetch:0, connectionKind:"none", connected:false, data:[], mode:"auto", selected:null, 
+  base:"", token:"", onlineFeed:"", onlineProvider:"adsblol-relay", internetBackoffUntil:0, airlabsLastFetch:0, relayLastFetch:0, relayLastQueryKey:"", connectionKind:"none", connected:false, data:[], mode:"auto", selected:null, 
   lat:initialCenter.lat, lon:initialCenter.lon, zoom:9, moved:false, autoFocused:false,
   startupLocationPending:true, startupGeo:null, startupRank:1, startupSource:"cologne",
   startupQueryDirty:false,
@@ -253,7 +253,13 @@ async function fetchInternetFeed(){
  // Old provider snapshots age out naturally in browserSourceResult.
  if(airlabs && state.internetSnapshot && Date.now()-state.airlabsLastFetch<60000)
   return state.internetSnapshot;
- if(relay && state.internetSnapshot && Date.now()-state.relayLastFetch<30000)
+ const publicQueryKey=relay?[
+  (Math.round(state.queryLat*10)/10).toFixed(1),
+  (Math.round(state.queryLon*10)/10).toFixed(1),
+  Math.max(10,Math.min(250,state.queryRadius))
+ ].join("/"):"";
+ if(relay && state.internetSnapshot && state.relayLastQueryKey===publicQueryKey &&
+    Date.now()-state.relayLastFetch<30000)
   return state.internetSnapshot;
  const u=new URL(state.onlineFeed);
  if(airlabs){
@@ -266,7 +272,9 @@ async function fetchInternetFeed(){
   ].map(x=>x.toFixed(3)).join(","));
   u.searchParams.set("_fields","hex,flight_icao,flight_iata,flight_number,lat,lng,alt,dir,speed,updated,aircraft_icao,reg_number");
  }else if(relay){
-  const lat=state.queryLat.toFixed(3),lon=state.queryLon.toFixed(3);
+  // Do not send precise GPS coordinates through an unowned relay.
+  const lat=(Math.round(state.queryLat*10)/10).toFixed(1);
+  const lon=(Math.round(state.queryLon*10)/10).toFixed(1);
   const radius=Math.max(10,Math.min(250,state.queryRadius));
   // Strictly fixed upstream target; no user-supplied arbitrary fetch URLs.
   u.pathname="/https://api.adsb.lol/v2/point/"+lat+"/"+lon+"/"+radius;
@@ -280,18 +288,23 @@ async function fetchInternetFeed(){
   const response=await fetch(u.href,{mode:"cors",credentials:"omit",cache:"no-store",signal:abort.signal});
   if(!response.ok){
    if(response.status===429){
-    const retry=Number(response.headers.get("Retry-After"));
+    const retry=Number(response.headers?.get?.("Retry-After"));
     state.internetBackoffUntil=Date.now()+1000*
       (Number.isFinite(retry)&&retry>0?Math.min(3600,retry):90);
    }else if(response.status>=500)state.internetBackoffUntil=Date.now()+60000;
    throw Error("Internet provider HTTP "+response.status+(response.status===429?" (rate limited)":""));
   }
+  const relayError=response.headers?.get?.("X-Cors-Error");
+  if(relayError)throw Error("CORS relay: "+String(relayError).slice(0,120));
   const text=await response.text();
   if(text.length>4*1024*1024)throw Error("Internet response exceeds 4 MiB.");
   const normalized=normalizeInternetPayload(JSON.parse(text),limited?"intelsky":airlabs?"airlabs":relay?"adsblol-relay":"custom",
     state.queryLat,state.queryLon,state.queryRadius);
   if(airlabs)state.airlabsLastFetch=Date.now();
-  if(relay)state.relayLastFetch=Date.now();
+  if(relay){
+   state.relayLastFetch=Date.now();
+   state.relayLastQueryKey=publicQueryKey;
+  }
   return normalized;
  }catch(error){
   if(error?.name==="AbortError")throw Error("Internet feed timeout (10 seconds).");
