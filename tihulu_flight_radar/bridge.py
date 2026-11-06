@@ -215,9 +215,20 @@ class Bridge:
                 with self.receiver_lock:
                     data = self.receiver.snapshot()
                 local = [a for a in data.get("aircraft", []) if isinstance(a, dict) and recently_seen(a)]
-                local_status = {"state": "receiving" if local else "no_aircraft",
-                                "error": None, "messages": data.get("messages"),
-                                "now": data.get("now")}
+                count = data.get("messages")
+                # A live readsb process writing aircraft.json may be decoding
+                # zero radio frames. Keep this distinct from "receiving".
+                local_state = ("receiving" if local else
+                               "decoder_no_rf_messages" if count == 0 else
+                               "no_recent_aircraft")
+                local_status = {"state": local_state,
+                                "error": None, "messages": count,
+                                "now": data.get("now"),
+                                "note": ("Decoder running, but no ADS-B messages have been decoded. "
+                                         "Verify that the Nooelec SDR is owned by readsb, "
+                                         "the 1090 MHz antenna is connected, and check "
+                                         "journalctl -u readsb -n 40 --no-pager")
+                                        if count == 0 else None}
             except DataError as exc:
                 local_status = {"state": "unavailable", "error": str(exc)}
         if mode == "auto" and not any(position_is_fresh(a) for a in local):
