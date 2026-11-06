@@ -110,7 +110,7 @@ def test_close_failure_is_reported_and_not_silently_cleared(monkeypatch):
     import tihulu_flight_radar.control as control
     monkeypatch.setattr(control.platform,"system",lambda:"Linux")
     monkeypatch.setattr(control,"_unit_active",lambda _: (True,"active"))
-    def failing(_):
+    def failing():
         raise DataError("restricted sudo permission missing")
     monkeypatch.setattr(control,"_stop_only_app_owned_readsb",failing)
     receiver=ReceiverController()
