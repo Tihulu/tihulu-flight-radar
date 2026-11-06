@@ -120,3 +120,15 @@ html.native .internet-panel>.usb-hint{display:none}
  background:#14212e;color-scheme:dark}
 body.tar-open{overflow:hidden}
 @media(max-width:620px){.tar-browser-title>span{display:none}.tar-browser-title{padding:6px;gap:5px}}
+
+/* Selectable Internet networks are independent map/data layers. */
+.multi-provider-layers{display:flex;flex-wrap:wrap;align-items:center;gap:.55rem;
+ border:1px solid #42546b;border-radius:10px;padding:.7rem;background:#142235}
+.multi-provider-layers[hidden]{display:none}
+.multi-provider-layers .layer-heading{width:100%;font-weight:700}
+.multi-provider-layers label{display:flex;align-items:center;gap:.4rem;
+ border:1px solid #41546c;border-radius:8px;padding:.35rem .55rem;cursor:pointer}
+.multi-provider-layers small{color:#bac8d9;font-size:.72rem;max-width:18rem}
+.multi-provider-layers .unavailable{opacity:.57;cursor:not-allowed}
+.multi-provider-layers button{min-height:2rem}
+@media(max-width:750px){.multi-provider-layers label{width:100%;flex-wrap:wrap}}
