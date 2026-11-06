@@ -114,9 +114,14 @@ class NativeRadarWindow(QMainWindow):
             self.classic_window = RadarWindow(
                 controller=self.bridge.receiver, owns_receiver=False
             )
+            self.classic_window.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
+            self.classic_window.destroyed.connect(self._classic_closed)
         self.classic_window.show()
         self.classic_window.raise_()
         self.classic_window.activateWindow()
+
+    def _classic_closed(self, *_):
+        self.classic_window = None
 
     def _about(self):
         QMessageBox.information(
