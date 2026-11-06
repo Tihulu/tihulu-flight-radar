@@ -449,10 +449,14 @@ class RadarWindow(QMainWindow):
                     self._show_embedded_map(target, "Full tar1090 aircraft map")
                     self.info.setText("Full tar1090 focused on recent aircraft or Germany.")
                 else:
-                    QMessageBox.information(
-                        self, "Full map unavailable",
-                        "tar1090 is not reachable. Open the built-in map instead, "
-                        "or check the tar1090/lighttpd services."
+                    # The static tar1090 HTML can be served even while readsb
+                    # is stopped for WebUSB. Use the actual in-app radar
+                    # instead of opening a grey tar1090 without aircraft.json.
+                    self._open_map()
+                    self.info.setText(
+                        "tar1090 has no fresh readsb aircraft.json backend. "
+                        "Opened the live built-in map instead; stop browser "
+                        "WebUSB before starting readsb on the same SDR."
                     )
             except Exception as exc:
                 self.info.setText(f"Map discovery failed: {exc}")
