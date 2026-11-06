@@ -159,8 +159,10 @@ class TarOverlayView(QWebEngineView):
         self._active = False
         self._generation = 0
         self._timer = QTimer(self)
-        self._timer.setInterval(2500)
+        self._timer.setInterval(1200)
         self._timer.timeout.connect(self._poll)
+        self._probe_busy = False
+        self._last_reason = ""
         self.loadFinished.connect(self._loaded)
         self.destroyed.connect(lambda *_: self._pool.shutdown(wait=False, cancel_futures=True))
 
@@ -175,15 +177,20 @@ class TarOverlayView(QWebEngineView):
                 allowed=False
         self._active = bool(ok and allowed
                             and (self._assume_tar or "/tar1090" in self.url().path))
+        self._probe_busy = False
+        self._last_reason = ""
         self._generation += 1
         if self._active:
-            self.page().runJavaScript(BOOTSTRAP_JS)
+            self.page().runJavaScript(BOOTSTRAP_JS, 0)
             self._timer.start()
+            self._poll()
         else:
             self._timer.stop()
 
     def _poll(self):
-        if not self._active or not self.isVisible():
+        # QWebEngineView can report not visible briefly while a Qt dialog is
+        # being shown, even though the document is loading; retry regardless.
+        if not self._active:
             return
         if self._pending is not None:
             if self._pending.done():
@@ -214,11 +221,25 @@ class TarOverlayView(QWebEngineView):
         from time import monotonic
         if monotonic()<getattr(self, "_next_poll", 0):
             return
-        self.page().runJavaScript(MAP_CENTER_JS,self._got_center)
+        if self._probe_busy:
+            return
+        self._probe_busy = True
+        # Explicit MainWorld (0): OLMap is a top-level lexical binding in
+        # tar1090's script.js and is invisible in Qt's ApplicationWorld.
+        self.page().runJavaScript(MAP_CENTER_JS, 0, self._got_center)
 
     def _got_center(self, value):
-        if not self._active or not isinstance(value,dict):
+        self._probe_busy = False
+        if not self._active:
             return
+        if not isinstance(value,dict) or not value.get("ready"):
+            reason = (value.get("reason") if isinstance(value, dict)
+                      else "tar1090 page did not return a map probe")
+            if reason != self._last_reason:
+                self._last_reason = reason
+                self._set_status(str(reason))
+            return
+        self._last_reason = ""
         lat,lon=value.get("lat"),value.get("lon")
         if not (isinstance(lat,(int,float)) and isinstance(lon,(int,float))
                 and math.isfinite(lat) and math.isfinite(lon)
@@ -231,6 +252,17 @@ class TarOverlayView(QWebEngineView):
             self._overlay_bootstrapped=True
             self._draw_overlay([], "Connecting to Internet feed", "")
 
+    def _set_status(self, message):
+        if not self._active:
+            return
+        # DOM-only status, no user text in innerHTML or script interpolation.
+        js = ("(() => {const p=document.getElementById("
+              "'tihulu-tar-overlay-panel');"
+              "if(p && !window.tihuluTarOverlay) p.textContent="
+              + json.dumps("Internet overlay: " + message[:175])
+              + ";})()")
+        self.page().runJavaScript(js, 0)
+
     def _draw_overlay(self, aircraft, provider, error="", updated_at=None):
         if not self._active:
             return
@@ -240,7 +272,7 @@ class TarOverlayView(QWebEngineView):
             "error":error,
             "updated_at":updated_at
         }, ensure_ascii=False)
-        self.page().runJavaScript(OVERLAY_JS+"("+payload+")")
+        self.page().runJavaScript(OVERLAY_JS+"("+payload+")", 0)
 
     def closeEvent(self, event):
         self._timer.stop()
