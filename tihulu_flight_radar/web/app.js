@@ -557,7 +557,7 @@ $("start").onclick=()=>control("start");
 $("stop").onclick=()=>control("stop");
 $("restart").onclick=()=>control("restart");
 $("mode").onchange=()=>{state.autoFocused=false;refresh()};
-$("focus").onclick=()=>focusAir(true);
+$("focus").onclick=()=>{focusAir(true);state.moved=true;};
 function chooseRegion(point,label,zoom=8){
  state.lat=point.lat;state.lon=point.lon;
  state.queryLat=point.lat;state.queryLon=point.lon;
