@@ -9,6 +9,56 @@ const startRegion = new URLSearchParams(location.search).get("region");
 // The old region query is retained only for explicit later user controls.
 const initialCenter = COLOGNE;
 const COLORS = {antenna:"#50dcad", internet:"#5cafe8", both:"#e6b56b"};
+// Shared altitude scale for all sources. Unknown altitude is neutral.
+const ALTITUDE_STOPS = [
+ [0,"#f36b3e"],[2000,"#f0aa38"],[6000,"#d8d941"],[10000,"#61d65b"],
+ [18000,"#25c8c0"],[26000,"#417ded"],[35000,"#a15be7"],[40000,"#e44bc3"]
+];
+function aircraftAltitude(a){
+ const raw=a?.alt_baro??a?.alt_geom??a?.altitude;
+ if(raw==="ground")return 0;
+ return (typeof raw==="number"&&Number.isFinite(raw))?raw:null;
+}
+function altitudeColor(a){
+ const altitude=aircraftAltitude(a);
+ if(altitude===null)return "#abb6c5";
+ const feet=Math.max(0,Math.min(40000,altitude));
+ for(let i=1;i<ALTITUDE_STOPS.length;i++){
+  const [top,high]=ALTITUDE_STOPS[i], [bottom,low]=ALTITUDE_STOPS[i-1];
+  if(feet>top)continue;
+  const t=(feet-bottom)/(top-bottom);
+  const v=k=>Math.round(parseInt(low.slice(k,k+2),16)*(1-t)+parseInt(high.slice(k,k+2),16)*t);
+  return "#"+[1,3,5].map(k=>v(k).toString(16).padStart(2,"0")).join("");
+ }
+ return ALTITUDE_STOPS[ALTITUDE_STOPS.length-1][1];
+}
+function aircraftSourceBadge(a){
+ const sources=Array.isArray(a?.sources)?a.sources:[];
+ const radio=sources.includes("antenna"),internet=sources.includes("internet");
+ return radio&&internet?"I/R":radio?"R":internet?"I":"?";
+}
+function paintAircraft(ctx,a,x,y){
+ const color=altitudeColor(a),badge=aircraftSourceBadge(a);
+ const heading=Number.isFinite(a.track)?a.track:Number.isFinite(a.true_heading)?a.true_heading:0;
+ ctx.save();ctx.translate(x,y);ctx.rotate(heading*Math.PI/180);
+ // Full airplane silhouette, nose-up with broad wings and tailplane.
+ ctx.beginPath();
+ ctx.moveTo(0,-17);ctx.lineTo(3,-11);ctx.lineTo(3,-4);
+ ctx.lineTo(15,2);ctx.lineTo(15,5);ctx.lineTo(3,4);
+ ctx.lineTo(3,11);ctx.lineTo(8,15);ctx.lineTo(8,17);
+ ctx.lineTo(0,14);ctx.lineTo(-8,17);ctx.lineTo(-8,15);
+ ctx.lineTo(-3,11);ctx.lineTo(-3,4);ctx.lineTo(-15,5);
+ ctx.lineTo(-15,2);ctx.lineTo(-3,-4);ctx.lineTo(-3,-11);
+ ctx.closePath();
+ ctx.lineWidth=2.5;ctx.strokeStyle="#102030";ctx.stroke();
+ ctx.fillStyle=color;ctx.fill();ctx.restore();
+ // Independent, upright badge never rotates with aircraft heading.
+ const bw=badge==="I/R"?29:18,bx=x+10,by=y+9;
+ ctx.fillStyle="rgba(8,24,37,.94)";ctx.fillRect(bx,by,bw,17);
+ ctx.strokeStyle=color;ctx.lineWidth=1;ctx.strokeRect(bx+.5,by+.5,bw-1,16);
+ ctx.fillStyle="#fff";ctx.font="bold 10px system-ui";ctx.textAlign="center";
+ ctx.fillText(badge,bx+bw/2,by+12);ctx.textAlign="start";
+}
 const canvas = $("map"), ctx = canvas.getContext("2d");
 const state = {
   base:"", token:"", onlineFeed:"", connectionKind:"none", connected:false, data:[], mode:"auto", selected:null, 
@@ -605,7 +655,7 @@ function paint(){
    if(points.length<2)continue;
    const icao=key.split("_")[0],a=state.data.find(a=>a.hex===icao);
    if(!a||!visible(a))continue;
-   ctx.strokeStyle=COLORS[category(a)];ctx.globalAlpha=.5;ctx.lineWidth=2;
+   ctx.strokeStyle=altitudeColor(a);ctx.globalAlpha=.5;ctx.lineWidth=2;
    ctx.beginPath();
    points.forEach((p,i)=>{const [x,y]=xy(p[0],p[1]);if(!i)ctx.moveTo(x,y);else ctx.lineTo(x,y)});
    ctx.stroke();ctx.globalAlpha=1;
@@ -617,12 +667,11 @@ function paint(){
   const [x,y]=xy(a.lat,a.lon);
   if(x< -15||x>w+15||y< -15||y>h+15)continue;
   markers++;
-  ctx.save();ctx.translate(x,y);ctx.rotate((Number(a.track)||0)*Math.PI/180);
-  ctx.fillStyle=COLORS[category(a)];ctx.beginPath();
-  ctx.moveTo(0,-13);ctx.lineTo(7,9);ctx.lineTo(0,4);ctx.lineTo(-7,9);
-  ctx.closePath();ctx.fill();ctx.restore();
+  paintAircraft(ctx,a,x,y);
   ctx.font="12px system-ui";ctx.fillStyle="#fff";
-  ctx.fillText((a.flight||a.hex||"Aircraft").trim(),x+12,y-8);
+  ctx.shadowColor="#102030";ctx.shadowBlur=3;
+  ctx.fillText((a.flight||a.hex||"Aircraft").trim(),x+19,y-10);
+  ctx.shadowBlur=0;
  }
  if(!markers){
   ctx.fillStyle="rgba(13,23,33,.9)";ctx.fillRect(12,12,Math.min(420,w-24),38);
