@@ -1,6 +1,6 @@
 #!/bin/sh
 set -eu
-NAME=tihulu-flight-radar_0.3.2.dev2_amd64.deb
+NAME=tihulu-flight-radar_0.3.2.dev3_amd64.deb
 test -x dist/TihuluFlightRadar/TihuluFlightRadar || {
   echo "PyInstaller executable not found" >&2
   exit 1
@@ -21,7 +21,7 @@ install -m 0440 packaging/linux/sudoers.conf \
   "$STAGE/etc/sudoers.d/tihulu-flight-radar"
 cat > "$STAGE/DEBIAN/control" <<'EOF'
 Package: tihulu-flight-radar
-Version: 0.3.2~dev2
+Version: 0.3.2~dev3
 Section: hamradio
 Priority: optional
 Architecture: amd64
