@@ -30,7 +30,7 @@ test("WebUSB claim failure provides manual safe readsb steps, does not pretend t
  const report=explainUsbError({message:"Could not connect to the RTL-SDR stick. Are you using it in another application?"},"linux");
  assert.match(report,/readsb/);
  assert.match(report,/sudo systemctl stop readsb.service/);
- assert.match(report,/website cannot/i);
+ assert.match(report,/(?:No website can|website cannot)/i);
  assert.doesNotMatch(report,/chmod 777|killall|rmmod|udevadm trigger/);
 });
 test("Read-only USB diagnostics enumerate permission grants without opening or claiming any device",async()=>{
