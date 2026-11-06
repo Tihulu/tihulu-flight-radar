@@ -152,7 +152,13 @@ class NativeRadarWindow(QMainWindow):
         self.server.shutdown()
         self.server.server_close()
         self.server_thread.join(timeout=2)
-        self.bridge.receiver.close()
+        try:
+            self.bridge.receiver.close(
+                release_local_service=self.release_action.isChecked()
+            )
+        except Exception as exc:
+            QMessageBox.warning(self, "Receiver release warning",
+                                "The receiver may still be occupied: " + str(exc))
         super().closeEvent(event)
 
 
