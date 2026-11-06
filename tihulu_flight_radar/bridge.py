@@ -63,6 +63,10 @@ def merge_aircraft(local: list[dict], online: list[dict]) -> list[dict]:
                 prior["observations"][label] = aircraft
                 if label == "internet":
                     prior["internet_providers"] = list(aircraft.get("internet_providers", []))
+                    if isinstance(aircraft.get("observations"), dict):
+                        networks = aircraft["observations"].get("internet_sources")
+                        if isinstance(networks, dict):
+                            prior["observations"]["internet_sources"] = networks
                 if not position_is_fresh(prior) and position_is_fresh(aircraft):
                     # The displayed position's source remains independently attributable.
                     prior["lat"], prior["lon"] = aircraft["lat"], aircraft["lon"]
@@ -72,6 +76,10 @@ def merge_aircraft(local: list[dict], online: list[dict]) -> list[dict]:
             row = dict(aircraft)
             row["sources"] = [label]
             row["observations"] = {label: aircraft}
+            if label == "internet" and isinstance(aircraft.get("observations"), dict):
+                networks = aircraft["observations"].get("internet_sources")
+                if isinstance(networks, dict):
+                    row["observations"]["internet_sources"] = networks
             row["position_source"] = label if position_is_fresh(aircraft) else None
             merged.append(row)
             if key is not None:
