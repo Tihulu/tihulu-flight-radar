@@ -1,6 +1,7 @@
 """Mocked end-to-end Linux installer regression (never uses real sudo/pipx/apt)."""
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -14,8 +15,8 @@ def _stub(path: Path, content: str):
     path.chmod(0o755)
 
 
-@pytest.mark.skipif(os.name != "posix" or os.geteuid() == 0,
-                    reason="The installer refuses root; CI non-root runner only")
+@pytest.mark.skipif(sys.platform != "linux" or getattr(os, "geteuid", lambda: 0)() == 0,
+                    reason="Linux Debian/Ubuntu/Pop!_OS installer only; refuses root")
 def test_one_line_upgrade_creates_both_application_shortcuts(tmp_path):
     home = tmp_path / "test-home"
     tools = tmp_path / "mock-bin"
@@ -66,6 +67,8 @@ exit 1
     assert (home / ".local/share/icons/hicolor/scalable/apps/tihulu-flight-radar.svg").exists()
 
 
+@pytest.mark.skipif(sys.platform != "linux",
+                    reason="Linux-only installer syntax checked on Linux CI")
 def test_installer_shell_syntax():
     result = subprocess.run(["bash", "-n", str(INSTALLER)],
                             capture_output=True, text=True, check=False)
