@@ -33,7 +33,14 @@ echo "Tihulu Flight Radar — install or update from '$ref'"
 echo "The existing readsb/tar1090 services, receiver settings and recordings stay untouched."
 echo "System packages and narrowly scoped sudoers permissions require sudo."
 sudo apt-get update
+# Ubuntu 24.04 uses libasound2t64; Debian 12 uses libasound2.
+if apt-cache show libasound2t64 >/dev/null 2>&1; then
+  audio_lib=libasound2t64
+else
+  audio_lib=libasound2
+fi
 sudo apt-get install -y --no-install-recommends \
+  "$audio_lib" libxss1 libxshmfence1 \
   pipx python3-venv git curl sudo \
   libegl1 libgl1 libxkbcommon0 libxcb-cursor0 libdbus-1-3 libglib2.0-0 \
   libnss3 libnspr4 libxcomposite1 libxdamage1 libxrandr2 libgbm1 libxtst6
