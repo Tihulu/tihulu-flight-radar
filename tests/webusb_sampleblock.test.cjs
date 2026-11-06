@@ -31,7 +31,8 @@ test("WebUSB claim failure provides manual safe readsb steps, does not pretend t
  assert.match(report,/readsb/);
  assert.match(report,/sudo systemctl stop readsb.service/);
  assert.match(report,/(?:No website can|website cannot)/i);
- assert.doesNotMatch(report,/chmod 777|killall|rmmod|udevadm trigger/);
+ assert.match(report,/Do not chmod 777/);
+ assert.doesNotMatch(report,/(?:^|\n)\s*(?:sudo\s+)?(?:chmod\s+777|killall|rmmod|udevadm trigger)\b/m);
 });
 test("Read-only USB diagnostics enumerate permission grants without opening or claiming any device",async()=>{
  const {readOnlyUsbReport}=await tools;
