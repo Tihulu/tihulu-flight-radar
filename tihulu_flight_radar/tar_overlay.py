@@ -297,7 +297,8 @@ class TarOverlayView(QWebEngineView):
         # DOM-only status, no user text in innerHTML or script interpolation.
         js = ("(() => {const p=document.getElementById("
               "'tihulu-tar-overlay-panel');"
-              "if(p && !window.tihuluTarOverlay) p.textContent="
+              "const el=window.tihuluTarOverlay?.status || p;"
+              "if(el) el.textContent="
               + json.dumps("Internet overlay: " + message[:175])
               + ";})()")
         self.page().runJavaScript(js, 0)
@@ -311,7 +312,25 @@ class TarOverlayView(QWebEngineView):
             "error":error,
             "updated_at":updated_at
         }, ensure_ascii=False)
-        self.page().runJavaScript(OVERLAY_JS+"("+payload+")", 0)
+        # Return a JSON primitive instead of a JS object (see MAP_CENTER_JS)
+        # and report actual OpenLayers/style failures to the user.
+        injected = ("(() => {try {return JSON.stringify("
+                    + OVERLAY_JS + "(" + payload + "));}"
+                    "catch(error){return JSON.stringify({error:String(error)});}})()")
+        self.page().runJavaScript(injected, 0, self._overlay_result)
+
+    def _overlay_result(self, value):
+        if not self._active or not isinstance(value, str):
+            return
+        try:
+            outcome = json.loads(value)
+        except ValueError:
+            self._set_status("Invalid Qt overlay draw response")
+            return
+        if isinstance(outcome, dict) and outcome.get("error"):
+            self._set_status("OpenLayers overlay error: " + str(outcome["error"]))
+        elif isinstance(outcome, str):
+            self._set_status(outcome)
 
     def closeEvent(self, event):
         self._timer.stop()
