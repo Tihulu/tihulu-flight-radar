@@ -161,7 +161,7 @@ class Bridge:
                                 "now": data.get("now")}
             except DataError as exc:
                 local_status = {"state": "unavailable", "error": str(exc)}
-        if mode == "auto" and not local:
+        if mode == "auto" and not any(position_is_fresh(a) for a in local):
             want_online = True
         if want_online:
             online, online_status = self.online.fetch(lat, lon, radius)
