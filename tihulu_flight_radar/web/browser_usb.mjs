@@ -1,4 +1,4 @@
-import {normalizeIqSampleBlock, platformFamily, explainUsbError, readOnlyUsbReport} from "./usb_tools.mjs";
+import {normalizeIqSampleBlock, platformFamily, explainUsbError, readOnlyUsbReport, probeUsbInterface} from "./usb_tools.mjs";
 /*
  * Device-owned browser RTL-SDR loop. No Python, readsb or companion server.
  * WebUSB permission is requested only from the explicit button click.
@@ -23,6 +23,26 @@ function showDiagnostic(text){
 $("usbCheck")?.addEventListener("click",async()=>{
  const status=await readOnlyUsbReport(navigator.usb,platform);
  showDiagnostic(status);
+});
+$("usbClaimTest")?.addEventListener("click",async()=>{
+ if(device || chosenDevice || readLoop){
+  tell("Stop this tab's SDR capture before running the separate USB interface-claim test.",true);
+  return;
+ }
+ $("usbClaimTest").disabled=true;
+ try{
+  const result=await probeUsbInterface(navigator.usb);
+  const line=result.ok
+   ? result.summary
+   : "USB test failed at "+result.stage+": "+result.errorName+": "+result.errorMessage;
+  const extra=result.cleanupErrors?.length
+   ? "\nRelease warning: "+result.cleanupErrors.join("; "):"";
+  showDiagnostic(line+extra+(result.ok?"":"\n\n"+
+    explainUsbError({name:result.errorName,message:result.errorMessage},platform)));
+  tell(line,!result.ok);
+ }finally{
+  $("usbClaimTest").disabled=false;
+ }
 });
 $("usbCopy")?.addEventListener("click",async()=>{
  try{
@@ -87,6 +107,7 @@ async function cleanup(){
  if(worker){worker.terminate();worker=null;}
  $("usbStop").disabled=true;
  $("usbStart").disabled=!Driver;
+ if($("usbClaimTest"))$("usbClaimTest").disabled=false;
 }
 async function read(){
  let terminalError=null;
@@ -128,6 +149,7 @@ async function start(){
  }
  stopRequested=false;alreadyReported=false;
  $("usbStart").disabled=true;$("usbStop").disabled=false;
+ if($('usbClaimTest'))$('usbClaimTest').disabled=true;
  try{
   // Keep navigator.usb.requestDevice within the click's user activation.
   const provider=new Driver({webusb:{
