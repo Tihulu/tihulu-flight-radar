@@ -31,7 +31,7 @@ function harness({selectedWidth=0,mapWidth=900}={}){
  const layers=[];
  class Vector{constructor(){this.features=[]}clear(){this.features=[]}addFeature(f){this.features.push(f)}getFeatures(){return this.features}}
  class Feature{constructor(obj){this.properties=obj}get(k){return this.properties[k]}}
- const ol={source:{Vector},layer:{Vector:class{constructor(opts){this.source=opts.source;this.style=opts.style}}},
+ const ol={Feature,source:{Vector},layer:{Vector:class{constructor(opts){this.source=opts.source;this.style=opts.style}}},
   style:{Style:class{constructor(opts){this.options=opts}},Text:class{constructor(opts){this.options=opts}},
    Fill:class{constructor(opts){this.options=opts}},Stroke:class{constructor(opts){this.options=opts}}},
   geom:{Point:class{constructor(v){this.coordinates=v}}},proj:{fromLonLat:x=>x}};
