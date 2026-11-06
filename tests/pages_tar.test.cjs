@@ -22,9 +22,12 @@ test("Full tar1090 map starts near genuine local aircraft and retains other plan
  const fn=vm.runInNewContext(extract("tarFocusURL")+"\ntarFocusURL",sandbox);
  const parsed=new URL(fn("http://127.0.0.1/tar1090/"));
  assert.equal(parsed.searchParams.get("icao"),"3c1234");
- assert.equal(parsed.searchParams.get("SiteLat"),"50.900000");
- assert.equal(parsed.searchParams.get("SiteLon"),"7.100000");
- assert.equal(parsed.searchParams.get("centerReceiver"),"");
+ assert.equal(parsed.searchParams.get("tihuluFocusLat"),"50.900000");
+ assert.equal(parsed.searchParams.has("SiteLat"),false);
+ assert.equal(parsed.searchParams.get("rangeRings"),"0");
+ assert.equal(parsed.searchParams.get("tihuluFocusLon"),"7.100000");
+ assert.equal(parsed.searchParams.has("SiteLon"),false);
+ assert.equal(parsed.searchParams.has("centerReceiver"),false);
  assert.equal(parsed.searchParams.get("noIsolation"),"");
 });
 
@@ -33,8 +36,10 @@ test("Tar1090 defaults Germany if no live aircraft, no imposed USA coordinates",
  const sandbox={URL,state,visible:()=>true,isPositioned:()=>false};
  const fn=vm.runInNewContext(extract("tarFocusURL")+"\ntarFocusURL",sandbox);
  const p=new URL(fn("http://localhost:8504/?zoom=5&SiteLon=-98&SiteLat=37"));
- assert.equal(p.searchParams.get("SiteLat"),"51.165700");
- assert.equal(p.searchParams.get("SiteLon"),"10.451500");
+ assert.equal(p.searchParams.get("tihuluFocusLat"),"51.165700");
+ assert.equal(p.searchParams.has("SiteLat"),false);
+ assert.equal(p.searchParams.get("tihuluFocusLon"),"10.451500");
+ assert.equal(p.searchParams.has("SiteLon"),false);
  assert.equal(p.searchParams.get("zoom"),"7");
 });
 
@@ -54,6 +59,8 @@ test("Embedded tar overlay uses OpenLayers source and exposes a source-specific 
  assert.match(m[1],/ol\.layer\.Vector/);
  assert.match(m[1],/source:'internet'/);
  assert.match(m[1],/Show Internet aircraft overlay/);
+ assert.match(py,/siteCircleLayer\.setVisible\(false\)/);
+ assert.match(py,/locationDotLayer\.setVisible\(false\)/);
  new vm.Script(m[1]+"({aircraft:[],provider:'test'})");
 });
 
