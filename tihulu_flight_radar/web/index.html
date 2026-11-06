@@ -62,6 +62,12 @@
       <button id="zoomIn" aria-label="Zoom in">+</button><button id="zoomOut" aria-label="Zoom out">−</button>
     </div>
    </div>
+   <div class="aircraft-legend" aria-label="Aircraft symbols and altitude color key">
+     <span><strong>R</strong> radio</span><span><strong>I</strong> Internet</span><span><strong>I/R</strong> both sources</span>
+     <span class="altitude-label">Aircraft color · altitude</span>
+     <div class="altitude-ramp" role="img" aria-label="Altitude from orange at ground level, yellow and green at lower heights, cyan and blue, to purple and pink at 40000 feet"></div>
+     <span class="altitude-label">0–40,000 ft · grey = unknown</span>
+   </div>
    <canvas id="map" role="img" aria-label="Live geographic aircraft map, with offline coordinate grid"></canvas>
    <div class="mapfooter"><span id="mapLabel">Germany default view · no receiver position assumed</span><span><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a> · <span id="sourceCredits">Source attribution shown after connection</span></span></div>
   </section>
