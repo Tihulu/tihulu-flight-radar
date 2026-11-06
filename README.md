@@ -44,8 +44,9 @@ preview is manually installed and physically tested.
 
 ## Current browser preview — source ownership and real Internet options (6 Nov 2026)
 
-**Working preview URL:** https://tihulu.github.io/TIHULU-TEXT-CENTER/flight_radar/
-(the separate `/tihulu-flight-radar/` Pages URL is not published).
+**Publishing targets (verify both deployments and matching source-revision.json):**
+https://tihulu.github.io/tihulu-flight-radar/ and
+https://tihulu.github.io/TIHULU-TEXT-CENTER/flight_radar/.
 
 The user has **physically confirmed** real Nooelec 0bda:2838 browser WebUSB Mode S reception after releasing its specific Linux DVB driver; the same physical SDR cannot also run readsb/tar1090. When WebUSB is active, **Full radar map** expands the same real source-aware browser map without opening an empty legacy tar1090 backend. **External tar1090** requires separately running readsb and a current `data/aircraft.json`; the native classic app checks JSON freshness before opening.
 
@@ -56,7 +57,7 @@ Browser Internet sources: built-in **IntelSky** (real CORS-enabled *limited mili
 
 English-language, local-first ADS-B / Mode S receiver desktop software.
 
-**Version 0.3.1 (development preview).** Uses real receiver data only. It never
+**Current development branch version 0.3.2.dev0; user's installed stable baseline 0.3.1.** Uses real receiver data only. It never
 creates simulated aircraft or positions. ADS-B broadcasts may contain locations;
 Mode S does not guarantee location. MLAT positioning requires synchronized
 multiple receivers and is **not** calculated by this app.
