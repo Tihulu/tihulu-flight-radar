@@ -1,5 +1,36 @@
 # Tihulu Flight Radar
 
+## Pop!_OS upgrade with preserved 0.3.1 legacy rollback
+
+The known-good **0.3.1** source snapshot is archived at
+[`legacy/v0.3.1`](https://github.com/Tihulu/tihulu-flight-radar/tree/legacy/v0.3.1)
+(exact commit `67280cd84feb89faec6a80f5fe2a55ce5f7b89e6`).
+The new opt-in **0.3.2.dev0** Internet-provider preview is archived at
+[`preview/v0.3.2-dev0`](https://github.com/Tihulu/tihulu-flight-radar/tree/preview/v0.3.2-dev0)
+(source commit `c1e9c2c849cab681c863d4f63d538c1a940397f9`).
+
+**Close the app before switching.** Download the version switcher once:
+```bash
+curl -fLsS https://raw.githubusercontent.com/Tihulu/tihulu-flight-radar/preview/v0.3.2-dev0/scripts/popos-version-switch.sh -o "$HOME/tihulu-flight-switch.sh"
+```
+Then replace the old installed pipx application with the preview:
+```bash
+bash "$HOME/tihulu-flight-switch.sh" preview
+```
+Or restore the original 0.3.1 snapshot whenever needed:
+```bash
+bash "$HOME/tihulu-flight-switch.sh" legacy
+```
+
+The wrapper uses exact Git SHAs, `pipx install --force` (one application,
+not two installed copies), desktop shortcut refresh and an installed version
+check. Do **not** purge `readsb` or `tar1090`: their services and SDR
+settings are preserved. The archived GitHub source represents the last
+pre-multi-provider 0.3.1 code; a local `0.3.1` version string alone cannot
+prove the same source commit. Full details:
+[Pop!_OS version install and rollback](docs/POP_OS_VERSION_SWITCH_AND_LEGACY.md).
+
+
 ## Optional multi-source preview — 0.3.2.dev0 (6 Nov 2026)
 
 **The existing installed Pop!_OS 0.3.1 is the user-verified stable baseline.
