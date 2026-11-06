@@ -61,7 +61,7 @@ function paintAircraft(ctx,a,x,y){
 }
 const canvas = $("map"), ctx = canvas.getContext("2d");
 const state = {
-  base:"", token:"", onlineFeed:"", connectionKind:"none", connected:false, data:[], mode:"auto", selected:null, 
+  base:"", token:"", onlineFeed:"", onlineProvider:"intelsky", internetBackoffUntil:0, connectionKind:"none", connected:false, data:[], mode:"auto", selected:null, 
   lat:initialCenter.lat, lon:initialCenter.lon, zoom:9, moved:false, autoFocused:false,
   startupLocationPending:true, startupGeo:null, startupRank:1, startupSource:"cologne",
   startupQueryDirty:false,
@@ -161,40 +161,85 @@ function getFeedURL(raw){
    throw Error("Internet feed must be a trusted HTTPS /api/aircraft endpoint without embedded keys.");
  return url.origin+url.pathname;
 }
+// A keyless browser-compatible limited network source; not the full ADS-B
+// population. Public general ADS-B APIs commonly require a CORS-enabled relay.
+const INTELSKY_URL="https://intelsky.org/api/";
+function configuredOnlineFeed(){
+ state.onlineProvider=$("onlinePreset")?.value||"intelsky";
+ if(state.onlineProvider==="off")return "";
+ if(state.onlineProvider==="intelsky")return INTELSKY_URL;
+ return getFeedURL($("onlineFeedUrl").value);
+}
+function greatCircleNM(lat1,lon1,lat2,lon2){
+ const r=Math.PI/180,p=(lat2-lat1)*r,q=(lon2-lon1)*r;
+ return 3440.065*2*Math.asin(Math.min(1,Math.sqrt(Math.max(0,
+  Math.sin(p/2)**2+Math.cos(lat1*r)*Math.cos(lat2*r)*Math.sin(q/2)**2))));
+}
+function normalizeInternetPayload(raw,provider,lat,lon,radius,now=Date.now()/1000){
+ const limited=provider==="intelsky";
+ const stamp=Number(limited?raw?.now:raw?.generated_at);
+ const age=now-stamp;
+ if(!Number.isFinite(stamp)||age < -10||age > 90)
+  throw Error("Missing or stale Internet snapshot timestamp.");
+ const records=limited?raw?.ac:raw?.aircraft;
+ if(!Array.isArray(records))throw Error("Invalid Internet aircraft schema.");
+ const seenIds=new Set(),planes=[];
+ for(const a of records.slice(0,10000)){
+  if(!a||typeof a!=="object")continue;
+  const hex=String(a.hex||"").toLowerCase();
+  if(!/^[0-9a-f]{6}$/.test(hex)||seenIds.has(hex)||
+     !Number.isFinite(a.lat)||!Number.isFinite(a.lon)||
+     a.lat < -90||a.lat > 90||a.lon < -180||a.lon > 180||
+     greatCircleNM(lat,lon,a.lat,a.lon)>radius)continue;
+  // IntelSky supplies snapshot timestamp but not per-aircraft age.
+  // This is a network snapshot, NOT RF reception by the user's antenna.
+  const seen=limited?0:a.seen,seenPos=limited?0:a.seen_pos;
+  if(!Number.isFinite(seen)||seen<0||seen>60||
+     !Number.isFinite(seenPos)||seenPos<0||seenPos>60)continue;
+  seenIds.add(hex);
+  planes.push({...a,hex,seen,seen_pos:seenPos,
+   sources:["internet"],position_source:"internet",
+   observations:{internet:{...a,provider,timestamp:stamp}}});
+ }
+ const attribution=limited
+  ?"IntelSky.org · limited military/government network coverage"
+  :raw.attribution||"Check provider's attribution and usage terms";
+ return {generated_at:stamp,active_sources:["internet"],aircraft:planes,
+  counts:{antenna:0,internet:planes.length,combined:planes.length},
+  sources:{antenna:{state:"unavailable",error:"No local receiver selected"},
+   internet:{state:"available",provider:limited?"IntelSky":raw.provider||"Custom CORS feed",
+     attribution,updated_at:stamp,limited_coverage:limited}}};
+}
 async function fetchInternetFeed(){
- const u=new URL(state.onlineFeed);
- u.searchParams.set("lat",state.queryLat.toFixed(3));
- u.searchParams.set("lon",state.queryLon.toFixed(3));
- u.searchParams.set("radius",String(state.queryRadius));
- const abort=new AbortController(), timeout=setTimeout(()=>abort.abort(),10000);
+ if(!state.onlineFeed)throw Error("No Internet source is configured.");
+ if(Date.now()<state.internetBackoffUntil)
+  throw Error("Internet feed cooling down after rate limit or outage; retry later.");
+ const limited=state.onlineProvider==="intelsky",u=new URL(state.onlineFeed);
+ if(!limited){
+  u.searchParams.set("lat",state.queryLat.toFixed(3));
+  u.searchParams.set("lon",state.queryLon.toFixed(3));
+  u.searchParams.set("radius",String(state.queryRadius));
+ }
+ const abort=new AbortController(),timeout=setTimeout(()=>abort.abort(),10000);
  try{
   const response=await fetch(u.href,{mode:"cors",credentials:"omit",cache:"no-store",signal:abort.signal});
-  if(!response.ok)throw Error("Internet feed returned HTTP "+response.status);
+  if(!response.ok){
+   if(response.status===429){
+    const retry=Number(response.headers.get("Retry-After"));
+    state.internetBackoffUntil=Date.now()+1000*
+      (Number.isFinite(retry)&&retry>0?Math.min(3600,retry):90);
+   }else if(response.status>=500)state.internetBackoffUntil=Date.now()+60000;
+   throw Error("Internet provider HTTP "+response.status+(response.status===429?" (rate limited)":""));
+  }
   const text=await response.text();
-  if(text.length>4*1024*1024)throw Error("Internet feed exceeds size limit.");
-  const result=JSON.parse(text);
-  if(!Array.isArray(result.aircraft))throw Error("Internet feed did not return aircraft.");
-  const receivedAt=Number(result.generated_at);
-  const age=Date.now()/1000-receivedAt;
-  if(!Number.isFinite(age) || age< -10 || age>90)
-   throw Error("Internet snapshot is stale or missing an observation timestamp.");
-  const safe=result.aircraft.slice(0,10000).filter(a=>a&&typeof a==="object").map(a=>{
-   const own={...a};
-   if(typeof own.seen==="number")own.seen+=Math.max(0,age);
-   if(typeof own.seen_pos==="number")own.seen_pos+=Math.max(0,age);
-   own.sources=["internet"];
-   own.position_source=isPositioned(own)?"internet":null;
-   own.observations={internet:a};
-   return own;
-  }).filter(a=>Number.isFinite(a.seen)&&a.seen>=0&&a.seen<=60);
-  return {
-    generated_at:receivedAt,active_sources:["internet"],aircraft:safe,
-    counts:{antenna:0,internet:safe.length,combined:safe.length},
-    sources:{antenna:{state:"unavailable",error:"Requires paired local bridge"},
-             internet:{state:"available",provider:result.provider||"Configured Internet feed",
-                       attribution:result.attribution||"See Internet feed provider terms",
-                       updated_at:receivedAt}}
-  };
+  if(text.length>4*1024*1024)throw Error("Internet response exceeds 4 MiB.");
+  return normalizeInternetPayload(JSON.parse(text),limited?"intelsky":"custom",
+    state.queryLat,state.queryLon,state.queryRadius);
+ }catch(error){
+  if(error?.name==="AbortError")throw Error("Internet feed timeout (10 seconds).");
+  if(error instanceof TypeError)
+   throw Error("Network or CORS blocked this feed. General ADS-B providers may need an HTTPS/CORS relay.");
+  throw error;
  }finally{clearTimeout(timeout)}
 }
 // Browser-direct RF (from adsb_worker.mjs) is a distinct proven observation
@@ -282,7 +327,8 @@ window.tihuluUsbCanStart=()=>state.connectionKind!=="bridge";
 window.tihuluUsbStarted=()=>{
  state.usbSnapshot={aircraft:[],messages:0,updatedAt:Date.now()};
  state.usbMessageCount=0;state.connectionKind="usb";state.connected=true;
- state.onlineFeed=getFeedURL($("onlineFeedUrl").value);
+ state.onlineFeed=configuredOnlineFeed();
+   state.internetBackoffUntil=0;
  $("mode").value=state.onlineFeed?"hybrid":"antenna";
  connection(true,"Direct browser WebUSB · 1090 MHz");
  for(const id of ["start","stop","restart"])$(id).disabled=true;
@@ -357,14 +403,16 @@ async function connect(){
   if(state.connectionKind==="usb"){
    // The Connect button is for optional Internet feed configuration when the
    // USB receiver is already running — never launch a second RF process.
-   state.onlineFeed=getFeedURL($("onlineFeedUrl").value);
+   state.onlineFeed=configuredOnlineFeed();
+   state.internetBackoffUntil=0;
    state.internetSnapshot=null;
    $("mode").value=state.onlineFeed?"hybrid":"antenna";
    await refresh(true);
    state.timer=setInterval(()=>{if(!document.hidden)refresh()},15000);
    return;
   }
-  state.onlineFeed=getFeedURL($("onlineFeedUrl").value);
+  state.onlineFeed=configuredOnlineFeed();
+   state.internetBackoffUntil=0;
   const token=$("token").value.trim();
   if(token){
    state.base=getBase($("bridgeUrl").value.trim());
