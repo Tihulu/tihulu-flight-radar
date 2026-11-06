@@ -1092,6 +1092,7 @@ async function setBrowserTar(open){
  }
 }
 $("fullTar1090").onclick=()=>void setBrowserTar(true);
+$("openTarPrimary").onclick=()=>void setBrowserTar(true);
 $("closeFullTar").onclick=()=>void setBrowserTar(false);
 $("fullTarFrame").addEventListener("load",()=>publishTarBrowserSnapshot());
 window.addEventListener("message",event=>{
@@ -1209,4 +1210,10 @@ if(location.hostname==="tihulu.github.io"){
  });
 }
 
-initializeStartupLocation();
+// An explicit ?view=tar1090 opens the real upstream interface immediately.
+ // It works even before any SDR, local decoder or Internet feed is available;
+ // genuine Internet contacts are injected as they arrive, never simulated.
+ if(new URLSearchParams(location.search).get("view")==="tar1090"){
+   window.addEventListener("load",()=>void setBrowserTar(true),{once:true});
+ }
+ initializeStartupLocation();
