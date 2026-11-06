@@ -64,12 +64,23 @@ class NativeRadarWindow(QMainWindow):
         # Share the user's already-configured receiver mode from the classic
         # dashboard. Earlier versions ignored this and defaulted to systemd,
         # hiding a working Direct readsb / Remote JSON receiver.
-        from .control import MODES
+        from .control import MODES, linux_readsb_unit_installed
+        import platform
+        import shutil
         preferred = str(self.settings.value("mode", self.bridge.receiver.mode))
         remote = str(self.settings.value("remote", ""))
         decoder = str(self.settings.value("decoder", ""))
         if preferred == "Remote JSON" and not remote.strip():
             preferred = self.bridge.receiver.mode
+        # Users with a working standalone readsb often have no systemd
+        # readsb.service; do not silently show an empty RF layer in that case.
+        if (preferred == "Linux services" and platform.system() == "Linux"
+                and not linux_readsb_unit_installed()
+                and (shutil.which("readsb")
+                     or any(path.is_file() for path in (
+                         __import__("pathlib").Path("/usr/bin/readsb"),
+                         __import__("pathlib").Path("/usr/local/bin/readsb"))))):
+            preferred = "Direct readsb"
         try:
             if preferred in MODES:
                 self.bridge.receiver.configure(preferred, remote, decoder)
