@@ -7,7 +7,6 @@
 import {foldCityName,offlineCityMatches,onlineCityMatches,validStationCoordinates} from "./location_search.mjs";
 
 export const STORAGE_KEY="tihulu-flight-radar-search-place-v1";
-const SOURCE="../web/cities-de-tr.json";
 const RADIUSES=Object.freeze([25,50,100,150,250]);
 const LABELS=Object.freeze({DE:"Germany",TR:"Türkiye"});
 let catalogPromise=null;
@@ -69,14 +68,14 @@ export function initFlightLocationUI({onChoose,getCurrent}){
  const town=$("placeTown"),query=$("placeQuery"),suggestions=$("placeSuggestions");
  const lat=$("placeLatitude"),lon=$("placeLongitude"),radius=$("placeRadius");
  const status=$("placeStatus"),selection=$("placeSelection");
- let cities=[],localities=[],activePlace=null,requestId=0;
+ let cities=[],localities=[],activePlace=null,requestId=0,manualChanged=false;
  const say=value=>{status.textContent=String(value)};
  const option=(value,title)=>{
   const el=document.createElement("option");el.value=value;el.textContent=title;return el;
  };
  function showSelection(row){
   if(!row||!validStationCoordinates(row.lat,row.lon))return;
-  activePlace={...row};lat.value=Number(row.lat).toFixed(5);
+  manualChanged=false;activePlace={...row};lat.value=Number(row.lat).toFixed(5);
   lon.value=Number(row.lon).toFixed(5);
   selection.textContent=displayName(row)+" · "+lat.value+", "+lon.value+" (map search point)";
   suggestions.replaceChildren();suggestions.hidden=true;
@@ -123,9 +122,9 @@ export function initFlightLocationUI({onChoose,getCurrent}){
   lat.value=String(saved?.lat??now.lat);
   lon.value=String(saved?.lon??now.lon);
   selection.textContent=saved?.label||"Choose a place to change the online aircraft search center.";
-  activePlace=null;
+  activePlace=null;manualChanged=false;
   query.value="";
-  country.value=saved?.country==="TR"?"TR":"DE";
+  country.value=saved?.country==="TR"?"TR":saved?.country==="all"?"all":"DE";
   say("Loading Satellite Center's offline Germany/Türkiye directory...");
   try{
    cities=await loadPlaces();
@@ -163,14 +162,14 @@ export function initFlightLocationUI({onChoose,getCurrent}){
  $("placeClose").addEventListener("click",close);
  root.addEventListener("click",e=>{if(e.target===root)close();});
  root.addEventListener("keydown",e=>{if(e.key==="Escape"){e.preventDefault();e.stopPropagation();close();}});
- country.addEventListener("change",()=>{query.value="";activePlace=null;refreshRegions();});
- region.addEventListener("change",()=>{query.value="";activePlace=null;refreshTownList();});
+ country.addEventListener("change",()=>{query.value="";activePlace=null;manualChanged=false;refreshRegions();});
+ region.addEventListener("change",()=>{query.value="";activePlace=null;manualChanged=false;refreshTownList();});
  town.addEventListener("change",()=>{
   const row=localities[Number(town.value)];
   if(row)showSelection(row);
  });
  query.addEventListener("input",()=>{
-  activePlace=null;
+  activePlace=null;manualChanged=false;
   const text=query.value.trim();
   if(foldCityName(text).length<2){listSuggestions([]);return;}
   const subset=region.value
@@ -184,12 +183,13 @@ export function initFlightLocationUI({onChoose,getCurrent}){
  });
  for(const el of [lat,lon]){
   el.addEventListener("input",()=>{
-   activePlace=null;
+   activePlace=null;manualChanged=true;
    selection.textContent="Manual WGS84 coordinates · map search point only; not SDR location.";
   });
  }
  $("placeApply").addEventListener("click",()=>{
   if(activePlace){apply(activePlace,activePlace.provider);return;}
+  if(!manualChanged){say("Choose a listed city/district or edit coordinates before applying.");return;}
   if(lat.value.trim()===""||lon.value.trim()===""){
    say("Enter both latitude and longitude or select an offline place.");return;
   }
