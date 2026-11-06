@@ -38,12 +38,13 @@
  <section class="internet-panel" aria-label="Internet aircraft source">
   <div class="internet-panel-head">
    <strong>Internet aircraft overlay</strong>
-   <span id="networkStatus" role="status" aria-live="polite">IntelSky available as a limited, keyless source; not a full commercial ADS-B feed.</span>
+   <span id="networkStatus" role="status" aria-live="polite">General ADS-B source selected (community relay; availability not guaranteed).</span>
   </div>
   <div class="internet-controls">
   <label class="field">Internet source
    <select id="onlinePreset" aria-label="Internet aircraft source">
-    <option value="intelsky" selected>IntelSky (public browser feed · limited coverage)</option>
+    <option value="adsblol-relay" selected>adsb.lol — general aircraft via public CORS relay (experimental)</option>
+    <option value="intelsky">IntelSky — direct browser API (military/government only)</option>
     <option value="airlabs">AirLabs (optional personal API key · broader flights)</option>
     <option value="custom">Custom HTTPS/CORS ADS-B feed (full network if supplied)</option>
     <option value="off">Off — radio only</option>
@@ -55,7 +56,7 @@
   </label>
    <button id="networkApply" type="button">Enable / refresh Internet layer</button>
   </div>
-  <p class="usb-hint">Direct browser network data uses the selected provider's permitted HTTPS/CORS API. IntelSky may have zero aircraft in your region; AirLabs requires a personal key. This never stops your antenna or readsb. General network feeds without CORS require your own approved relay.</p>
+  <p class="usb-hint"><strong>General flights:</strong> adsb.lol is used through an independent public cors.dev relay because its API does not permit direct GitHub Pages requests. The relay receives your browser IP and an approximately 10 km-rounded map center, <strong>never raw USB IQ</strong>; it may be rate-limited or unavailable. Data © adsb.lol (ODbL 1.0). Select IntelSky for direct, keyless but limited military/government coverage; AirLabs requires your own key. Your SDR continues independently if any Internet service fails.</p>
  </section>
  <details class="bridge-advanced"><summary>Optional: paired receiver / Internet feed settings (advanced)</summary>
  <div class="toolbar">
@@ -70,7 +71,7 @@
   <button id="refresh">Refresh now</button><button id="installApp" hidden>Install web app</button><button id="legacyTar" title="Only works with an independent live readsb JSON backend">External tar1090 (readsb required)</button>
  </div>
  </details>
- <div class="notice" id="sourceHelp">Browser-first radar: choose RTL-SDR above for direct WebUSB reception, or use an authorized HTTPS CORS-enabled Internet feed (advanced) without USB. A paired readsb bridge remains optional for Firefox/Safari or professional receiver features. The built-in IntelSky browser source covers a limited set of military/government contacts and may have no aircraft in your search region; it is NOT a full general ADS-B network. Full-network feeds like adsb.lol need a trusted HTTPS/CORS relay or a provider-owned key. Real hardware requires exclusive OS USB access. <a href="https://github.com/Tihulu/tihulu-flight-radar/blob/main/docs/GITHUB_PAGES_AND_LOCAL_BRIDGE.md" target="_blank" rel="noopener noreferrer">Setup guide</a></div>
+ <div class="notice" id="sourceHelp">Browser-first radar: choose RTL-SDR above for direct WebUSB reception, or use an authorized HTTPS CORS-enabled Internet feed (advanced) without USB. A paired readsb bridge remains optional for Firefox/Safari or professional receiver features. The built-in IntelSky browser source covers a limited set of military/government contacts and may have no aircraft in your search region; it is NOT a full general ADS-B network. General ADS-B flights can be tried through the labeled community relay; a private owner-hosted HTTPS/CORS relay is recommended for reliable coverage. Real hardware requires exclusive OS USB access. <a href="https://github.com/Tihulu/tihulu-flight-radar/blob/main/docs/GITHUB_PAGES_AND_LOCAL_BRIDGE.md" target="_blank" rel="noopener noreferrer">Setup guide</a></div>
  <div class="metrics" aria-label="Live source statistics">
   <div class="metric"><span>Local aircraft</span><strong id="localCount">—</strong></div>
   <div class="metric"><span>Online aircraft</span><strong id="onlineCount">—</strong></div>
