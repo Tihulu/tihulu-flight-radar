@@ -61,7 +61,7 @@ function paintAircraft(ctx,a,x,y){
 }
 const canvas = $("map"), ctx = canvas.getContext("2d");
 const state = {
-  base:"", token:"", onlineFeed:"", onlineProvider:"intelsky", internetBackoffUntil:0, airlabsLastFetch:0, connectionKind:"none", connected:false, data:[], mode:"auto", selected:null, 
+  base:"", token:"", onlineFeed:"", onlineProvider:"adsblol-relay", internetBackoffUntil:0, airlabsLastFetch:0, relayLastFetch:0, connectionKind:"none", connected:false, data:[], mode:"auto", selected:null, 
   lat:initialCenter.lat, lon:initialCenter.lon, zoom:9, moved:false, autoFocused:false,
   startupLocationPending:true, startupGeo:null, startupRank:1, startupSource:"cologne",
   startupQueryDirty:false,
@@ -164,10 +164,14 @@ function getFeedURL(raw){
 // A keyless browser-compatible limited network source; not the full ADS-B
 // population. Public general ADS-B APIs commonly require a CORS-enabled relay.
 const INTELSKY_URL="https://intelsky.org/api/";
+const ADSBLOL_PUBLIC_RELAY="https://proxy.cors.dev/";
+// Shared third-party relay (not controlled by TIHULU), not a production SLA.
+// Only public map center is sent; never antenna IQ, browser keys or location permission.
 function configuredOnlineFeed(){
  const provider=$("onlinePreset")?.value||"intelsky";
  let url="";
  if(provider==="intelsky")url=INTELSKY_URL;
+ else if(provider==="adsblol-relay")url=ADSBLOL_PUBLIC_RELAY;
  else if(provider==="airlabs"){
   if(!String($("airlabsKey")?.value||"").trim())
    throw Error("AirLabs needs your personal API key (session only).");
@@ -184,7 +188,7 @@ function greatCircleNM(lat1,lon1,lat2,lon2){
   Math.sin(p/2)**2+Math.cos(lat1*r)*Math.cos(lat2*r)*Math.sin(q/2)**2))));
 }
 function normalizeInternetPayload(raw,provider,lat,lon,radius,now=Date.now()/1000){
- const limited=provider==="intelsky";
+ const limited=provider==="intelsky", relay=provider==="adsblol-relay";
  if(provider==="airlabs"){
   if(raw?.error)throw Error("AirLabs: "+String(raw.error.message||raw.error.code||"API error").slice(0,150));
   if(!Array.isArray(raw?.response))throw Error("AirLabs response has no aircraft array.");
@@ -205,11 +209,11 @@ function normalizeInternetPayload(raw,provider,lat,lon,radius,now=Date.now()/100
   raw={generated_at:now,aircraft:rows,provider:"AirLabs",
     attribution:"AirLabs.co · API-key-based live flight data (plan coverage and quotas apply)"};
  }
- const stamp=Number(limited?raw?.now:raw?.generated_at);
+ const stamp=Number((limited||relay)?raw?.now:raw?.generated_at);
  const age=now-stamp;
  if(!Number.isFinite(stamp)||age < -10||age > 90)
   throw Error("Missing or stale Internet snapshot timestamp.");
- const records=limited?raw?.ac:raw?.aircraft;
+ const records=(limited||relay)?raw?.ac:raw?.aircraft;
  if(!Array.isArray(records))throw Error("Invalid Internet aircraft schema.");
  const seenIds=new Set(),planes=[];
  for(const a of records.slice(0,10000)){
@@ -231,11 +235,12 @@ function normalizeInternetPayload(raw,provider,lat,lon,radius,now=Date.now()/100
  }
  const attribution=limited
   ?"IntelSky.org · limited military/government network coverage"
+  :relay?"adsb.lol (ODbL 1.0) · via public cors.dev relay"
   :raw.attribution||"Check provider's attribution and usage terms";
  return {generated_at:stamp,active_sources:["internet"],aircraft:planes,
   counts:{antenna:0,internet:planes.length,combined:planes.length},
   sources:{antenna:{state:"unavailable",error:"No local receiver selected"},
-   internet:{state:"available",provider:limited?"IntelSky":raw.provider||"Custom CORS feed",
+   internet:{state:"available",provider:limited?"IntelSky":relay?"adsb.lol (public CORS relay)":raw.provider||"Custom CORS feed",
      attribution,updated_at:stamp,limited_coverage:limited}}};
 }
 async function fetchInternetFeed(){
@@ -243,9 +248,12 @@ async function fetchInternetFeed(){
  if(Date.now()<state.internetBackoffUntil)
   throw Error("Internet feed cooling down after rate limit or outage; retry later.");
  const limited=state.onlineProvider==="intelsky",airlabs=state.onlineProvider==="airlabs";
+ const relay=state.onlineProvider==="adsblol-relay";
  // User-owned free API keys have quotas; avoid spending one every 15 seconds.
  // Old provider snapshots age out naturally in browserSourceResult.
  if(airlabs && state.internetSnapshot && Date.now()-state.airlabsLastFetch<60000)
+  return state.internetSnapshot;
+ if(relay && state.internetSnapshot && Date.now()-state.relayLastFetch<30000)
   return state.internetSnapshot;
  const u=new URL(state.onlineFeed);
  if(airlabs){
@@ -257,6 +265,11 @@ async function fetchInternetFeed(){
     Math.min(90,state.queryLat+latD),Math.min(180,state.queryLon+lonD)
   ].map(x=>x.toFixed(3)).join(","));
   u.searchParams.set("_fields","hex,flight_icao,flight_iata,flight_number,lat,lng,alt,dir,speed,updated,aircraft_icao,reg_number");
+ }else if(relay){
+  const lat=state.queryLat.toFixed(3),lon=state.queryLon.toFixed(3);
+  const radius=Math.max(10,Math.min(250,state.queryRadius));
+  // Strictly fixed upstream target; no user-supplied arbitrary fetch URLs.
+  u.pathname="/https://api.adsb.lol/v2/point/"+lat+"/"+lon+"/"+radius;
  }else if(!limited){
   u.searchParams.set("lat",state.queryLat.toFixed(3));
   u.searchParams.set("lon",state.queryLon.toFixed(3));
@@ -275,9 +288,10 @@ async function fetchInternetFeed(){
   }
   const text=await response.text();
   if(text.length>4*1024*1024)throw Error("Internet response exceeds 4 MiB.");
-  const normalized=normalizeInternetPayload(JSON.parse(text),limited?"intelsky":airlabs?"airlabs":"custom",
+  const normalized=normalizeInternetPayload(JSON.parse(text),limited?"intelsky":airlabs?"airlabs":relay?"adsblol-relay":"custom",
     state.queryLat,state.queryLon,state.queryRadius);
   if(airlabs)state.airlabsLastFetch=Date.now();
+  if(relay)state.relayLastFetch=Date.now();
   return normalized;
  }catch(error){
   if(error?.name==="AbortError")throw Error("Internet feed timeout (10 seconds).");
@@ -352,6 +366,7 @@ function browserSourceResult(mode=String($("mode").value),internetError=null){
       error:internetError,provider:state.internetSnapshot?.sources?.internet?.provider,
       attribution:attribution||(
         state.onlineProvider==="intelsky"?"IntelSky.org · limited military/government coverage":
+       state.onlineProvider==="adsblol-relay"?"adsb.lol (ODbL 1.0) via public CORS relay":
         "Network provider attribution not yet available"),
       limited_coverage:state.onlineProvider==="intelsky",
       updated_at:state.internetSnapshot?.sources?.internet?.updated_at}
