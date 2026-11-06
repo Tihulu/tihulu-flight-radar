@@ -214,3 +214,45 @@ def test_active_decoder_with_zero_messages_is_not_reported_as_rf_reception():
     assert rf["state"]=="decoder_no_rf_messages"
     assert "no ADS-B messages" in rf["note"]
     assert result["counts"]["antenna"]==0
+
+
+def test_tar_status_does_not_trust_static_html_without_live_decoder(monkeypatch):
+    import tihulu_flight_radar.core as core
+    bridge = Bridge(token="test")
+    monkeypatch.setattr(core, "find_tar1090_url", lambda: None)
+    status = bridge.tar1090_status()
+    assert status["available"] is False
+    assert status["url"] is None
+    assert "aircraft.json" in status["reason"]
+    monkeypatch.setattr(core, "find_tar1090_url",
+                        lambda: "http://127.0.0.1/tar1090/")
+    status = bridge.tar1090_status()
+    assert status["available"] is True
+    assert status["url"] == "http://127.0.0.1/tar1090/"
+
+
+def test_tar_status_is_bearer_protected_and_does_not_claim_an_sdr(monkeypatch):
+    import tihulu_flight_radar.core as core
+    monkeypatch.setattr(core, "find_tar1090_url", lambda: None)
+    bridge = Bridge(token="tar-token")
+    bridge.receiver.snapshot = lambda: (_ for _ in ()).throw(
+        AssertionError("tar status must not open SDR"))
+    server = ThreadingHTTPServer(("127.0.0.1", 0), BaseHTTPRequestHandler)
+    server.RequestHandlerClass = make_handler(bridge, server.server_port)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    url = f"http://127.0.0.1:{server.server_port}/api/tar-status"
+    try:
+        with pytest.raises(urllib.error.HTTPError) as exc:
+            urllib.request.urlopen(url, timeout=3)
+        assert exc.value.code == 401
+        req = urllib.request.Request(url, headers={
+            "Authorization": "Bearer tar-token",
+            "Origin": "https://tihulu.github.io"})
+        with urllib.request.urlopen(req, timeout=3) as response:
+            result = json.load(response)
+            assert result["available"] is False
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=3)
