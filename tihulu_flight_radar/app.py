@@ -700,9 +700,13 @@ class RadarWindow(QMainWindow):
 
     def closeEvent(self, event):
         self.timer.stop()
-        # Drain any pending Start action BEFORE release; otherwise a late
-        # worker could start readsb after close() already ran.
-        self.pool.shutdown(wait=True, cancel_futures=True)
+        # Let an in-flight Start/Restart finish before releasing the receiver.
+        # Keep the executor available if close fails, so Stop can be retried.
+        if self.action_future is not None:
+            try:
+                self.action_future.result(timeout=35)
+            except Exception:
+                pass
         try:
             self.controller.close()
         except DataError as exc:
@@ -712,6 +716,7 @@ class RadarWindow(QMainWindow):
             event.ignore()
             self.timer.start(2000)
             return
+        self.pool.shutdown(wait=True, cancel_futures=True)
         self.map_server.close()
         super().closeEvent(event)
 
