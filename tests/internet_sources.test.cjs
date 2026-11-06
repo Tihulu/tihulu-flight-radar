@@ -202,6 +202,7 @@ test("Public CORS relay uses fixed adsb.lol endpoint, rounds location and caches
  assert.equal(calls[0].url,"https://proxy.cors.dev/https://api.adsb.lol/v2/point/50.9/7.0/100");
  assert.equal(calls[0].options.credentials,"omit");
  assert.equal(first.counts.internet,1);
+ state.internetSnapshot=first; // the caller stores network snapshots for Hybrid mode
  const same=await fn();
  assert.equal(same,first);
  assert.equal(calls.length,1);
