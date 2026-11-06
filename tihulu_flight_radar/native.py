@@ -35,9 +35,11 @@ class EmbeddedRadarView(QWebEngineView):
         dialog.resize(1180, 800)
         layout = QVBoxLayout(dialog)
         from .tar_overlay import TarOverlayView
-        owner = self.window()
-        provider = getattr(getattr(owner, "bridge", None), "online", None)
-        child = TarOverlayView(dialog, provider=provider, assume_tar=True)
+        # Give the full tar viewer its own bounded feed cache. Previously it
+        # shared the main map's single-key 35-second cooldown, so querying a
+        # different tar1090 viewport returned no aircraft despite a healthy
+        # Internet feed in the main window.
+        child = TarOverlayView(dialog, assume_tar=True)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(child)
         self._popups.append(dialog)
@@ -104,7 +106,12 @@ class NativeRadarWindow(QMainWindow):
         self.web = EmbeddedRadarView(self)
         self.setCentralWidget(self.web)
         self.web.loadFinished.connect(self._paired_on_loaded)
-        self.web.setUrl(QUrl(self.local_url + "/"))
+        # This desktop installation can start in the selected region without
+        # misrepresenting it as the real antenna position or requesting GPS.
+        region = str(self.settings.value("start_region", "cologne")).lower()
+        if region not in ("cologne", "germany"):
+            region = "germany"
+        self.web.setUrl(QUrl(self.local_url + "/?region=" + region))
 
         self.classic_window = None
         self._startup_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="tihulu-rf-start")
