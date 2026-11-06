@@ -209,11 +209,8 @@ window.tihuluStopUsb=stop;
 navigator.usb?.addEventListener("disconnect",()=>{
  if(device||chosenDevice)void stop();
 });
-// By default hiding this tab releases USB; opt-in continuity allows one RF owner
-// to share decoded flights with the SAME-ORIGIN Geolocation app while hidden.
-// Page close/navigation and Hard Stop always release the SDR.
-document.addEventListener("visibilitychange",()=>{
- if(document.hidden&&device&&!$("usbKeepHidden")?.checked)void stop();
-});
+// Give other SDR programs their dongle back when browsing away or hiding
+// this tab; no background capture or device handle is intentionally retained.
+document.addEventListener("visibilitychange",()=>{if(document.hidden && device)void stop()});
 window.addEventListener("pagehide",()=>{if(device||chosenDevice)void stop()});
 void preload();

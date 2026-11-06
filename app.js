@@ -419,43 +419,15 @@ window.tihuluUsbStarted=()=>{
   ?"WebUSB started with antenna only; Internet configuration requires attention: "+networkSetupError
   :"Browser SDR connected. Loading the selected Internet network alongside real RF.");
 };
-// Same-origin, browser-local sharing with TIHULU RF Geolocation Center.
- // Only real direct RTL-SDR ADS-B decoder snapshots, never internet feed aircraft.
- // Does not make another USB connection; one tab owns the dongle.
-const rfGeoAircraftChannel=typeof BroadcastChannel!=="undefined"?
-  new BroadcastChannel("tihulu.rfgeo.adsb.v1"):null;
-let rfGeoLastAircraftPublish=0;
-function publishRFGeoAntennaAircraft(packet){
- if(!rfGeoAircraftChannel||state.connectionKind!=="usb"||!packet||Date.now()-rfGeoLastAircraftPublish<1000)return;
- const now=Date.now();
- const aircraft=(Array.isArray(packet.aircraft)?packet.aircraft:[])
-  .filter(a=>a&&/^[0-9a-f]{6}$/i.test(String(a.hex||""))&&
-    Number.isFinite(a.lat)&&Math.abs(a.lat)<=90&&Number.isFinite(a.lon)&&Math.abs(a.lon)<=180&&
-    Number.isFinite(a.seen_pos)&&a.seen_pos>=0&&a.seen_pos<=60)
-  .slice(0,150).map(a=>({hex:a.hex,flight:String(a.flight||"").trim().slice(0,24),
-    lat:a.lat,lon:a.lon,alt_baro:Number.isFinite(a.alt_baro)?a.alt_baro:null,
-    seen_pos:a.seen_pos}));
- rfGeoLastAircraftPublish=now;
- try{rfGeoAircraftChannel.postMessage({type:"actual_adsb",app:"tihulu-flight-radar",
-   decoder:"LOCAL RTL-SDR / CRC-VALID MODE S ADS-B CPR",timestamp:now,
-   messages:Number(packet.messages)||0,aircraft})}catch{}
-}
-function stopRFGeoAntennaAircraft(){
- try{rfGeoAircraftChannel?.postMessage({type:"stopped",app:"tihulu-flight-radar",
-   timestamp:Date.now(),aircraft:[]})}catch{}
-}
-
 window.tihuluUsbSnapshot=packet=>{
  if(state.connectionKind!=="usb")return;
  state.usbSnapshot=packet;
  state.usbMessageCount=packet.messages||0;
- publishRFGeoAntennaAircraft(packet);
  displayUsbSnapshot();
 };
 window.tihuluUsbError=message=>notice("Direct USB: "+message);
 window.tihuluUsbStopped=()=>{
  if(state.connectionKind!=="usb")return;
- stopRFGeoAntennaAircraft();
  state.usbSnapshot={aircraft:[],messages:0,updatedAt:0};
  state.usbMessageCount=0;state.data=[];state.lastData=[];
  if(state.onlineFeed){
@@ -1123,5 +1095,3 @@ if(location.hostname==="tihulu.github.io"){
 }
 
 initializeStartupLocation();
-
-window.addEventListener("pagehide",()=>{stopRFGeoAntennaAircraft();try{rfGeoAircraftChannel?.close()}catch{}});
