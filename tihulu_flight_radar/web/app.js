@@ -890,22 +890,26 @@ $("legacyTar").onclick=async()=>{
   notice("tar1090 needs a separate live readsb JSON backend. Your SDR is owned by this WebUSB tab, so use this full browser map. Stop WebUSB before switching the same antenna to readsb.");
   return;
  }
- if(state.connectionKind==="bridge"){
-  try{
-   const status=await api("/api/status");
-   if(!status.active){
-    setRadarExpanded(true);
-    notice("Local readsb decoder inactive: tar1090 has no live aircraft.json. Showing the integrated radar instead.");
-    return;
-   }
-  }catch(error){
-   setRadarExpanded(true);
-   notice("Cannot verify readsb backend: "+String(error.message||error)+". Using the in-app map.");
-   return;
-  }
+ // A running readsb process is not proof that tar1090 has fresh JSON.
+ // GitHub Pages cannot share this tab's WebUSB receiver with tar1090.
+ if(state.connectionKind!=="bridge"){
+  setRadarExpanded(true);
+  notice("No independently verified tar1090 decoder. This full browser map retains genuine WebUSB aircraft and Internet layers.");
+  return;
  }
- const raw=prompt("External tar1090 URL (requires separately running readsb/data/aircraft.json):",
-  "http://127.0.0.1/tar1090/");
+ let live;
+ try{live=await api("/api/tar-status");}
+ catch(error){
+  setRadarExpanded(true);
+  notice("Unable to verify tar1090 aircraft.json: "+String(error.message||error)+". Showing the working integrated radar.");
+  return;
+ }
+ if(!live.available || !live.url){
+  setRadarExpanded(true);
+  notice(live.reason||"tar1090 has no fresh readsb aircraft.json; use this full radar.");
+  return;
+ }
+ const raw=prompt("Verified separate tar1090 receiver URL:",live.url);
  if(raw===null)return;
  try{window.open(tarFocusURL(raw),"_blank","noopener,noreferrer");}
  catch(error){notice("Invalid tar1090 URL: "+error.message);}
