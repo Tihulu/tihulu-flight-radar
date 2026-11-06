@@ -70,3 +70,59 @@ test("Internet feed URL requires trusted HTTPS endpoint without keys in query",(
  assert.throws(()=>fn("http://feed.example/api/aircraft"),/HTTPS/);
  assert.throws(()=>fn("https://feed.example/api/aircraft?key=foo"),/without embedded keys/);
 });
+
+
+test("Auto focus respects the chosen Internet search region, not Germany center",()=>{
+ const state={moved:false,autoFocused:false,zoom:7,
+  queryLat:50.938,queryLon:6.96,lat:51.1657,lon:10.4515,
+  data:[
+   {hex:"123456",lat:50.95,lon:6.96,seen:2,seen_pos:2,sources:["internet"]},
+   {hex:"abcdef",lat:51.1657,lon:10.4515,seen:2,seen_pos:2,sources:["internet"]}
+  ]};
+ let painted=0;
+ const fn=vm.runInNewContext(extract("focusAir")+"\nfocusAir", {
+  state,visible:()=>true,isPositioned:a=>a.seen_pos<=60,paint:()=>{painted++},
+  GERMANY:{lat:51.1657,lon:10.4515},Math
+ });
+ fn(true);
+ assert.equal(state.lat,50.95);
+ assert.equal(state.lon,6.96);
+ assert.equal(state.autoFocused,true);
+ assert.ok(painted);
+});
+
+test("Camera movement cannot silently retarget the online API's search area",()=>{
+ assert.match(js,/queryLat:initialCenter\.lat/);
+ assert.match(js,/lat:state\.queryLat\.toFixed\(3\)/);
+ assert.match(js,/lon:state\.queryLon\.toFixed\(3\)/);
+ assert.match(js,/searchHere/);
+ assert.match(js,/queryLat=state\.lat/);
+ const html=fs.readFileSync(path.join(root,"tihulu_flight_radar/web/index.html"),"utf8");
+ assert.match(html,/id="cologne"/);
+ assert.match(html,/id="searchHere"/);
+ assert.match(html,/id="sourceCredits"/);
+});
+
+test("Qt's tar1090 MainWorld script probes OpenLayers and hides receiver overlays",()=>{
+ const py=fs.readFileSync(path.join(root,"tihulu_flight_radar/tar_overlay.py"),"utf8");
+ const m=py.match(/MAP_CENTER_JS = r"""([\s\S]*?)"""/);
+ assert.ok(m);
+ const script=m[1];
+ new vm.Script(script);
+ let center=[-74,40],zoom=4;
+ const layers=[];
+ const view={getCenter:()=>center,setCenter:x=>{center=x},setZoom:z=>{zoom=z}};
+ const ctx={
+  URLSearchParams,location:{search:"?tihuluFocusLat=50.938&tihuluFocusLon=6.960&zoom=9"},
+  window:{},OLMap:{getView:()=>view},ol:{proj:{fromLonLat:x=>x,toLonLat:x=>x}},
+  siteCircleLayer:{setVisible:b=>layers.push(["circle",b])},
+  locationDotLayer:{setVisible:b=>layers.push(["dot",b])},
+ };
+ const result=vm.runInNewContext(script,ctx);
+ assert.equal(result.ready,true);
+ assert.equal(result.lat,50.938);
+ assert.equal(result.lon,6.960);
+ assert.equal(zoom,9);
+ assert.deepEqual(layers,[["circle",false],["dot",false]]);
+ assert.equal(ctx.window.tihuluTarCameraApplied,true);
+});
