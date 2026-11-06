@@ -140,22 +140,51 @@ def detect_sdr_processes() -> list[str]:
                    if name.strip().lower() in CONFLICT_PROCESSES})
 
 
+def tar1090_data_fresh(payload: object, *, now: float | None = None) -> bool:
+    """A served tar1090 HTML page does not prove readsb data exists.
+
+    /tar1090/data/aircraft.json must be actual recent decoder JSON. Empty
+    lists are allowed; fabricated planes and fixed fake timestamps are not.
+    """
+    if not isinstance(payload, dict) or not isinstance(payload.get("aircraft"), list):
+        return False
+    observed = payload.get("now")
+    current = time.time() if now is None else now
+    return (isinstance(observed, (int, float)) and not isinstance(observed, bool)
+            and math.isfinite(observed) and 0 <= current - observed <= DATA_TIMEOUT_SECONDS)
+
+
 def find_tar1090_url() -> str | None:
-    """Find a working local tar1090 frontend, without trusting proxies."""
+    """Find a local tar1090 UI backed by actual fresh readsb aircraft.json.
+
+    If browser WebUSB owns the only SDR, readsb is commonly stopped. In
+    that case the static tar1090 HTML might still be HTTP 200, but its
+    backend is dead: return None instead of showing the misleading grey map.
+    """
     from urllib.error import HTTPError, URLError
     from urllib.request import ProxyHandler, build_opener
+    from urllib.parse import urljoin
 
     opener = build_opener(ProxyHandler({}))
     for url in TAR1090_URLS:
         try:
             with opener.open(url, timeout=1.6) as response:
-                if (response.status == 200 and
+                if not (response.status == 200 and
                         "text/html" in response.headers.get("Content-Type", "")):
-                    return url
-        except (URLError, HTTPError, OSError, TimeoutError):
+                    continue
+            with opener.open(urljoin(url, "data/aircraft.json"), timeout=1.6) as response:
+                if response.status != 200:
+                    continue
+                raw = response.read(MAX_JSON_BYTES + 1)
+            if len(raw) > MAX_JSON_BYTES:
+                continue
+            payload = json.loads(raw)
+            if tar1090_data_fresh(payload):
+                return url
+        except (URLError, HTTPError, OSError, TimeoutError,
+                ValueError, UnicodeDecodeError, json.JSONDecodeError):
             continue
     return None
-
 
 def lan_ip() -> str | None:
     """Find the LAN IP for the legacy local tar1090 route."""
