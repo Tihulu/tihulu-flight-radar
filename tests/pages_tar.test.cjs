@@ -232,3 +232,51 @@ test("tar1090 inherits permitted location over a nearby radio plane",()=>{
  assert.equal(params.get("tihuluFocusLon"),"27.100000");
  assert.equal(params.has("icao"),false);
 });
+
+
+test("tar1090 source controls live inside map_container, not atop the selected aircraft sidebar",()=>{
+ const py=fs.readFileSync(path.join(root,"tihulu_flight_radar/tar_overlay.py"),"utf8");
+ const m=py.match(/BOOTSTRAP_JS = r"""([\s\S]*?)"""/);
+ assert.ok(m,"bootstrap script missing");
+ new vm.Script(m[1]);
+ const selected={id:"selected_infoblock"};
+ const host={
+  id:"map_container",children:[],
+  appendChild(node){
+   if(node.parentElement && node.parentElement.children){
+    node.parentElement.children=node.parentElement.children.filter(x=>x!==node);
+   }
+   node.parentElement=this;this.children.push(node);
+  }
+ };
+ const elements=new Map([["map_container",host],["selected_infoblock",selected]]);
+ const doc={
+  getElementById:id=>elements.get(id)||null,
+  createElement:tag=>{
+   const node={tagName:tag.toUpperCase(),style:{},textContent:"",parentElement:null};
+   Object.defineProperty(node,"id",{
+    get(){return node._id;},
+    set(v){node._id=v;elements.set(v,node);}
+   });
+   return node;
+  },
+  body:{children:[],appendChild(){throw Error("Do not mount on body over infoblock")}}
+ };
+ const ctx={document:doc};
+ vm.runInNewContext(m[1],ctx);
+ const panel=elements.get("tihulu-tar-overlay-panel");
+ assert.ok(panel);
+ assert.equal(panel.parentElement,host);
+ assert.ok(panel.style.cssText.includes("position:absolute"));
+ assert.ok(panel.style.cssText.includes("max-width:calc(100% - 24px)"));
+ assert.ok(!panel.style.cssText.includes("position:fixed"));
+ assert.ok(!selected.children?.includes(panel));
+ vm.runInNewContext(m[1],ctx);
+ assert.equal(host.children.length,1,"re-injection must not duplicate the panel");
+ assert.equal(host.children[0],panel);
+ const overlay=py.match(/OVERLAY_JS = r"""([\s\S]*?)"""/);
+ assert.ok(overlay);
+ assert.match(overlay[1],/getElementById\('map_container'\)/);
+ assert.match(overlay[1],/panel\.parentElement!==host/);
+ assert.doesNotMatch(overlay[1],/document\.body\.appendChild\(panel\)/);
+});
