@@ -632,7 +632,7 @@ class RadarWindow(QMainWindow):
         dialog.resize(1170, 800)
         layout = QVBoxLayout(dialog)
         layout.setContentsMargins(0, 0, 0, 0)
-        view = (TarOverlayView(dialog) if "/tar1090" in url
+        view = (TarOverlayView(dialog, assume_tar=True) if title.startswith("Full tar1090")
                 else QWebEngineView(dialog))
         layout.addWidget(view)
         view.setUrl(QUrl(url))
