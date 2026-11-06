@@ -9,6 +9,8 @@ on:
       - "scripts/build-web-tar1090.sh"
       - "scripts/build-browser-assets.sh"
       - "tests/internet_sources.test.cjs"
+      - "tests/multi_sources.test.cjs"
+      - "tests/test_multi_sources.py"
       - "tests/webusb_sampleblock.test.cjs"
   pull_request:
     branches: [main]
@@ -43,6 +45,7 @@ jobs:
         run: |
           test -s tihulu_flight_radar/web/index.html
           test -s tihulu_flight_radar/web/style.css
+          node --check tihulu_flight_radar/web/multi_sources.js
           node --check tihulu_flight_radar/web/app.js
           node --check tihulu_flight_radar/web/sw.js
           node --check tihulu_flight_radar/web/browser_usb.mjs
@@ -63,11 +66,12 @@ jobs:
           PY
           bash -n scripts/rtl-sdr-usb-interface.sh
           node --check deploy/cloudflare-worker.mjs
-          node --test tests/web_bridge.test.cjs tests/pages_tar.test.cjs tests/browser_adsb.test.cjs tests/browser_source.test.cjs tests/aircraft_visuals.test.cjs tests/webusb_sampleblock.test.cjs tests/internet_sources.test.cjs tests/tar_full_browser.test.cjs
+          node --test tests/web_bridge.test.cjs tests/pages_tar.test.cjs tests/browser_adsb.test.cjs tests/browser_source.test.cjs tests/aircraft_visuals.test.cjs tests/webusb_sampleblock.test.cjs tests/internet_sources.test.cjs tests/multi_sources.test.cjs tests/tar_full_browser.test.cjs
           python3 -m json.tool tihulu_flight_radar/web/manifest.webmanifest >/dev/null
           test -s tihulu_flight_radar/web/icon.svg
           test -s tihulu_flight_radar/web/sw.js
           test -s tihulu_flight_radar/web/browser_usb.mjs
+          test -s tihulu_flight_radar/web/multi_sources.js
           test -s tihulu_flight_radar/web/adsb_worker.mjs
           test -s tihulu_flight_radar/web/usb_tools.mjs
           test -s tihulu_flight_radar/web/vendor/rtlsdr.mjs
