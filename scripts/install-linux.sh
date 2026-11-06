@@ -36,7 +36,7 @@ sudo apt-get update
 sudo apt-get install -y --no-install-recommends \
   pipx python3-venv git curl sudo \
   libegl1 libgl1 libxkbcommon0 libxcb-cursor0 libdbus-1-3 libglib2.0-0 \
-  libnss3 libnspr4 libxcomposite1 libxdamage1 libxrandr2 libgbm1
+  libnss3 libnspr4 libxcomposite1 libxdamage1 libxrandr2 libgbm1 libxtst6
 
 # pipx --force replaces a previously installed version with the selected ref.
 # Do not uninstall first: a failed download must not remove the existing app.
