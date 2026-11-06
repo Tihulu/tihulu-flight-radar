@@ -35,11 +35,13 @@ jobs:
         run: test "$(uname -m)" = arm64
       - name: Run unit tests
         run: python -m pytest -q
+      - name: Verify embedded native desktop entrypoint
+        run: python -c "from tihulu_flight_radar.native import NativeRadarWindow; print(NativeRadarWindow.__name__)"
       - name: Validate Linux installer syntax
         if: matrix.label == 'linux-x64'
         run: bash -n scripts/install-linux.sh
       - name: Verify map autofocus / nearest-aircraft logic
-        run: node --test tests/map_focus.test.cjs tests/map_html.test.cjs
+        run: node --test tests/map_focus.test.cjs tests/map_html.test.cjs tests/web_bridge.test.cjs
       - name: Install Linux Qt runtime dependencies
         if: matrix.label == 'linux-x64'
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libegl1 libgl1 libxkbcommon0 libdbus-1-3
@@ -85,6 +87,8 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: /opt/tihulu-venv/bin/python scripts/qt_smoke.py
+      - name: Verify embedded native desktop entrypoint
+        run: /opt/tihulu-venv/bin/python -c "from tihulu_flight_radar.native import NativeRadarWindow; print(NativeRadarWindow.__name__)"
       - name: Compile Python
         run: /opt/tihulu-venv/bin/python -m compileall -q tihulu_flight_radar
       - name: Build Debian-compatible preview
