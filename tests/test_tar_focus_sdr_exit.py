@@ -21,8 +21,12 @@ def test_tar_camera_selects_nearest_genuine_local_aircraft_and_preserves_other_p
     q=params(focused_tar_url("http://127.0.0.1/tar1090/?enableLabels", data))
     assert q["icao"] == ["3c1234"]
     assert "noIsolation" in q
-    assert q["SiteLat"] == ["50.900000"]
-    assert q["SiteLon"] == ["7.100000"]
+    assert q["tihuluFocusLat"] == ["50.900000"]
+    assert "SiteLat" not in q
+    assert q["rangeRings"] == ["0"]
+    assert q["tihuluFocusLon"] == ["7.100000"]
+    assert "SiteLon" not in q
+    assert "centerReceiver" not in q
     assert q["zoom"] == ["10"]
     assert "enableLabels" in q
 
@@ -30,8 +34,10 @@ def test_tar_camera_selects_nearest_genuine_local_aircraft_and_preserves_other_p
 def test_tar_camera_ignores_stale_positions_and_uses_germany_default():
     data={"aircraft":[aircraft(seen=180), aircraft(seen_pos=150)]}
     q=params(focused_tar_url("http://localhost/tar1090/?SiteLat=39&SiteLon=-99&zoom=4",data))
-    assert q["SiteLat"] == [f"{GERMANY[0]:.6f}"]
-    assert q["SiteLon"] == [f"{GERMANY[1]:.6f}"]
+    assert q["tihuluFocusLat"] == [f"{GERMANY[0]:.6f}"]
+    assert "SiteLat" not in q
+    assert q["tihuluFocusLon"] == [f"{GERMANY[1]:.6f}"]
+    assert "SiteLon" not in q
     assert q["zoom"] == ["7"]
     assert "icao" not in q
 
@@ -39,8 +45,8 @@ def test_tar_camera_ignores_stale_positions_and_uses_germany_default():
 def test_tar_camera_authorized_receiver_precedes_germany_only_if_no_aircraft():
     q=params(focused_tar_url("http://127.0.0.1/tar1090/", {"aircraft":[]},
                              receiver=(38.4, 27.1)))
-    assert q["SiteLat"] == ["38.400000"]
-    assert q["SiteLon"] == ["27.100000"]
+    assert q["tihuluFocusLat"] == ["38.400000"]
+    assert q["tihuluFocusLon"] == ["27.100000"]
 
 
 def test_receiver_close_releases_preexisting_linux_readsb_when_requested(monkeypatch):
