@@ -5,17 +5,21 @@ const $ = id => document.getElementById(id);
 const GERMANY = {lat:51.1657, lon:10.4515};
 const COLOGNE = {lat:50.938, lon:6.960};
 const startRegion = new URLSearchParams(location.search).get("region");
-const initialCenter = startRegion === "cologne" ? COLOGNE : GERMANY;
+// Startup priority: consented geolocation > nearest real RF-positioned plane > Cologne.
+// The old region query is retained only for explicit later user controls.
+const initialCenter = COLOGNE;
 const COLORS = {antenna:"#50dcad", internet:"#5cafe8", both:"#e6b56b"};
 const canvas = $("map"), ctx = canvas.getContext("2d");
 const state = {
   base:"", token:"", onlineFeed:"", connectionKind:"none", connected:false, data:[], mode:"auto", selected:null, 
-  lat:initialCenter.lat, lon:initialCenter.lon, zoom:8, moved:false, autoFocused:false,
+  lat:initialCenter.lat, lon:initialCenter.lon, zoom:9, moved:false, autoFocused:false,
+  startupLocationPending:true, startupGeo:null, startupRank:1, startupSource:"cologne",
+  startupQueryDirty:false,
   // Camera movement must not change the API search key during feed cooldown.
   queryLat:initialCenter.lat, queryLon:initialCenter.lon, queryRadius:100,
   lastFreshAt:0, lastData:[],
   pointer:null, tracks:new Map(), tiles:new Map(), tileFailures:0, fetching:false, timer:null,
-  centerLabel:(startRegion==="cologne"?"Cologne regional view":"Germany default view")+" · not receiver location"
+  centerLabel:"Cologne startup fallback · awaiting location permission / radio aircraft"
 };
 const selectors = ["showAntenna","showInternet","showBoth","showTracks","showTiles"];
 function notice(s){$("message").textContent=s}
@@ -23,6 +27,59 @@ function isPositioned(a){
  return a && Number.isFinite(a.lat) && Number.isFinite(a.lon) &&
   a.lat >= -90 && a.lat <= 90 && a.lon >= -180 && a.lon <= 180 &&
   Number.isFinite(a.seen_pos) && a.seen_pos >= 0 && a.seen_pos <= 60;
+}
+// Pure startup choice; only the radio-sourced position qualifies as RF.
+// A merged aircraft whose position came from the Internet is not radio GPS.
+function chooseStartupTarget(geo, aircraft){
+ const valid=p=>p && Number.isFinite(p.lat) && Number.isFinite(p.lon) &&
+   Math.abs(p.lat)<=90 && Math.abs(p.lon)<=180;
+ if(valid(geo))return {lat:geo.lat,lon:geo.lon,zoom:10,rank:3,source:"location"};
+ const available=(Array.isArray(aircraft)?aircraft:[]).filter(a=>
+  valid(a) && a.position_source==="antenna" &&
+  a.sources?.includes("antenna") && Number.isFinite(a.seen) && a.seen<=60 &&
+  Number.isFinite(a.seen_pos) && a.seen_pos<=60);
+ const square=a=>{
+  const dx=(a.lon-COLOGNE.lon)*Math.cos(COLOGNE.lat*Math.PI/180);
+  const dy=a.lat-COLOGNE.lat;return dx*dx+dy*dy;
+ };
+ available.sort((a,b)=>square(a)-square(b));
+ if(available.length)return {lat:available[0].lat,lon:available[0].lon,
+   zoom:10,rank:2,source:"antenna",flight:available[0].flight||available[0].hex};
+ return {lat:COLOGNE.lat,lon:COLOGNE.lon,zoom:9,rank:1,source:"cologne"};
+}
+function applyStartupPriority(){
+ // Manual map movement/selection always wins; do not steal camera focus.
+ if(state.moved || state.startupLocationPending)return;
+ const selected=chooseStartupTarget(state.startupGeo,state.data);
+ if(selected.rank<=state.startupRank)return;
+ state.startupRank=selected.rank;state.startupSource=selected.source;
+ state.lat=selected.lat;state.lon=selected.lon;state.zoom=selected.zoom;
+ state.queryLat=selected.lat;state.queryLon=selected.lon;
+ state.autoFocused=true;
+ state.centerLabel=selected.source==="location"
+   ? "Your permitted current location · startup"
+   : "Nearest actual radio aircraft "+(selected.flight||"")+" · startup";
+ state.startupQueryDirty=state.connected;
+ paint();
+}
+function initializeStartupLocation(){
+ if(!navigator.geolocation){
+  state.startupLocationPending=false;applyStartupPriority();return;
+ }
+ navigator.geolocation.getCurrentPosition(
+  fix=>{
+   const p=fix?.coords;
+   if(p && Number.isFinite(p.latitude) && Number.isFinite(p.longitude)){
+    state.startupGeo={lat:p.latitude,lon:p.longitude};
+   }
+   state.startupLocationPending=false;applyStartupPriority();
+   if(state.startupQueryDirty && !state.fetching && state.connected){
+    state.startupQueryDirty=false;refresh();
+   }
+  },
+  ()=>{state.startupLocationPending=false;applyStartupPriority();},
+  {enableHighAccuracy:false,timeout:6500,maximumAge:300000}
+ );
 }
 function category(a){return a.sources?.length > 1 ? "both" : (a.sources?.[0] || "internet")}
 function visible(a){
@@ -266,7 +323,7 @@ async function refresh(raise=false){
   state.lastData=state.data.map(a=>({...a}));
   state.lastFreshAt=Date.now();
   updateCounters(result.counts);feedSummary(result.sources);recordTracks();
-  if(!state.autoFocused&&!state.moved)focusAir();
+  applyStartupPriority();
   const providerTime=result.sources?.internet?.updated_at;
   $("lastUpdate").textContent=formatTime(providerTime ?? result.generated_at);
   $("sourceCredits").textContent=result.sources?.internet?.attribution ||
@@ -295,7 +352,14 @@ async function refresh(raise=false){
   notice("Feed unavailable: "+e.message+". Showing only remaining fresh real observations, not new aircraft.");
   if(raise)throw e;
   return false;
- }finally{state.fetching=false}
+ }finally{
+  state.fetching=false;
+  if(state.startupQueryDirty && state.connected){
+   state.startupQueryDirty=false;
+   // A current-location search may have arrived during an older request.
+   setTimeout(()=>refresh(),0);
+  }
+ }
 }
 async function control(action){
  if(!state.connected)return;
@@ -552,3 +616,5 @@ if(location.hostname==="tihulu.github.io"){
  $("mode").value="internet";
  notice("GitHub Pages ready. Enter a trusted HTTPS Internet feed URL or pair a local bridge for antenna data.");
 }
+
+initializeStartupLocation();
