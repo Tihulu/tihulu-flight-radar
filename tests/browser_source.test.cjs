@@ -5,8 +5,10 @@ const fs=require("node:fs");
 const path=require("node:path");
 const vm=require("node:vm");
 const js=fs.readFileSync(path.join(__dirname,"../tihulu_flight_radar/web/app.js"),"utf8");
-const m=js.match(/function browserSourceResult\([^)]*\)\{[\s\S]*?\n\}/);
-if(!m)throw Error("browserSourceResult missing");
+const start=js.indexOf("function browserSourceResult(");
+const end=js.indexOf("\nfunction displayUsbSnapshot",start);
+if(start<0||end<0)throw Error("browserSourceResult missing");
+const standalone=js.slice(start,end);
 
 function source(mode,withRadio=true){
  const time=Date.now();
@@ -30,7 +32,7 @@ function source(mode,withRadio=true){
   isPositioned:a=>Number.isFinite(a?.lat)&&Number.isFinite(a?.lon)&&
     Number.isFinite(a?.seen_pos)&&a.seen_pos<=60,
   $:id=>({value:mode})};
- const fn=vm.runInNewContext(m[0]+"\nbrowserSourceResult",sandbox);
+ const fn=vm.runInNewContext(standalone+"\nbrowserSourceResult",sandbox);
  return fn(mode);
 }
 test("Hybrid browser merges matching ICAO without relabeling a radio-derived position",()=>{
