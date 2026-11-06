@@ -8,6 +8,8 @@ on:
       - "AGENTS.md"
       - "scripts/build-web-tar1090.sh"
       - "scripts/build-browser-assets.sh"
+      - "tests/internet_sources.test.cjs"
+      - "tests/webusb_sampleblock.test.cjs"
   pull_request:
     branches: [main]
     paths:
