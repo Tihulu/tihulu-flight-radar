@@ -44,7 +44,7 @@ jobs:
         run: node --test tests/map_focus.test.cjs tests/map_html.test.cjs tests/web_bridge.test.cjs
       - name: Install Linux Qt runtime dependencies
         if: matrix.label == 'linux-x64'
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libegl1 libgl1 libxkbcommon0 libdbus-1-3
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libegl1 libgl1 libxkbcommon0 libdbus-1-3 libnss3 libnspr4 libxcomposite1 libxdamage1 libxrandr2 libgbm1
       - name: Smoke-test Qt desktop window
         if: matrix.label == 'linux-x64'
         env:
@@ -73,7 +73,7 @@ jobs:
       - name: Install Debian build dependencies
         run: |
           apt-get update
-          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git ca-certificates python3 python3-venv python3-pip libpython3.11 build-essential patchelf libegl1 libgl1 libxkbcommon0 libxkbcommon-x11-0 libdbus-1-3 libglib2.0-0 libfontconfig1 libx11-6 libxcb-cursor0 libsm6 libice6
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git ca-certificates python3 python3-venv python3-pip libpython3.11 build-essential patchelf libegl1 libgl1 libxkbcommon0 libxkbcommon-x11-0 libdbus-1-3 libglib2.0-0 libfontconfig1 libx11-6 libxcb-cursor0 libsm6 libice6 libnss3 libnspr4 libxcomposite1 libxdamage1 libxrandr2 libgbm1
       - uses: actions/checkout@v4
       - name: Install app and test tools
         run: |
