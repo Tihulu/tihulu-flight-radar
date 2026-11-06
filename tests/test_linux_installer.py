@@ -1,0 +1,72 @@
+"""Mocked end-to-end Linux installer regression (never uses real sudo/pipx/apt)."""
+import os
+import subprocess
+from pathlib import Path
+
+import pytest
+
+
+INSTALLER = Path(__file__).resolve().parents[1] / "scripts" / "install-linux.sh"
+
+
+def _stub(path: Path, content: str):
+    path.write_text("#!/bin/sh\n" + content, encoding="utf-8")
+    path.chmod(0o755)
+
+
+@pytest.mark.skipif(os.name != "posix" or os.geteuid() == 0,
+                    reason="The installer refuses root; CI non-root runner only")
+def test_one_line_upgrade_creates_both_application_shortcuts(tmp_path):
+    home = tmp_path / "test-home"
+    tools = tmp_path / "mock-bin"
+    home.mkdir()
+    tools.mkdir()
+    _stub(tools / "sudo", "exit 0\n")
+    _stub(tools / "pipx", """
+mkdir -p "$HOME/.local/bin"
+printf '#!/bin/sh\\nexit 0\\n' > "$HOME/.local/bin/tihulu-flight-radar"
+printf '#!/bin/sh\\nexit 0\\n' > "$HOME/.local/bin/tihulu-flight-bridge"
+chmod +x "$HOME/.local/bin/tihulu-flight-radar" "$HOME/.local/bin/tihulu-flight-bridge"
+exit 0
+""")
+    _stub(tools / "curl", """
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "-o" ]; then
+    shift
+    printf '<svg xmlns="http://www.w3.org/2000/svg"></svg>\\n' > "$1"
+    exit 0
+  fi
+  shift
+done
+exit 1
+""")
+    _stub(tools / "dpkg", "exit 1\n")
+    # Installer must preserve the user's unrelated local resources.
+    preserved = home / ".local/share/important-data"
+    preserved.parent.mkdir(parents=True)
+    preserved.write_text("do not remove", encoding="utf-8")
+    appdir = home / ".local/share/applications"
+    appdir.mkdir(parents=True)
+    (appdir / "tihulu-adsb-radar.desktop").write_text("old shortcut")
+    env = dict(os.environ, HOME=str(home), PATH=str(tools)+os.pathsep+os.environ["PATH"],
+               TIHULU_REF="feature/github-pages-local-bridge-2026-11-06")
+    result = subprocess.run(["bash", str(INSTALLER)], env=env, text=True,
+                            capture_output=True, timeout=35, check=False)
+    assert result.returncode == 0, result.stdout + result.stderr
+    qt = (appdir / "tihulu-flight-radar.desktop").read_text(encoding="utf-8")
+    web = (appdir / "tihulu-flight-radar-web.desktop").read_text(encoding="utf-8")
+    assert "Name=Tihulu Flight Radar\n" in qt
+    assert 'Exec="'+str(home)+"/.local/bin/tihulu-flight-radar"+'"' in qt
+    assert "Terminal=false" in qt
+    assert "Name=Tihulu Flight Radar Web" in web
+    assert 'Exec="'+str(home)+"/.local/bin/tihulu-flight-bridge"+'" --open-browser' in web
+    assert "Terminal=true" in web
+    assert preserved.read_text() == "do not remove"
+    assert not (appdir / "tihulu-adsb-radar.desktop").exists()
+    assert (home / ".local/share/icons/hicolor/scalable/apps/tihulu-flight-radar.svg").exists()
+
+
+def test_installer_shell_syntax():
+    result = subprocess.run(["bash", "-n", str(INSTALLER)],
+                            capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stderr
