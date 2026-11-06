@@ -23,12 +23,13 @@ build = ["pyinstaller>=6.12,<7"]
 
 [project.scripts]
 tihulu-flight-radar = "tihulu_flight_radar.app:main"
+tihulu-flight-bridge = "tihulu_flight_radar.bridge:main"
 
 [tool.setuptools.packages.find]
 include = ["tihulu_flight_radar*"]
 
 [tool.setuptools.package-data]
-tihulu_flight_radar = ["map.html", "map_focus.js"]
+tihulu_flight_radar = ["map.html", "map_focus.js", "web/*.html", "web/*.css", "web/*.js"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
