@@ -29,7 +29,7 @@ function getBase(raw){
  // People naturally type "127.0.0.1:8510" without a scheme.
  // Normalize only known loopback origins; never downgrade arbitrary hosts.
  raw=String(raw||"").trim();
- if(/^(?:localhost|127\\.0\\.0\\.1)(?::[0-9]{1,5})?\\/?$/i.test(raw)) raw="http://"+raw;
+ if(/^(?:localhost|127\.0\.0\.1)(?::[0-9]{1,5})?\/?$/i.test(raw)) raw="http://"+raw;
  const u=new URL(raw);
  if(u.username || u.password || u.search || u.hash || u.pathname!=="/") throw Error("Use a bridge origin without a path or credentials.");
  if(u.protocol==="http:" && !["127.0.0.1","localhost","[::1]"].includes(u.hostname))
