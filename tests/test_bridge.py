@@ -176,3 +176,41 @@ def test_internet_provider_all_feeds_down_exposes_errors_not_fake_positions(monk
     assert "adsb.lol" in status["error"]
     assert "adsb.fi" in status["error"]
     assert status["updated_at"] is None
+
+
+def test_online_cache_ages_real_observations_instead_of_replaying_as_live(monkeypatch):
+    import tihulu_flight_radar.bridge as module
+    class Response:
+        def __enter__(self): return self
+        def __exit__(self, *_): return None
+        def read(self, n):
+            return json.dumps({"ac":[aircraft("3c1234", seen=2, seen_pos=2)]}).encode()
+    class Opener:
+        def open(self, req, timeout): return Response()
+    monkeypatch.setattr(module, "build_opener", lambda *_: Opener())
+    monkeypatch.setattr(module, "ProxyHandler", lambda *_: object())
+    provider=module.DataProvider()
+    original,status=provider.fetch(50.938,6.960,100)
+    assert len(original)==1
+    # Simulate 42 seconds elapsed without fetching the provider again.
+    provider.last_update-=42
+    cached,status=provider.fetch(50.938,6.960,100)
+    assert status["cached"] is True
+    assert len(cached)==1
+    assert 43<=cached[0]["seen"]<=46
+    assert 43<=cached[0]["seen_pos"]<=46
+    provider.last_update-=30
+    expired,status=provider.fetch(50.938,6.960,100)
+    assert expired==[]
+    assert status["cached"] is True
+
+
+def test_active_decoder_with_zero_messages_is_not_reported_as_rf_reception():
+    bridge=Bridge(token="test")
+    bridge.receiver.snapshot=lambda: {"aircraft":[], "messages":0, "now":12345}
+    bridge.online.fetch=lambda *_: ([], {"provider":"test","error":None})
+    result=bridge.snapshot("hybrid",50.938,6.960,100)
+    rf=result["sources"]["antenna"]
+    assert rf["state"]=="decoder_no_rf_messages"
+    assert "no ADS-B messages" in rf["note"]
+    assert result["counts"]["antenna"]==0
