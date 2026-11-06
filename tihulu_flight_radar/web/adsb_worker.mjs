@@ -108,7 +108,7 @@ export function extractFrames(raw){
   const hi=mag[j]+mag[j+2]+mag[j+7]+mag[j+9];
   const lo=mag[j+1]+mag[j+3]+mag[j+4]+mag[j+5]+mag[j+6]+
             mag[j+8]+mag[j+10]+mag[j+11]+mag[j+12]+mag[j+13]+mag[j+14];
-  if(hi<500 || hi*11<lo*2.7)continue;
+  if(hi<500 || hi*11<lo*12)continue;
   if(mag[j]<mag[j+1]*1.5 || mag[j+2]<mag[j+3]*1.5 ||
      mag[j+7]<mag[j+8]*1.5 || mag[j+9]<mag[j+10]*1.5)continue;
   const frame=new Uint8Array(14);
