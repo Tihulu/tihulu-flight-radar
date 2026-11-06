@@ -151,7 +151,10 @@ test("Embedded tar Internet map overlays report OpenLayers drawing errors",()=>{
  assert.ok(m);
  assert.match(py,/def _overlay_result\(self, value\)/);
  assert.match(py,/JSON\.stringify\(/);
- assert.match(m[1],/Internet aircraft \(blue\)/);
+ assert.match(m[1],/Internet airplanes \(I\)/);
+ assert.match(m[1],/Local radio \(R\), matched \(I\/R\)/);
+ assert.match(m[1],/source:\x27radio\x27/);
+ assert.match(m[1],/source:\x27internet\x27/);
 });
 
 
