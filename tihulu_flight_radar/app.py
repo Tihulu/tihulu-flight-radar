@@ -29,6 +29,7 @@ from .control import MODES, ReceiverController, service_action
 from .core import (DataError, detect_sdr_processes, export_json, find_tar1090_url,
                    lan_ip, summarize, recently_seen, position_is_fresh)
 from .map_server import LocalMapServer
+from .tar_map import focused_tar_url
 
 
 STYLE = """
@@ -444,8 +445,9 @@ class RadarWindow(QMainWindow):
             try:
                 url = self.map_future.result()
                 if url:
-                    self._show_embedded_map(url, "Full tar1090 aircraft map")
-                    self.info.setText("Full tar1090 aircraft map opened inside Tihulu.")
+                    target = focused_tar_url(url, self.last_data)
+                    self._show_embedded_map(target, "Full tar1090 aircraft map")
+                    self.info.setText("Full tar1090 focused on recent aircraft or Germany.")
                 else:
                     QMessageBox.information(
                         self, "Full map unavailable",
