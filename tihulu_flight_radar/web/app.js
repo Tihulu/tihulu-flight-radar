@@ -165,14 +165,18 @@ function getFeedURL(raw){
 // population. Public general ADS-B APIs commonly require a CORS-enabled relay.
 const INTELSKY_URL="https://intelsky.org/api/";
 function configuredOnlineFeed(){
- state.onlineProvider=$("onlinePreset")?.value||"intelsky";
- if(state.onlineProvider==="off")return "";
- if(state.onlineProvider==="intelsky")return INTELSKY_URL;
- if(state.onlineProvider==="airlabs"){
-  if(!String($("airlabsKey")?.value||"").trim())throw Error("AirLabs needs your own personal API key (session only).");
-  return "https://airlabs.co/api/v9/flights";
- }
- return getFeedURL($("onlineFeedUrl").value);
+ const provider=$("onlinePreset")?.value||"intelsky";
+ let url="";
+ if(provider==="intelsky")url=INTELSKY_URL;
+ else if(provider==="airlabs"){
+  if(!String($("airlabsKey")?.value||"").trim())
+   throw Error("AirLabs needs your personal API key (session only).");
+  url="https://airlabs.co/api/v9/flights";
+ }else if(provider==="custom")url=getFeedURL($("onlineFeedUrl").value);
+ else if(provider!=="off")throw Error("Unknown Internet provider choice.");
+ // Atomic config: invalid key/URL must not change a working source.
+ state.onlineProvider=provider;
+ return url;
 }
 function greatCircleNM(lat1,lon1,lat2,lon2){
  const r=Math.PI/180,p=(lat2-lat1)*r,q=(lon2-lon1)*r;
@@ -473,9 +477,11 @@ async function connect(){
   state.timer=setInterval(()=>{if(!document.hidden)refresh()},15000);
  }catch(e){
   if(state.connectionKind==="usb"){
-   // A failed network feed cannot disconnect a healthy in-browser RTL-SDR.
+   // A bad optional network key/URL must not disconnect healthy WebUSB
+   // or permanently cancel the already-running RF refresh timer.
    state.connected=true;displayUsbSnapshot();
-   notice("Optional Internet feed failed, but direct USB remains connected: "+e.message);
+   if(!state.timer)state.timer=setInterval(()=>{if(!document.hidden)refresh()},15000);
+   notice("Optional Internet feed failed; direct WebUSB remains connected: "+e.message);
   }else{
    state.connected=false;state.token="";state.connectionKind="none";
    connection(false,"Not connected");
