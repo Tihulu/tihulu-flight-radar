@@ -60,6 +60,22 @@ class NativeRadarWindow(QMainWindow):
         self.setMinimumSize(850, 560)
         self.settings = QSettings("Tihulu", "FlightRadar")
         self.bridge = Bridge(allow_control=True)
+        # Share the user's already-configured receiver mode from the classic
+        # dashboard. Earlier versions ignored this and defaulted to systemd,
+        # hiding a working Direct readsb / Remote JSON receiver.
+        from .control import MODES
+        preferred = str(self.settings.value("mode", self.bridge.receiver.mode))
+        remote = str(self.settings.value("remote", ""))
+        decoder = str(self.settings.value("decoder", ""))
+        if preferred == "Remote JSON" and not remote.strip():
+            preferred = self.bridge.receiver.mode
+        try:
+            if preferred in MODES:
+                self.bridge.receiver.configure(preferred, remote, decoder)
+        except Exception:
+            # An invalid saved URL must not crash the radar window.
+            self.bridge.receiver.configure(self.bridge.receiver.mode)
+
         # Ephemeral loopback port allows multiple instances without taking over
         # an unrelated running service or requiring manual bridge connection.
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), BaseHTTPRequestHandler)
