@@ -96,3 +96,54 @@ test("No clandestine tar1090 endpoint is opened when WebUSB owns the one SDR",()
  assert.match(html,/value="intelsky"/);
  assert.match(html,/value="custom"/);
 });
+
+test("Personal-key AirLabs flight conversion uses metres to feet and km/h to knots",()=>{
+ const now=Date.now()/1000;
+ const a={response:[{hex:"3c1234",lat:50.95,lng:6.97,
+  updated:now-3,alt:10668,speed:740.8,dir:275,flight_icao:"DLH123"}]};
+ const result=mk().normalizeInternetPayload(a,"airlabs",50.938,6.96,100,now);
+ assert.equal(result.aircraft.length,1);
+ const p=result.aircraft[0];
+ assert.ok(Math.abs(p.alt_baro-35000)<2);
+ assert.ok(Math.abs(p.gs-400)<0.1);
+ assert.equal(p.track,275);
+ assert.equal(p.flight,"DLH123");
+ assert.ok(Math.abs(p.seen-3)<0.001);
+ assert.deepEqual(Array.from(p.sources),["internet"]);
+ assert.equal(result.sources.internet.provider,"AirLabs");
+ assert.equal(result.counts.antenna,0);
+});
+test("An AirLabs HTTP 200 key-error is not falsely displayed as empty airspace",()=>{
+ assert.throws(()=>mk().normalizeInternetPayload({
+  error:{message:"Unknown api_key",code:"unknown_api_key"}
+ },"airlabs",50.938,6.96,100),/Unknown api_key/);
+});
+test("AirLabs request uses only the user's chosen key and regional bbox",async()=>{
+ let url=null;
+ const now=Date.now()/1000;
+ const state={onlineFeed:"https://airlabs.co/api/v9/flights",
+  onlineProvider:"airlabs",queryLat:50.938,queryLon:6.96,queryRadius:100,
+  internetBackoffUntil:0,airlabsLastFetch:0};
+ const fn=vm.runInNewContext(segment+"\nfetchInternetFeed",{
+  state,$:id=>({value:id==="airlabsKey"?"personal-test-key":""}),
+  Date,Math,URL,Number,AbortController,setTimeout,clearTimeout,
+  fetch:async(u,config)=>{
+   url=new URL(u);
+   assert.equal(config.credentials,"omit");
+   return {ok:true,async text(){return JSON.stringify({response:[
+    {hex:"3c1234",lat:50.95,lng:6.97,alt:10000,updated:now}
+   ]})}};
+  }
+ });
+ const first=await fn();
+ assert.equal(url.origin,"https://airlabs.co");
+ assert.equal(url.pathname,"/api/v9/flights");
+ assert.equal(url.searchParams.get("api_key"),"personal-test-key");
+ assert.ok(url.searchParams.has("bbox"));
+ assert.equal(first.aircraft.length,1);
+ const unchangedUrl=url.href;
+ const again=await fn();
+ assert.equal(again,first,"cached feed must not spend API quota every 15 seconds");
+ assert.equal(url.href,unchangedUrl);
+ assert.ok(state.airlabsLastFetch>0);
+});
