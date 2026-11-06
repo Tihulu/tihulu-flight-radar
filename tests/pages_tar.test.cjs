@@ -153,3 +153,64 @@ test("Embedded tar Internet map overlays report OpenLayers drawing errors",()=>{
  assert.match(py,/JSON\.stringify\(/);
  assert.match(m[1],/Internet aircraft \(blue\)/);
 });
+
+
+test("Startup priority: consented location, then nearest genuine radio plane, then Cologne",()=>{
+ const COLOGNE={lat:50.938,lon:6.960};
+ const choose=vm.runInNewContext(extract("chooseStartupTarget")+"\nchooseStartupTarget",{COLOGNE,Math,Number,Array});
+ const radioFar={hex:"123456",lat:51.9,lon:9.8,seen:2,seen_pos:2,sources:["antenna"],position_source:"antenna"};
+ const radioNear={hex:"654321",lat:50.94,lon:7.05,seen:1,seen_pos:1,sources:["antenna","internet"],position_source:"antenna"};
+ const internetNear={hex:"abcdef",lat:50.938,lon:6.961,seen:1,seen_pos:1,sources:["internet"],position_source:"internet"};
+ const internetPositionOnRf={hex:"fedcba",lat:50.937,lon:6.962,seen:1,seen_pos:1,sources:["antenna","internet"],position_source:"internet"};
+ assert.equal(choose(null,[]).source,"cologne");
+ assert.equal(choose(null,[internetNear,internetPositionOnRf]).source,"cologne");
+ const target=choose(null,[radioFar,radioNear,internetNear,internetPositionOnRf]);
+ assert.equal(target.source,"antenna");
+ assert.equal(target.lat,radioNear.lat);
+ assert.equal(target.lon,radioNear.lon);
+ const gps=choose({lat:38.4,lon:27.1},[radioNear]);
+ assert.equal(gps.source,"location");
+ assert.equal(gps.lat,38.4);
+ assert.equal(gps.lon,27.1);
+});
+
+test("Radio startup focus upgrades to location if granted later, but manual map wins",()=>{
+ const COLOGNE={lat:50.938,lon:6.960};
+ const state={
+   moved:false,startupLocationPending:false,startupGeo:null,startupRank:1,
+   startupSource:"cologne",connected:true,startupQueryDirty:false,
+   lat:COLOGNE.lat,lon:COLOGNE.lon,zoom:9,
+   queryLat:COLOGNE.lat,queryLon:COLOGNE.lon,
+   data:[{hex:"3c1234",lat:50.96,lon:7.2,seen:1,seen_pos:1,
+          sources:["antenna"],position_source:"antenna"}]
+ };
+ let painted=0;
+ const ctx={state,COLOGNE,Math,Number,Array,paint:()=>painted++};
+ const fn=vm.runInNewContext(
+   extract("chooseStartupTarget")+"\n"+extract("applyStartupPriority")+"\napplyStartupPriority",ctx);
+ fn();
+ assert.equal(state.startupSource,"antenna");
+ assert.equal(state.queryLon,7.2);
+ assert.equal(state.startupQueryDirty,true);
+ state.startupQueryDirty=false;
+ state.startupGeo={lat:39.9,lon:32.9};
+ fn();
+ assert.equal(state.startupSource,"location");
+ assert.equal(state.queryLon,32.9);
+ assert.equal(state.startupRank,3);
+ state.moved=true;state.startupGeo={lat:48,lon:11};
+ fn();
+ assert.equal(state.lat,39.9);
+ assert.equal(painted,2);
+});
+
+test("Location requires explicit Qt permission, and never silently asks for a receiver position",()=>{
+ const native=fs.readFileSync(path.join(root,"tihulu_flight_radar/native.py"),"utf8");
+ assert.match(native,/permissionRequested\.connect\(self\._location_permission_requested\)/);
+ assert.match(native,/QWebEnginePermission\.PermissionType\.Geolocation/);
+ assert.match(native,/QMessageBox\.question/);
+ assert.match(native,/permission\.grant\(\)/);
+ assert.match(native,/permission\.deny\(\)/);
+ assert.match(js,/navigator\.geolocation\.getCurrentPosition/);
+ assert.match(js,/position_source==="antenna"/);
+});
