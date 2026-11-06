@@ -33,13 +33,15 @@ jobs:
           node --check tihulu_flight_radar/web/sw.js
           node --check tihulu_flight_radar/web/browser_usb.mjs
           node --check tihulu_flight_radar/web/adsb_worker.mjs
+          node --check tihulu_flight_radar/web/usb_tools.mjs
           node --check deploy/cloudflare-worker.mjs
-          node --test tests/web_bridge.test.cjs tests/pages_tar.test.cjs tests/browser_adsb.test.cjs tests/browser_source.test.cjs tests/aircraft_visuals.test.cjs
+          node --test tests/web_bridge.test.cjs tests/pages_tar.test.cjs tests/browser_adsb.test.cjs tests/browser_source.test.cjs tests/aircraft_visuals.test.cjs tests/webusb_sampleblock.test.cjs
           python3 -m json.tool tihulu_flight_radar/web/manifest.webmanifest >/dev/null
           test -s tihulu_flight_radar/web/icon.svg
           test -s tihulu_flight_radar/web/sw.js
           test -s tihulu_flight_radar/web/browser_usb.mjs
           test -s tihulu_flight_radar/web/adsb_worker.mjs
+          test -s tihulu_flight_radar/web/usb_tools.mjs
           test -s tihulu_flight_radar/web/vendor/rtlsdr.mjs
           test -s tihulu_flight_radar/web/vendor/RTLSDR-LICENSE.txt
           grep -q 'app.js' tihulu_flight_radar/web/index.html
