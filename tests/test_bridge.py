@@ -120,3 +120,59 @@ def test_http_pairing_host_origin_cors_and_static_assets():
         server.shutdown()
         server.server_close()
         worker.join(timeout=3)
+
+
+def test_internet_provider_falls_back_after_primary_429_without_fabricated_aircraft(monkeypatch):
+    import io
+    from email.message import Message
+    from urllib.error import HTTPError
+    import tihulu_flight_radar.bridge as module
+
+    calls = []
+    class FakeResponse:
+        def __init__(self, body):
+            self.body = body
+        def __enter__(self):
+            return self
+        def __exit__(self, *_):
+            return False
+        def read(self, _count):
+            return self.body
+    class FakeOpener:
+        def open(self, request, timeout):
+            calls.append(request.full_url)
+            if "api.adsb.lol" in request.full_url:
+                h=Message()
+                h["Retry-After"]="90"
+                raise HTTPError(request.full_url, 429, "Slow down", h, None)
+            return FakeResponse(json.dumps({
+                "ac":[aircraft("3c1234",seen=2.0,position=True)]
+            }).encode("utf-8"))
+    monkeypatch.setattr(module, "build_opener", lambda *_: FakeOpener())
+    monkeypatch.setattr(module, "ProxyHandler", lambda *_: object())
+    provider=module.DataProvider()
+    result,status=provider.fetch(50.9,7.1,100)
+    assert len(result)==1
+    assert result[0]["hex"]=="3c1234"
+    assert status["provider"]=="adsb.fi"
+    assert "personal/non-commercial" in status["attribution"]
+    assert len(calls)==2
+    result2,status2=provider.fetch(50.9,7.1,100)
+    assert status2["cached"] is True
+    assert len(calls)==2
+
+
+def test_internet_provider_all_feeds_down_exposes_errors_not_fake_positions(monkeypatch):
+    from urllib.error import URLError
+    import tihulu_flight_radar.bridge as module
+    class Offline:
+        def open(self, request, timeout):
+            raise URLError("network disconnected")
+    monkeypatch.setattr(module, "build_opener", lambda *_: Offline())
+    monkeypatch.setattr(module, "ProxyHandler", lambda *_: object())
+    provider=module.DataProvider()
+    result,status=provider.fetch(50.9,7.1,100)
+    assert result==[]
+    assert "adsb.lol" in status["error"]
+    assert "adsb.fi" in status["error"]
+    assert status["updated_at"] is None
