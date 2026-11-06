@@ -28,9 +28,10 @@
    <summary>USB cannot connect? Check permissions and driver conflicts (no installation)</summary>
    <div class="usb-check-actions">
     <button id="usbCheck" type="button">Check USB permissions (read-only)</button>
+    <button id="usbClaimTest" type="button">Test interface claim (open → claim → release)</button>
     <button id="usbCopy" type="button">Copy diagnostics</button>
    </div>
-   <pre id="usbReport" role="status" aria-live="polite">The permission check does not open the USB receiver or interrupt any running program.</pre>
+   <pre id="usbReport" role="status" aria-live="polite">The permission check does not open the USB receiver. The separate interface test briefly opens and releases a previously permitted receiver, without RF tuning or sampling.</pre>
    <p class="usb-hint">Verified Pop!_OS / Nooelec 0bda:2838 fix: if <code>readsb</code> is inactive but the USB tree shows <code>Driver=dvb_usb_rtl28xxu</code>, the Linux DVB driver may still own interface 0. <a href="https://github.com/Tihulu/tihulu-flight-radar/blob/feature/github-pages-local-bridge-2026-11-06/docs/RTL_SDR_WEBUSB_LINUX_OWNERSHIP.md" target="_blank" rel="noopener noreferrer">See the safe, device-verified release/restore guide</a>. Never assume every PC uses <code>1-4:1.0</code>. After an explicit unbind, keep the USB plugged in until the browser test; unplugging it may rebind the driver. This website cannot run sudo or modify kernel drivers.</p>
   </details>
  </section>
