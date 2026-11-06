@@ -8,14 +8,14 @@ set -Eeuo pipefail
 usage() {
   printf '%s\n' \
     'Usage: bash popos-version-switch.sh preview|legacy' \
-    '  preview  install 0.3.2.dev3 multi-provider development snapshot' \
+    '  preview  install 0.3.2.dev4 multi-provider development snapshot' \
     '  legacy   restore the preserved 0.3.1 pre-multi-source snapshot' \
     'Close Tihulu Flight Radar windows before switching versions.'
 }
 case "${1:-}" in
   preview)
-    ref="a73a12bf2706ecda88705d98e0e8595f631f5104"
-    expected="0.3.2.dev3"
+    ref="e56a0fc890327c6a3705dcb4bde9226b7bed19b6"
+    expected="0.3.2.dev4"
     ;;
   legacy)
     ref="67280cd84feb89faec6a80f5fe2a55ce5f7b89e6"
@@ -71,4 +71,4 @@ fi
 printf '\n%s\n' \
   "Installed TIHULU Flight Radar $actual from exact GitHub commit $ref." \
   "Use: bash popos-version-switch.sh legacy   (to restore original 0.3.1)" \
-  "Use: bash popos-version-switch.sh preview  (to reinstall 0.3.2.dev3)"
+  "Use: bash popos-version-switch.sh preview  (to reinstall 0.3.2.dev4)"
