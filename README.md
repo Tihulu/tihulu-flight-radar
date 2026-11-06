@@ -155,3 +155,11 @@ failure and cancels close rather than claiming the USB is free.
 Boot-enable/disable is a separate explicit control; closing the app does
 not change system startup settings. No broad process-kill commands are used.
 Background-mode default is OFF for receivers owned by the desktop app.
+
+
+On automatic close, Flight Radar stops **readsb.service only**, leaving
+an independent tar1090 map/UI service running. The exact one-unit
+`systemctl stop readsb.service` command requires a refreshed narrow
+sudoers policy; re-running the Linux installer after this PR merges
+installs it without broadening to unrestricted sudo. Explicit in-app
+Stop/Restart controls retain the previous paired readsb/tar1090 behavior.
