@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import sys
 import threading
+from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -77,10 +78,10 @@ class NativeRadarWindow(QMainWindow):
         if (preferred == "Linux services" and platform.system() == "Linux"
                 and not linux_readsb_unit_installed()
                 and (shutil.which("readsb")
-                     or any(path.is_file() for path in (
-                         __import__("pathlib").Path("/usr/bin/readsb"),
-                         __import__("pathlib").Path("/usr/local/bin/readsb"))))):
+                     or Path("/usr/bin/readsb").is_file()
+                     or Path("/usr/local/bin/readsb").is_file())):
             preferred = "Direct readsb"
+            self.settings.setValue("mode", preferred)
         try:
             if preferred in MODES:
                 self.bridge.receiver.configure(preferred, remote, decoder)
