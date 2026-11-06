@@ -100,9 +100,26 @@ class DataProvider:
         self.provider_name = "adsb.lol"
         self.attribution = "adsb.lol — ODbL 1.0"
 
+    def _fresh_cached(self) -> list[dict]:
+        """Age each real observation while in cache; never freeze seen=0."""
+        if self.last_update is None:
+            return []
+        elapsed = max(0.0, time.time() - self.last_update)
+        result = []
+        for aircraft in self.cached:
+            row = dict(aircraft)
+            for age_field in ("seen", "seen_pos"):
+                age = row.get(age_field)
+                if isinstance(age, (float, int)) and math.isfinite(age):
+                    row[age_field] = max(0.0, float(age)) + elapsed
+            if recently_seen(row):
+                result.append(row)
+        return result
+
     def _status(self, cached: bool) -> dict:
+        age = max(0.0, time.time() - self.last_update) if self.last_update else None
         return {"provider": self.provider_name, "attribution": self.attribution,
-                "updated_at": self.last_update if self.cached else None,
+                "updated_at": self.last_update, "cache_age_seconds": age,
                 "error": self.last_error, "cached": cached}
 
     def fetch(self, lat: float, lon: float, radius: int) -> tuple[list[dict], dict]:
@@ -111,14 +128,17 @@ class DataProvider:
             current = time.monotonic()
             if current < self.retry_after:
                 if self.cache_key == key:
-                    return list(self.cached), self._status(cached=True)
+                    return self._fresh_cached(), self._status(cached=True)
                 return [], {"provider": self.provider_name,
                             "attribution": self.attribution, "updated_at": None,
                             "error": "Feed refresh cooldown; use Refresh later.",
                             "cached": True}
 
+            if key != self.cache_key:
+                # Never show cached aircraft from a different search area.
+                self.cached = []
+                self.last_update = None
             self.cache_key = key
-            self.cached = []
             self.last_error = None
             self.retry_after = current + ONLINE_CACHE_SECONDS
             errors: list[str] = []
@@ -133,7 +153,10 @@ class DataProvider:
                 })
                 try:
                     opener = build_opener(ProxyHandler({}))
-                    with opener.open(request, timeout=6) as response:
+                    # Two provider attempts must fit within the browser's
+                    # 10-second request timeout; otherwise the frontend
+                    # clears a healthy map because it aborts a slow response.
+                    with opener.open(request, timeout=3.5) as response:
                         raw = response.read(MAX_ONLINE_BYTES + 1)
                     if len(raw) > MAX_ONLINE_BYTES:
                         raise DataError("Online feed response too large.")
@@ -163,8 +186,10 @@ class DataProvider:
                     errors.append(f"{name}: {str(exc)[:95]}")
                     self.backoff[name] = time.monotonic() + 60
             self.last_error = " | ".join(errors) or "No feed available."
-            self.last_update = None
-            return [], self._status(cached=False)
+            # Preserve last *real* positions only for their remaining
+            # freshness window, with age counters incremented accordingly.
+            # Do not fabricate a new observation timestamp after an outage.
+            return self._fresh_cached(), self._status(cached=bool(self.cached))
 
 
 class Bridge:
