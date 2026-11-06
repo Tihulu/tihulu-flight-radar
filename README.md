@@ -35,7 +35,7 @@ The known-good **0.3.1** source snapshot is archived at
 (exact commit `67280cd84feb89faec6a80f5fe2a55ce5f7b89e6`).
 The new opt-in **0.3.2.dev3** Internet-only original-tar1090 preview is archived at
 [`preview/v0.3.2-dev3`](https://github.com/Tihulu/tihulu-flight-radar/tree/preview/v0.3.2-dev3)
-(source commit `d275a53adec350b72ffc6dff2055325fda40a97b`).
+(source commit `a73a12bf2706ecda88705d98e0e8595f631f5104`).
 
 **Close the app before switching.** Download the version switcher once:
 ```bash
