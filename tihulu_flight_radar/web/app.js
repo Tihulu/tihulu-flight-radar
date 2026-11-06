@@ -942,6 +942,59 @@ window.addEventListener("keydown",event=>{
  if(event.key==="Escape"&&document.body.classList.contains("radar-expanded"))
   setRadarExpanded(false);
 });
+// Full original tar1090 browser frontend: it only displays aircraft coming
+// from this page. It never starts readsb or claims the USB a second time.
+let tarFrameOpen=false;
+function publishTarBrowserSnapshot(){
+ const frame=$("fullTarFrame");
+ if(!tarFrameOpen||!frame?.contentWindow)return;
+ const aircraft=(state.data||[]).filter(a=>a && Number.isFinite(a.seen) && a.seen>=0 && a.seen<=60)
+  .slice(0,1500).map(a=>({
+    hex:a.hex,flight:a.flight,lat:a.lat,lon:a.lon,track:a.track,
+    gs:a.gs,tas:a.tas,ias:a.ias,mach:a.mach,
+    alt_baro:a.alt_baro,alt_geom:a.alt_geom,baro_rate:a.baro_rate,
+    geom_rate:a.geom_rate,squawk:a.squawk,rssi:a.rssi,
+    seen:a.seen,seen_pos:a.seen_pos,messages:a.messages,
+    r:a.r,t:a.t,type:a.type,category:a.category,dbFlags:a.dbFlags,
+    sources:a.sources
+  }));
+ frame.contentWindow.postMessage({type:"tihulu:tar-aircraft",
+  now:Date.now()/1000,
+  messages:state.connectionKind==="usb"?state.usbMessageCount:
+    (Number.isFinite(state.receiverMessages)?state.receiverMessages:0),
+  aircraft},location.origin);
+}
+function setBrowserTar(open){
+ const shell=$("tarBrowserShell");
+ tarFrameOpen=!!open;
+ shell.hidden=!tarFrameOpen;
+ document.body.classList.toggle("tar-open",tarFrameOpen);
+ if(tarFrameOpen){
+  const frame=$("fullTarFrame");
+  if(!frame.getAttribute("src")){
+   const query=new URLSearchParams({
+    lat:state.lat.toFixed(5),lon:state.lon.toFixed(5),
+    zoom:String(Math.max(3,Math.min(13,state.zoom)))
+   });
+   frame.setAttribute("src","./tar1090/index.html?"+query.toString());
+  }
+  publishTarBrowserSnapshot();
+  notice("Full upstream tar1090 frontend opened with this tab's real aircraft. No separate readsb service or USB claim.");
+ }else{
+  $("fullTar1090").focus();
+ }
+}
+$("fullTar1090").onclick=()=>setBrowserTar(true);
+$("closeFullTar").onclick=()=>setBrowserTar(false);
+$("fullTarFrame").addEventListener("load",()=>publishTarBrowserSnapshot());
+window.addEventListener("message",event=>{
+ if(event.origin!==location.origin || event.source!==$("fullTarFrame").contentWindow)return;
+ if(event.data?.type==="tihulu:tar-ready")publishTarBrowserSnapshot();
+});
+window.setInterval(()=>{if(tarFrameOpen && !document.hidden)publishTarBrowserSnapshot()},1200);
+window.addEventListener("keydown",event=>{
+ if(event.key==="Escape" && tarFrameOpen)setBrowserTar(false);
+});
 $("legacyTar").onclick=async()=>{
  if(state.connectionKind==="usb"){
   // Do not direct a user with one USB dongle to a dead readsb JSON server.
