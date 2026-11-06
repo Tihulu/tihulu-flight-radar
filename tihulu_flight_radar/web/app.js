@@ -6,9 +6,9 @@ const GERMANY = {lat:51.1657, lon:10.4515};
 const COLORS = {antenna:"#50dcad", internet:"#5cafe8", both:"#e6b56b"};
 const canvas = $("map"), ctx = canvas.getContext("2d");
 const state = {
-  base:"", token:"", connected:false, data:[], mode:"auto", selected:null, 
+  base:"", token:"", onlineFeed:"", connectionKind:"none", connected:false, data:[], mode:"auto", selected:null, 
   lat:GERMANY.lat, lon:GERMANY.lon, zoom:7, moved:false, autoFocused:false,
-  pointer:null, tracks:new Map(), tiles:new Map(), fetching:false, timer:null,
+  pointer:null, tracks:new Map(), tiles:new Map(), tileFailures:0, fetching:false, timer:null,
   centerLabel:"Germany default view · not receiver location"
 };
 const selectors = ["showAntenna","showInternet","showBoth","showTracks","showTiles"];
@@ -36,6 +36,51 @@ function getBase(raw){
    throw Error("Remote bridges must use HTTPS. Plain HTTP is permitted only for loopback.");
  if(u.protocol!=="https:" && u.protocol!=="http:") throw Error("Bridge URL must use HTTP(S).");
  return u.origin;
+}
+function getFeedURL(raw){
+ raw=String(raw||"").trim();
+ if(!raw)return "";
+ const url=new URL(raw);
+ if(url.protocol!=="https:" || url.username || url.password || url.search || url.hash ||
+    !url.pathname.endsWith("/api/aircraft"))
+   throw Error("Internet feed must be a trusted HTTPS /api/aircraft endpoint without embedded keys.");
+ return url.origin+url.pathname;
+}
+async function fetchInternetFeed(){
+ const u=new URL(state.onlineFeed);
+ u.searchParams.set("lat",state.lat.toFixed(3));
+ u.searchParams.set("lon",state.lon.toFixed(3));
+ u.searchParams.set("radius","100");
+ const abort=new AbortController(), timeout=setTimeout(()=>abort.abort(),10000);
+ try{
+  const response=await fetch(u.href,{mode:"cors",credentials:"omit",cache:"no-store",signal:abort.signal});
+  if(!response.ok)throw Error("Internet feed returned HTTP "+response.status);
+  const text=await response.text();
+  if(text.length>4*1024*1024)throw Error("Internet feed exceeds size limit.");
+  const result=JSON.parse(text);
+  if(!Array.isArray(result.aircraft))throw Error("Internet feed did not return aircraft.");
+  const receivedAt=Number(result.generated_at);
+  const age=Date.now()/1000-receivedAt;
+  if(!Number.isFinite(age) || age< -10 || age>90)
+   throw Error("Internet snapshot is stale or missing an observation timestamp.");
+  const safe=result.aircraft.slice(0,10000).filter(a=>a&&typeof a==="object").map(a=>{
+   const own={...a};
+   if(typeof own.seen==="number")own.seen+=Math.max(0,age);
+   if(typeof own.seen_pos==="number")own.seen_pos+=Math.max(0,age);
+   own.sources=["internet"];
+   own.position_source=isPositioned(own)?"internet":null;
+   own.observations={internet:a};
+   return own;
+  }).filter(a=>Number.isFinite(a.seen)&&a.seen>=0&&a.seen<=60);
+  return {
+    generated_at:receivedAt,active_sources:["internet"],aircraft:safe,
+    counts:{antenna:0,internet:safe.length,combined:safe.length},
+    sources:{antenna:{state:"unavailable",error:"Requires paired local bridge"},
+             internet:{state:"available",provider:result.provider||"Configured Internet feed",
+                       attribution:result.attribution||"See Internet feed provider terms",
+                       updated_at:receivedAt}}
+  };
+ }finally{clearTimeout(timeout)}
 }
 // Called only by our packaged Qt WebEngine wrapper after the trusted local
 // page is loaded. The token is never placed in a URL, cookies or storage.
@@ -75,24 +120,33 @@ async function checkReceiver(){
 async function connect(){
  if(state.timer){clearInterval(state.timer);state.timer=null;}
  try{
-  state.base=getBase($("bridgeUrl").value.trim());
-  state.token=$("token").value.trim();
-  if(!state.token) throw Error("Paste the session token displayed by the local bridge.");
-  await checkReceiver();
-  connection(true,"Paired with local bridge");
+  state.onlineFeed=getFeedURL($("onlineFeedUrl").value);
+  const token=$("token").value.trim();
+  if(token){
+   state.base=getBase($("bridgeUrl").value.trim());
+   state.token=token;state.connectionKind="bridge";
+   await checkReceiver();
+  }else if(state.onlineFeed){
+   state.base="";state.token="";state.connectionKind="internet";
+   $("receiverStatus").textContent="Internet-only: no local hardware connected. Pair a bridge for antenna data.";
+   for(const id of ["start","stop","restart"])$(id).disabled=true;
+  }else{
+   throw Error("For antenna data enter a local pairing token; for Internet only enter an HTTPS Internet feed URL.");
+  }
+  state.connected=true;
+  await refresh(true);
+  connection(true,state.connectionKind==="bridge"?"Paired with local bridge":"Internet feed connected");
   $("token").value="";
-  notice("Bridge paired. Local/online source data stays attributed separately.");
-  await refresh();
   state.timer=setInterval(()=>{if(!document.hidden)refresh()},15000);
  }catch(e){
+  state.connected=false;state.token="";state.connectionKind="none";
   connection(false,"Not connected");
-  notice("Connection failed: "+e.message+". Verify the bridge is running, pairing token, browser local-network permission and CORS.");
-  state.token="";
+  notice("Connection failed: "+e.message+". Check bridge pairing or feed CORS/availability.");
  }
 }
 function disconnect(){
  if(state.timer)clearInterval(state.timer);
- state.timer=null;state.token="";state.base="";state.data=[];
+ state.timer=null;state.token="";state.base="";state.onlineFeed="";state.connectionKind="none";state.data=[];
  state.tracks.clear();state.autoFocused=false;
  connection(false,"Disconnected");updateCounters();renderTable();paint();
  $("feedStatus").textContent="No source connected.";
@@ -185,24 +239,31 @@ function focusAir(force=false){
  state.centerLabel="Focused on observed "+(has[0].flight||has[0].hex||"aircraft");
  paint();
 }
-async function refresh(){
- if(!state.connected || state.fetching)return;
+async function refresh(raise=false){
+ if(!state.connected || state.fetching)return false;
  state.fetching=true;
  try{
-  const args=new URLSearchParams({mode:$("mode").value,lat:state.lat.toFixed(3),
-    lon:state.lon.toFixed(3),radius:"100"});
-  const result=await api("/api/aircraft?"+args.toString());
+  const mode=$("mode").value;
+  if(state.connectionKind==="internet" && mode==="antenna")
+   throw Error("Antenna-only mode requires a paired local bridge.");
+  const args=new URLSearchParams({mode,lat:state.lat.toFixed(3),lon:state.lon.toFixed(3),radius:"100"});
+  const result=state.connectionKind==="bridge"
+    ? await api("/api/aircraft?"+args.toString())
+    : await fetchInternetFeed();
   state.data=Array.isArray(result.aircraft)?result.aircraft:[];
-  updateCounters(result.counts);
-  feedSummary(result.sources);
-  recordTracks();
+  updateCounters(result.counts);feedSummary(result.sources);recordTracks();
   if(!state.autoFocused&&!state.moved)focusAir();
   $("lastUpdate").textContent=formatTime(result.generated_at);
   renderTable();paint();
-  notice("Updated real observations from "+(result.active_sources||[]).join(" + ")+". Internet and antenna counts are independent.");
+  notice("Updated genuine "+(result.active_sources||[]).join(" + ")+" observations."+
+     (state.connectionKind==="internet"&&mode==="hybrid"?" Antenna layer requires a local bridge.":""));
+  return true;
  }catch(e){
   notice("Update failed: "+e.message+" — previous positions are not treated as live.");
   state.data=[];updateCounters();renderTable();paint();
+  $("lastUpdate").textContent="—";
+  if(raise)throw e;
+  return false;
  }finally{state.fetching=false}
 }
 async function control(action){
