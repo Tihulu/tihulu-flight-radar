@@ -538,12 +538,19 @@ async function connect(){
   connection(true,state.connectionKind==="bridge"?"Paired with local bridge":"Internet source configured · check individual provider statuses");
   $("token").value="";
   state.timer=setInterval(()=>{if(!document.hidden)refresh()},15000);
-  if(state.connectionKind==="bridge"&&!state.moved){
-   // Native Qt's loopback origin changes its TCP port on every launch.
-   // Restore owner-private location preferences through authenticated API.
+  if(state.connectionKind==="bridge"){
+   // Native Qt changes its loopback port each time. Synchronize only the
+   // explicitly selected place, never a receiver/GPS site coordinate.
    try{
-    const stored=await api("/api/search-location");
-    if(stored?.place&&!state.moved)applyPlaceToFlightRadar(stored.place,false);
+    const locationModule=await import("./flight_location_ui.mjs");
+    const tabPlace=locationModule.readSavedPlace();
+    if(state.moved && tabPlace){
+     await api("/api/search-location",{method:"POST",
+      headers:{"Content-Type":"application/json"},body:JSON.stringify(tabPlace)});
+    }else if(!state.moved){
+     const stored=await api("/api/search-location");
+     if(stored?.place&&!state.moved)applyPlaceToFlightRadar(stored.place,false);
+    }
    }catch(error){notice("Native location preference unavailable: "+error.message);}
   }
  }catch(e){
