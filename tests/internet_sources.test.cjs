@@ -86,9 +86,11 @@ test("Real browser request does not upload local RF or position to global IntelS
  assert.equal(rows.counts.antenna,0);
  assert.equal(rows.counts.internet,1);
 });
-test("No clandestine tar1090 endpoint is opened when WebUSB owns the one SDR",()=>{
- assert.match(js,/state\.connectionKind==="usb"[\s\S]{0,230}setRadarExpanded\(true\)/);
- assert.match(js,/tar1090 needs a separate live readsb JSON backend/);
+test("Full original tar1090 works with WebUSB or Internet-only without a second SDR",()=>{
+ // Integrated upstream frontend consumes the already-observed aircraft.
+ // Never silently starts readsb or claims the same RTL-SDR twice.
+ assert.match(js,/state\.connectionKind!=="bridge"[\s\S]{0,90}await setBrowserTar\(true\)/);
+ assert.match(js,/No live readsb backend; original tar1090 is using Internet-only aircraft/);
  assert.match(js,/api\/tar-status/);
  assert.match(js,/live\.available/);
  assert.match(html,/id="expandMap"/);
