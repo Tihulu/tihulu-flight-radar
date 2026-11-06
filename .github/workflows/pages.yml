@@ -30,7 +30,7 @@ jobs:
           node --check tihulu_flight_radar/web/app.js
           node --check tihulu_flight_radar/web/sw.js
           node --check deploy/cloudflare-worker.mjs
-          node --test tests/web_bridge.test.cjs
+          node --test tests/web_bridge.test.cjs tests/pages_tar.test.cjs
           python3 -m json.tool tihulu_flight_radar/web/manifest.webmanifest >/dev/null
           test -s tihulu_flight_radar/web/icon.svg
           test -s tihulu_flight_radar/web/sw.js
