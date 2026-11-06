@@ -55,19 +55,29 @@ def choose_tar_focus(snapshot: dict | None, receiver: tuple | None = None):
 
 def focused_tar_url(base: str, snapshot: dict | None = None,
                     receiver: tuple | None = None) -> str:
-    """Build tar1090 official URL params. Never rely on cached USA viewport."""
+    """Never forge a tar1090 receiver/site location to set the camera.
+
+    The native Qt viewer separately applies map camera focus through OpenLayers.
+    SiteLat/SiteLon are real *receiver-site override* parameters, and setting
+    them to Germany falsely draws a receiver dot and range circles there.
+    """
     parsed = urlsplit(base)
     if parsed.scheme not in ("http", "https") or not parsed.hostname:
         raise ValueError("Valid tar1090 HTTP(S) URL required.")
     focus = choose_tar_focus(snapshot, receiver)
-    # Respect other existing URL options, but replace only camera parameters.
     pairs = [(k, v) for k, v in parse_qsl(parsed.query, keep_blank_values=True)
-             if k.lower() not in (
-                 "icao", "zoom", "sitelat", "sitelon", "centerreceiver", "noisolation")]
-    pairs.extend([("SiteLat", f"{focus['lat']:.6f}"),
-                  ("SiteLon", f"{focus['lon']:.6f}"),
-                  ("centerReceiver", ""), ("zoom", str(focus["zoom"]))])
+             if k.lower() not in ("icao", "zoom", "sitelat", "sitelon",
+                                  "centerreceiver", "lockdotcentered",
+                                  "noisolation", "rangerings",
+                                  "tihulufocuslat", "tihulufocuslon")]
+    # Explicitly hide rings, keep tar1090's *actual* receiver location intact.
+    pairs.append(("rangeRings", "0"))
+    pairs.append(("zoom", str(focus["zoom"])))
+    # The Qt viewer reads the Tihulu fields and sets map camera separately.
+    # Upstream tar1090 ignores unrecognized query parameters.
+    pairs.append(("tihuluFocusLat", f"{focus['lat']:.6f}"))
+    pairs.append(("tihuluFocusLon", f"{focus['lon']:.6f}"))
     if focus["icao"]:
         pairs.extend([("icao", focus["icao"]), ("noIsolation", "")])
-    query = urlencode(pairs)
-    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, query, parsed.fragment))
+    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path,
+                       urlencode(pairs), parsed.fragment))
