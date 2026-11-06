@@ -48,7 +48,7 @@ BOOTSTRAP_JS = r"""(() => {
   if (document.getElementById('tihulu-tar-overlay-panel')) return;
   const panel = document.createElement('div');
   panel.id='tihulu-tar-overlay-panel';
-  panel.style.cssText='position:fixed;bottom:16px;right:15px;z-index:2147483000;'+
+  panel.style.cssText='position:fixed;top:72px;left:15px;z-index:2147483000;'+
     'background:#101d2aef;color:#eaf7ff;padding:9px;border:1px solid #407391;'+
     'border-radius:8px;font:12px system-ui;max-width:260px';
   panel.textContent='Internet overlay: waiting for tar1090 map…';
@@ -87,7 +87,7 @@ OVERLAY_JS = r"""(function(input){
        || document.createElement('div');
     panel.replaceChildren();
     panel.id='tihulu-tar-overlay-panel';
-    panel.style.cssText = 'position:fixed;bottom:16px;right:15px;z-index:2147483000;'+
+    panel.style.cssText = 'position:fixed;top:72px;left:15px;z-index:2147483000;'+
       'background:#101d2aef;color:#eaf7ff;padding:9px;border:1px solid #407391;'+
       'border-radius:8px;font:12px system-ui;max-width:230px';
     const checkbox = document.createElement('input');
@@ -110,7 +110,11 @@ OVERLAY_JS = r"""(function(input){
   const local=(typeof g==='object' && g.planes) ? g.planes : {};
   let plotted=0, overlapped=0;
   for (const a of input.aircraft) {
-    if (a.hex && Object.prototype.hasOwnProperty.call(local,a.hex.toLowerCase())) {
+    const observed = a.hex ? local[a.hex.toLowerCase()] : null;
+    if (observed && Array.isArray(observed.position) &&
+        Number.isFinite(observed.seen_pos) && observed.seen_pos<=60 &&
+        Number.isFinite(observed.seen) && observed.seen<=60 &&
+        observed.visible!==false) {
       overlapped++;continue;
     }
     const f=new ol.Feature({
