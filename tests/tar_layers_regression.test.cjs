@@ -91,16 +91,16 @@ test("Source toggles instantly remove hidden map planes AND table rows",async()=
  assert.equal(b.destroyed,false);
  assert.equal(c.destroyed,false);
  assert.deepEqual(Object.keys(h.upstream.planes),["bbb222","ccc333"]);
- assert.deepEqual((await h.json()).aircraft.map(x=>x.hex),["bbb222","ccc333"]);
+ assert.deepEqual(Array.from((await h.json()).aircraft,x=>x.hex),["bbb222","ccc333"]);
  matched.checked=false;matched.onchange();
  assert.equal(c.destroyed,true);
- assert.deepEqual((await h.json()).aircraft.map(x=>x.hex),["bbb222"]);
+ assert.deepEqual(Array.from((await h.json()).aircraft,x=>x.hex),["bbb222"]);
  radio.checked=false;radio.onchange();
  assert.equal(b.destroyed,true);
  assert.equal((await h.json()).aircraft.length,0);
  assert.ok(h.counts().tableRefresh>=3,"table is redrawn when the source changes");
  radio.checked=true;radio.onchange();
- assert.deepEqual((await h.json()).aircraft.map(x=>x.hex),["bbb222"]);
+ assert.deepEqual(Array.from((await h.json()).aircraft,x=>x.hex),["bbb222"]);
 });
 test("Source overlay and altitude ramp move clear of selected aircraft infoblock",()=>{
  const h=harness({selectedWidth:300,mapWidth:1000});
