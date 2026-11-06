@@ -1,5 +1,31 @@
 # Tihulu Flight Radar
 
+## Preview 0.3.2.dev1 — original tar1090 without an antenna (6 Nov 2026)
+
+The **same complete upstream tar1090 interface** now opens from the browser
+and from the native Pop!_OS app when no RTL-SDR/readsb receiver is attached.
+It accepts actual Internet-only aircraft, real radio-only observations or
+ICAO24-deduplicated **I/R** hybrids. The original tar1090 map, photo/aircraft
+details, sidebar, filters, metadata and source badges are retained. The full
+GUI has explicit **Internet (I)**, **Radio (R)** and **Both (I/R)** display layers.
+
+Pop!_OS installer caches the complete tar1090 HTML/JS/aircraft metadata at
+`~/.local/share/tihulu-flight-radar/tar1090` so the native app can serve
+it safely from its private loopback bridge. If the optional cache fails, the
+app can use the trusted HTTPS Pages copy. The cache is static assets, **not**
+fabricated aircraft; actual Internet planes still require a working provider.
+An antenna is never automatically required to open tar1090, and fresh installs
+do not automatically start/readsb-claim the SDR.
+
+**Preserved legacy:** `legacy/v0.3.1` at
+`67280cd84feb89faec6a80f5fe2a55ce5f7b89e6` remains untouched.
+The installer upgrades the **same pipx environment**, not a parallel app;
+users can always restore the 0.3.1 commit via the pinned version switcher.
+Read [the full tar1090 guide](docs/ANTENNA_OPTIONAL_TAR1090.md) and
+[the Pop!_OS version guide](docs/POP_OS_VERSION_SWITCH_AND_LEGACY.md).
+The optional 0.3.2.dev1 preview has not been physically certified on the
+user's Nooelec receiver yet.
+
 ## Pop!_OS upgrade with preserved 0.3.1 legacy rollback
 
 The known-good **0.3.1** source snapshot is archived at
@@ -88,7 +114,7 @@ Browser Internet sources: built-in **IntelSky** (real CORS-enabled *limited mili
 
 English-language, local-first ADS-B / Mode S receiver desktop software.
 
-**Current development branch version 0.3.2.dev0; user's installed stable baseline 0.3.1.** Uses real receiver data only. It never
+**Current development branch version 0.3.2.dev1; user's stable legacy baseline 0.3.1.** Uses real receiver data only. It never
 creates simulated aircraft or positions. ADS-B broadcasts may contain locations;
 Mode S does not guarantee location. MLAT positioning requires synchronized
 multiple receivers and is **not** calculated by this app.
