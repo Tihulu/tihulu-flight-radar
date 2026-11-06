@@ -371,15 +371,22 @@ window.tihuluUsbCanStart=()=>state.connectionKind!=="bridge";
 window.tihuluUsbStarted=()=>{
  state.usbSnapshot={aircraft:[],messages:0,updatedAt:Date.now()};
  state.usbMessageCount=0;state.connectionKind="usb";state.connected=true;
- state.onlineFeed=configuredOnlineFeed();
-   state.internetBackoffUntil=0;state.airlabsLastFetch=0;
+ let networkSetupError=null;
+ try{state.onlineFeed=configuredOnlineFeed();}
+ catch(error){
+  networkSetupError=String(error.message||error);
+  state.onlineFeed="";state.onlineProvider="off";
+ }
+ state.internetBackoffUntil=0;state.airlabsLastFetch=0;
  $("mode").value=state.onlineFeed?"hybrid":"antenna";
  connection(true,"Direct browser WebUSB · 1090 MHz");
  for(const id of ["start","stop","restart"])$(id).disabled=true;
  if(!state.timer)state.timer=setInterval(()=>{if(!document.hidden)refresh()},15000);
  displayUsbSnapshot();
  void refresh();
- notice("Browser SDR connected. Loading the selected Internet network alongside real RF.");
+ notice(networkSetupError
+  ?"WebUSB started with antenna only; Internet configuration requires attention: "+networkSetupError
+  :"Browser SDR connected. Loading the selected Internet network alongside real RF.");
 };
 window.tihuluUsbSnapshot=packet=>{
  if(state.connectionKind!=="usb")return;
