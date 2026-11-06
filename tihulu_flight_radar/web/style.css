@@ -87,3 +87,21 @@ body.radar-expanded{overflow:hidden}
 #airlabsKeyField[hidden]{display:none!important}
 .source-key-warning{flex:1 1 100%;font-size:11px;color:#b2cadd;
  line-height:1.4;margin:0 0 4px}
+
+/* Explicit, first-class online aircraft configuration for browser/PWA.
+   Distinguishes a real, limited free feed from a full receiver-network API. */
+.internet-panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;
+ padding:12px 15px;margin:0 0 11px}
+.internet-panel-head{display:flex;align-items:center;justify-content:space-between;
+ gap:10px;flex-wrap:wrap;font-size:13px;margin-bottom:10px}
+#networkStatus{font-size:12px;color:#b7d9ef;line-height:1.45;overflow-wrap:anywhere}
+.internet-controls{display:flex;align-items:end;gap:9px;flex-wrap:wrap}
+.internet-controls>.field{max-width:100%;min-width:145px}
+.internet-controls>.field select,.internet-controls>.field input{width:100%;max-width:100%}
+.internet-controls #networkApply{white-space:normal;font-size:12px}
+html.native .internet-panel .internet-controls{display:none}
+html.native .internet-panel>.usb-hint{display:none}
+@media(max-width:650px){
+ .internet-controls>.field,.internet-controls #networkApply{flex:1 1 100%}
+ .internet-panel{padding:11px}
+}
