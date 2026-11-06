@@ -77,61 +77,94 @@ def merge_aircraft(local: list[dict], online: list[dict]) -> list[dict]:
 
 
 class DataProvider:
-    """Bounds anonymous public API traffic; errors never become fake positions."""
+    """Personal, low-rate public feed client with source-aware failover.
+
+    Never mix network feed data into real RF message counters. adsb.fi is a
+    personal/non-commercial fallback with explicit attribution requirements.
+    """
+    FEEDS = (
+        ("adsb.lol", "https://api.adsb.lol/v2/point/{lat}/{lon}/{r}",
+         "adsb.lol — ODbL 1.0"),
+        ("adsb.fi", "https://opendata.adsb.fi/api/v3/lat/{lat}/lon/{lon}/dist/{r}",
+         "adsb.fi — personal/non-commercial; cite adsb.fi"),
+    )
+
     def __init__(self):
         self.lock = threading.Lock()
-        self.cache_key: tuple | None = None
+        self.cache_key = None
         self.cached: list[dict] = []
         self.last_update: float | None = None
         self.retry_after = 0.0
+        self.backoff: dict[str, float] = {}
         self.last_error: str | None = None
+        self.provider_name = "adsb.lol"
+        self.attribution = "adsb.lol — ODbL 1.0"
+
+    def _status(self, cached: bool) -> dict:
+        return {"provider": self.provider_name, "attribution": self.attribution,
+                "updated_at": self.last_update if self.cached else None,
+                "error": self.last_error, "cached": cached}
 
     def fetch(self, lat: float, lon: float, radius: int) -> tuple[list[dict], dict]:
         key = (round(lat, 1), round(lon, 1), radius)
         with self.lock:
             current = time.monotonic()
-            if self.cache_key == key and current < self.retry_after:
-                return list(self.cached), self._status(cached=True)
-            if current < self.retry_after and self.cache_key != key:
-                return [], self._status(cached=True)
+            if current < self.retry_after:
+                if self.cache_key == key:
+                    return list(self.cached), self._status(cached=True)
+                return [], {"provider": self.provider_name,
+                            "attribution": self.attribution, "updated_at": None,
+                            "error": "Feed refresh cooldown; use Refresh later.",
+                            "cached": True}
+
             self.cache_key = key
             self.cached = []
             self.last_error = None
             self.retry_after = current + ONLINE_CACHE_SECONDS
-            url = f"https://api.adsb.lol/v2/point/{lat:.3f}/{lon:.3f}/{radius}"
-            request = Request(url, headers={
-                "Accept": "application/json", "User-Agent": "TihuluFlightRadar/0.3.1 (local bridge)"
-            })
-            # Prevent localhost HTTP proxies and unbounded downloads.
-            try:
-                opener = build_opener(ProxyHandler({}))
-                with opener.open(request, timeout=6) as response:
-                    raw = response.read(MAX_ONLINE_BYTES + 1)
-                if len(raw) > MAX_ONLINE_BYTES:
-                    raise DataError("Online aircraft response too large.")
-                result = json.loads(raw)
-                if not isinstance(result, dict) or not isinstance(result.get("ac"), list):
-                    raise DataError("Invalid online aircraft response.")
-                self.cached = [a for a in result["ac"][:10000]
-                               if isinstance(a, dict) and recently_seen(a)]
-                self.last_update = time.time()
-            except HTTPError as exc:
-                self.last_error = f"Provider HTTP {exc.code}"
-                if exc.code == 429:
-                    raw_wait = exc.headers.get("Retry-After", "90")
+            errors: list[str] = []
+            for name, template, attribution in self.FEEDS:
+                if current < self.backoff.get(name, 0):
+                    errors.append(name + ": cooldown")
+                    continue
+                url = template.format(lat=f"{lat:.3f}", lon=f"{lon:.3f}", r=radius)
+                request = Request(url, headers={
+                    "Accept": "application/json",
+                    "User-Agent": "TihuluFlightRadar/0.3.1 (personal receiver application)"
+                })
+                try:
+                    opener = build_opener(ProxyHandler({}))
+                    with opener.open(request, timeout=6) as response:
+                        raw = response.read(MAX_ONLINE_BYTES + 1)
+                    if len(raw) > MAX_ONLINE_BYTES:
+                        raise DataError("Online feed response too large.")
+                    result = json.loads(raw)
+                    if not isinstance(result, dict) or not isinstance(result.get("ac"), list):
+                        raise DataError("Invalid aircraft feed response schema.")
+                    self.cached = [
+                        aircraft for aircraft in result["ac"][:10000]
+                        if isinstance(aircraft, dict) and recently_seen(aircraft)
+                    ]
+                    self.provider_name = name
+                    self.attribution = attribution
+                    self.last_update = time.time()
+                    return list(self.cached), self._status(cached=False)
+                except HTTPError as exc:
+                    detail = f"{name}: HTTP {exc.code}"
+                    errors.append(detail)
+                    retry_header = exc.headers.get("Retry-After", "90")
                     try:
-                        wait = max(60, min(3600, int(raw_wait)))
-                    except ValueError:
-                        wait = 90
-                    self.retry_after = time.monotonic() + wait
-            except (URLError, OSError, ValueError, DataError) as exc:
-                self.last_error = str(exc)[:180]
-            return list(self.cached), self._status(cached=False)
-
-    def _status(self, cached: bool) -> dict:
-        return {"provider": "adsb.lol", "attribution": "adsb.lol — ODbL 1.0",
-                "updated_at": self.last_update if self.cached else None,
-                "error": self.last_error, "cached": cached}
+                        delay = int(retry_header)
+                    except (ValueError, TypeError):
+                        delay = 90
+                    self.backoff[name] = time.monotonic() + (
+                        max(60, min(3600, delay)) if exc.code == 429 else 90
+                    )
+                except (URLError, OSError, ValueError, DataError) as exc:
+                    errors.append(f"{name}: {str(exc)[:95]}")
+                    self.backoff[name] = time.monotonic() + 60
+            self.last_error = " | ".join(errors) or "No feed available."
+            self.last_update = None
+            return [], self._status(cached=False)
 
 
 class Bridge:
@@ -141,6 +174,7 @@ class Bridge:
         self.receiver = ReceiverController()
         self.receiver_lock = threading.RLock()
         self.online = DataProvider()
+        self.last_start_error: str | None = None
 
     def snapshot(self, mode: str, lat: float, lon: float, radius: int) -> dict:
         if mode not in ("antenna", "internet", "hybrid", "auto"):
@@ -177,7 +211,8 @@ class Bridge:
         with self.receiver_lock:
             active, detail = self.receiver.status()
             return {"active": active, "detail": detail, "mode": self.receiver.mode,
-                    "control_enabled": self.allow_control}
+                    "control_enabled": self.allow_control,
+                    "startup_error": self.last_start_error}
 
     def control(self, action: str) -> str:
         if not self.allow_control:
