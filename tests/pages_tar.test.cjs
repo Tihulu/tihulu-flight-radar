@@ -262,7 +262,7 @@ test("tar1090 source controls live inside map_container, not atop the selected a
   },
   body:{children:[],appendChild(){throw Error("Do not mount on body over infoblock")}}
  };
- const ctx={document:doc};
+ const ctx={document:doc,window:{addEventListener(){}}};
  vm.runInNewContext(m[1],ctx);
  const panel=elements.get("tihulu-tar-overlay-panel");
  assert.ok(panel);
@@ -279,4 +279,76 @@ test("tar1090 source controls live inside map_container, not atop the selected a
  assert.match(overlay[1],/getElementById\('map_container'\)/);
  assert.match(overlay[1],/panel\.parentElement!==host/);
  assert.doesNotMatch(overlay[1],/document\.body\.appendChild\(panel\)/);
+});
+
+
+test("tar1090 widget avoids visible aircraft info card and returns when card closes",()=>{
+ const py=fs.readFileSync(path.join(root,"tihulu_flight_radar/tar_overlay.py"),"utf8");
+ const code=py.match(/BOOTSTRAP_JS = r"""([\s\S]*?)"""/)[1];
+ const ids=new Map(),children=[];
+ const mapBounds={left:18,right:900,top:0,bottom:900,width:882,height:900};
+ const host={
+  getBoundingClientRect:()=>mapBounds,
+  appendChild(node){node.parentElement=this;children.push(node);}
+ };
+ let infoVisible=true;
+ const infoBounds={left:18,right:225,top:0,bottom:900,width:207,height:900};
+ const info={getBoundingClientRect:()=>infoBounds};
+ ids.set("map_container",host);ids.set("selected_infoblock",info);
+ const events=[];
+ const window={
+  getComputedStyle(){return {display:infoVisible?"block":"none",visibility:"visible"}},
+  addEventListener(name,callback){events.push([name,callback])}
+ };
+ const doc={
+  getElementById:id=>ids.get(id),
+  createElement(){
+   const node={style:{},textContent:"",parentElement:null};
+   Object.defineProperty(node,"id",{
+    get(){return node._id},
+    set(v){node._id=v;ids.set(v,node)}
+   });
+   return node;
+  }
+ };
+ let mutations=0,resizes=0;
+ class MutationObserver{
+  constructor(callback){this.callback=callback}
+  observe(node,options){
+   assert.equal(node,info);
+   assert.deepEqual([...options.attributeFilter],["style","class","hidden"]);
+   mutations++;
+  }
+ }
+ class ResizeObserver{
+  constructor(callback){this.callback=callback}
+  observe(node){resizes++}
+ }
+ const ctx={document:doc,window,MutationObserver,ResizeObserver,Math,Number};
+ vm.runInNewContext(code,ctx);
+ const panel=ids.get("tihulu-tar-overlay-panel");
+ assert.ok(panel);
+ assert.equal(panel.parentElement,host);
+ assert.equal(panel.style.left,"219px","starts outside occupied aircraft panel");
+ assert.equal(panel.style.maxWidth,"651px");
+ assert.equal(panel.style.display,"");
+ assert.equal(resizes,2);
+ assert.equal(mutations,1);
+ assert.ok(events.some(e=>e[0]==="resize"));
+ infoVisible=false;
+ window.tihuluTarPlacePanel();
+ assert.equal(panel.style.left,"12px","returns to map edge when selected card hides");
+ infoVisible=true;
+ mapBounds.width=245;mapBounds.right=263;
+ window.tihuluTarPlacePanel();
+ assert.equal(panel.style.left,"219px");
+ assert.equal(panel.style.maxWidth,"14px");
+ assert.equal(panel.style.display,"none","cannot cover sidebar in tiny window");
+ // Responsive, reversible: restore map width and render the same panel.
+ mapBounds.width=882;mapBounds.right=900;
+ window.tihuluTarPlacePanel();
+ assert.equal(panel.style.display,"");
+ vm.runInNewContext(code,ctx);
+ assert.equal(children.length,1,"no duplicate injected panel on reinjection");
+ assert.equal(mutations,1,"no duplicate observers on reinjection");
 });
