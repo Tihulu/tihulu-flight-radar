@@ -13,6 +13,19 @@
  <div class="connection"><span id="connectionDot" class="dot"></span><span id="connectionLabel" role="status">Not paired</span></div>
 </header>
 <main>
+ <section class="usb-direct-panel" aria-label="Direct browser USB receiver">
+  <div class="usb-topline">
+   <strong><span aria-hidden="true">📡</span> Direct 1090 MHz USB receiver</strong>
+   <span class="usb-pill">Brave / Chrome / Edge · HTTPS</span>
+  </div>
+  <div class="usb-controls">
+   <button id="usbStart" class="primary" disabled>Choose RTL-SDR &amp; start</button>
+   <button id="usbStop" disabled>Hard stop / release USB</button>
+   <span id="usbStatus" role="status" aria-live="polite">Checking direct browser USB capability…</span>
+  </div>
+  <p class="usb-hint">No desktop app, Python server or pairing token required. This page reads genuine ADS-B on 1090 MHz and decodes verified messages inside your browser. It stops USB on tab hide/close. A device already occupied by readsb or another SDR app cannot be claimed by the browser.</p>
+ </section>
+ <details class="bridge-advanced"><summary>Optional: paired receiver / Internet feed settings (advanced)</summary>
  <div class="toolbar">
   <label class="field feed">Internet feed (HTTPS, optional) <input id="onlineFeedUrl" type="url" placeholder="https://your-feed.example/api/aircraft" spellcheck="false" aria-label="CORS-enabled Internet feed endpoint"></label>
   <label class="field">Bridge URL <input id="bridgeUrl" value="http://127.0.0.1:8510" spellcheck="false" aria-label="Local bridge URL"></label>
@@ -24,7 +37,8 @@
   </select></label>
   <button id="refresh">Refresh now</button><button id="installApp" hidden>Install web app</button><button id="fullMap" title="Open existing complete tar1090 viewer (if installed)">Full tar1090 map</button>
  </div>
- <div class="notice" id="sourceHelp">GitHub Pages: use a paired local bridge for antenna data (127.0.0.1:8510 + session token), or configure a trusted HTTPS CORS-enabled Internet feed to see Internet aircraft without hardware. Public ADS-B APIs normally block direct browser requests. Internet requests share the selected map center with the configured provider. <a href="https://github.com/Tihulu/tihulu-flight-radar/blob/main/docs/GITHUB_PAGES_AND_LOCAL_BRIDGE.md" target="_blank" rel="noopener noreferrer">Setup guide</a></div>
+ </details>
+ <div class="notice" id="sourceHelp">Browser-first radar: choose RTL-SDR above for direct WebUSB reception, or use an authorized HTTPS CORS-enabled Internet feed (advanced) without USB. A paired readsb bridge remains optional for Firefox/Safari or professional receiver features. Public ADS-B feeds may block cross-origin browsers. Real hardware still requires OS USB permissions and exclusive access. <a href="https://github.com/Tihulu/tihulu-flight-radar/blob/main/docs/GITHUB_PAGES_AND_LOCAL_BRIDGE.md" target="_blank" rel="noopener noreferrer">Setup guide</a></div>
  <div class="metrics" aria-label="Live source statistics">
   <div class="metric"><span>Local aircraft</span><strong id="localCount">—</strong></div>
   <div class="metric"><span>Online aircraft</span><strong id="onlineCount">—</strong></div>
@@ -53,7 +67,7 @@
   </section>
   <aside class="side">
    <h2>Receiver</h2>
-   <p id="receiverStatus" class="muted">Connect to a trusted local bridge to inspect receiver state.</p>
+   <p id="receiverStatus" class="muted">WebUSB can receive directly in supported browsers. A paired bridge is optional.</p>
    <div class="buttons"><button id="start">Start</button><button id="stop">Stop</button><button id="restart">Restart</button></div>
    <h2>Sources</h2><p id="feedStatus" class="muted">No source connected.</p>
    <h2>Aircraft <span id="visibleCount" class="muted">0</span></h2>
@@ -61,7 +75,8 @@
    <h2>Selected aircraft</h2><pre id="details" class="details">Select an aircraft to inspect its received fields and source provenance.</pre>
   </aside>
  </div>
- <footer><span id="message" role="status">Ready — connect to a bridge. No artificial flights are generated.</span><span>Offline-first · <a href="https://github.com/Tihulu/tihulu-flight-radar" target="_blank" rel="noopener noreferrer">GitHub source</a></span></footer>
+ <footer><span id="message" role="status">Ready — choose USB above or configure an Internet feed. No artificial flights are generated.</span><span>Offline-first · <a href="https://github.com/Tihulu/tihulu-flight-radar" target="_blank" rel="noopener noreferrer">GitHub source</a></span></footer>
 </main>
 <script src="./app.js" defer></script>
+<script type="module" src="./browser_usb.mjs"></script>
 </body></html>
