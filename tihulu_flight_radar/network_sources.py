@@ -131,17 +131,6 @@ class MultiNetworkProvider:
         self.next_fetch: dict[str, float] = {}
         self.errors: dict[str, str | None] = {}
 
-    def _request(self, provider: str, lat: float, lon: float, radius: int):
-        url = _url(provider, lat, lon, radius)
-        request = Request(url, headers={"Accept": "application/json",
-            "User-Agent": "TihuluFlightRadar/0.3.1 (personal ADS-B map; https://github.com/Tihulu/tihulu-flight-radar)"})
-        opener = build_opener(ProxyHandler({}))
-        with opener.open(request, timeout=2) as response:
-            body = response.read(MAX_BYTES + 1)
-        if len(body) > MAX_BYTES:
-            raise DataError(provider+": HTTP response too large.")
-        return normalize_provider(provider, json.loads(body))
-
     def fetch(self, lat: float, lon: float, radius: int,
               selected: tuple[str, ...]) -> tuple[list[dict], dict]:
         if not selected or any(p not in NETWORK_INFO for p in selected):
