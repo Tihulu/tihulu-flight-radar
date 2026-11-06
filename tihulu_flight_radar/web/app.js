@@ -758,6 +758,23 @@ canvas.addEventListener("pointerup",e=>{
 canvas.addEventListener("wheel",e=>{
  e.preventDefault();state.moved=true;state.zoom=Math.max(2,Math.min(12,state.zoom+(e.deltaY<0?1:-1)));paint();
 },{passive:false});
+// Provider selection is explicit and never creates a hidden proxy/key.
+const preset=$("onlinePreset");
+const customFeed=$("onlineFeedUrl");
+function showProviderChoice(){
+ customFeed.disabled=preset.value!=="custom";
+ customFeed.title=customFeed.disabled
+  ?"Select Custom HTTPS/CORS ADS-B feed to enter a URL."
+  :"Only trusted /api/aircraft endpoints with documented CORS and source attribution.";
+}
+preset.onchange=()=>{
+ showProviderChoice();
+ if(state.connectionKind==="usb"||state.connectionKind==="internet"){
+  state.internetSnapshot=null;state.internetBackoffUntil=0;
+  void connect();
+ }
+};
+showProviderChoice();
 $("connect").onclick=connect;
 $("disconnect").onclick=disconnect;
 $("refresh").onclick=refresh;
@@ -792,12 +809,45 @@ function tarFocusURL(raw){
  }
  return url.href;
 }
-$("fullMap").onclick=()=>{
- const raw=prompt("Full tar1090 URL (receiver must host tar1090):","http://127.0.0.1/tar1090/");
+function setRadarExpanded(force){
+ const enabled=typeof force==="boolean"?force:!document.body.classList.contains("radar-expanded");
+ document.body.classList.toggle("radar-expanded",enabled);
+ $("expandMap").textContent=enabled?"Exit full radar":"Full radar map";
+ $("expandMap").setAttribute("aria-pressed",String(enabled));
+ resize();paint();
+ if(enabled)notice("Full browser radar is using this tab's real RF and configured network sources; no readsb backend required.");
+}
+$("expandMap").onclick=()=>setRadarExpanded();
+window.addEventListener("keydown",event=>{
+ if(event.key==="Escape"&&document.body.classList.contains("radar-expanded"))
+  setRadarExpanded(false);
+});
+$("legacyTar").onclick=async()=>{
+ if(state.connectionKind==="usb"){
+  // Do not direct a user with one USB dongle to a dead readsb JSON server.
+  setRadarExpanded(true);
+  notice("tar1090 needs a separate live readsb JSON backend. Your SDR is owned by this WebUSB tab, so use this full browser map. Stop WebUSB before switching the same antenna to readsb.");
+  return;
+ }
+ if(state.connectionKind==="bridge"){
+  try{
+   const status=await api("/api/status");
+   if(!status.active){
+    setRadarExpanded(true);
+    notice("Local readsb decoder inactive: tar1090 has no live aircraft.json. Showing the integrated radar instead.");
+    return;
+   }
+  }catch(error){
+   setRadarExpanded(true);
+   notice("Cannot verify readsb backend: "+String(error.message||error)+". Using the in-app map.");
+   return;
+  }
+ }
+ const raw=prompt("External tar1090 URL (requires separately running readsb/data/aircraft.json):",
+  "http://127.0.0.1/tar1090/");
  if(raw===null)return;
- try{
-  window.open(tarFocusURL(raw),"_blank","noopener,noreferrer");
- }catch(e){notice("Cannot open tar1090: "+e.message)}
+ try{window.open(tarFocusURL(raw),"_blank","noopener,noreferrer");}
+ catch(error){notice("Invalid tar1090 URL: "+error.message);}
 };
 $("start").onclick=()=>control("start");
 $("stop").onclick=()=>control("stop");
