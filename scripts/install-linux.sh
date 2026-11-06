@@ -43,7 +43,8 @@ pipx install --force "git+https://github.com/Tihulu/tihulu-flight-radar.git@$ref
 
 app_binary="$HOME/.local/bin/tihulu-flight-radar"
 bridge_binary="$HOME/.local/bin/tihulu-flight-bridge"
-for binary in "$app_binary" "$bridge_binary"; do
+classic_binary="$HOME/.local/bin/tihulu-flight-radar-classic"
+for binary in "$app_binary" "$bridge_binary" "$classic_binary"; do
   if [[ ! -x "$binary" ]]; then
     echo "Installation incomplete: missing executable $binary" >&2
     exit 1
@@ -80,15 +81,15 @@ sudo visudo -cf "$policy_tmp"
 sudo install -m 0440 "$policy_tmp" /etc/sudoers.d/tihulu-flight-radar
 sudo visudo -cf /etc/sudoers.d/tihulu-flight-radar
 
-# Each launcher points to pipx's verified absolute executable. Desktop UI is
-# separate from the web dashboard; both are visible in COSMIC/XDG Applications.
+# The main icon opens the native embedded live radar, never a system browser.
+# Classic keeps all earlier receiver functionality in another Qt application.
 cat > "$app_dir/tihulu-flight-radar.desktop" <<EOF
 [Desktop Entry]
 Version=1.0
 Type=Application
 Name=Tihulu Flight Radar
-GenericName=ADS-B Aircraft Monitor
-Comment=Live ADS-B receiver and flight map
+GenericName=Live ADS-B Aircraft Radar
+Comment=Native aircraft radar with antenna and Internet overlays
 Exec="$app_binary"
 Icon=tihulu-flight-radar
 Terminal=false
@@ -96,23 +97,37 @@ StartupNotify=true
 Categories=Network;HamRadio;
 EOF
 
-# Terminal=true is intentional: the session pairing token is displayed locally
-# in a terminal, never embedded into a browser URL or leaked to another origin.
+# The former "Web" icon now also opens an app window for existing users.
+# No terminal token or manual browser navigation is needed in the native GUI.
 cat > "$app_dir/tihulu-flight-radar-web.desktop" <<EOF
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=Tihulu Flight Radar Web
-GenericName=Local ADS-B Radar Web Dashboard
-Comment=Start the paired local receiver bridge and open the browser radar
-Exec="$bridge_binary" --open-browser
+Name=Tihulu Flight Radar Live
+GenericName=Live Aircraft Map
+Comment=Native desktop radar — antenna, Internet and combined overlays
+Exec="$app_binary"
 Icon=tihulu-flight-radar
-Terminal=true
-StartupNotify=false
+Terminal=false
+StartupNotify=true
 Categories=Network;HamRadio;
 EOF
 
-chmod 0644 "$app_dir/tihulu-flight-radar.desktop" "$app_dir/tihulu-flight-radar-web.desktop"
+cat > "$app_dir/tihulu-flight-radar-classic.desktop" <<EOF
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Tihulu Flight Radar Classic
+GenericName=Receiver Control and Full Statistics
+Comment=Original Qt receiver dashboard, export and full tar1090 support
+Exec="$classic_binary"
+Icon=tihulu-flight-radar
+Terminal=false
+StartupNotify=true
+Categories=Network;HamRadio;
+EOF
+
+chmod 0644 "$app_dir/tihulu-flight-radar.desktop" "$app_dir/tihulu-flight-radar-web.desktop" "$app_dir/tihulu-flight-radar-classic.desktop"
 # Only the known old launcher is removed; never alter a user's other shortcuts.
 rm -f "$app_dir/tihulu-adsb-radar.desktop"
 
@@ -125,9 +140,11 @@ fi
 
 echo
 echo "Installed/updated successfully from '$ref'."
-echo "COSMIC Applications → Tihulu Flight Radar (desktop)"
-echo "COSMIC Applications → Tihulu Flight Radar Web (paired local browser)"
+echo "COSMIC Applications → Tihulu Flight Radar (native live app)"
+echo "COSMIC Applications → Tihulu Flight Radar Live (native live app, old web shortcut replaced)"
+echo "COSMIC Applications → Tihulu Flight Radar Classic (legacy dashboard)"
 echo "Or run: $app_binary"
-echo "Web bridge: $bridge_binary --open-browser"
+echo "Classic desktop: $classic_binary"
+echo "GitHub Pages companion (optional, manual): $bridge_binary"
 echo "Web hardware controls default to OFF; they require --allow-control."
 echo "Receiver services, SDR access and recordings were not reset or deleted."
