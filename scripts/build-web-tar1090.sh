@@ -28,6 +28,24 @@ printf '%s\n' \
 git clone -q --depth=1 https://github.com/wiedehopf/tar1090-db.git "$WORK/db"
 mkdir -p "$OUT/db2"
 rsync -a --delete "$WORK/db/db/" "$OUT/db2/"
+# Upstream tar1090-db stores several .js JSON shards as GZIP bytes even
+# though the filename ends with .js. A static GitHub Pages host does not
+# promise Content-Encoding:gzip for those .js paths. Decode at build time.
+python3 - "$OUT/db2" <<'PY'
+from pathlib import Path
+import gzip, sys
+root = Path(sys.argv[1])
+converted = 0
+for file in root.glob("*.js"):
+    data = file.read_bytes()
+    if data.startswith(bytes([0x1f, 0x8b])):
+        file.write_bytes(gzip.decompress(data))
+        converted += 1
+    # Do not publish compressed files with a JSON suffix.
+    if file.read_bytes().startswith(bytes([0x1f, 0x8b])):
+        raise SystemExit(f"Unexpanded gzip aircraft database shard: {file}")
+print(f"Decompressed {converted} aircraft JSON shards for GitHub Pages.")
+PY
 printf '%s\n' \
   "Aircraft metadata © tar1090-db contributors, see https://github.com/wiedehopf/tar1090-db" \
   "Metadata is NOT a live air traffic observation." \
