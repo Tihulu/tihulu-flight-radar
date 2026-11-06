@@ -35,8 +35,6 @@ jobs:
         run: test "$(uname -m)" = arm64
       - name: Run unit tests
         run: python -m pytest -q
-      - name: Verify embedded native desktop entrypoint
-        run: python -c "from tihulu_flight_radar.native import NativeRadarWindow; print(NativeRadarWindow.__name__)"
       - name: Validate Linux installer syntax
         if: matrix.label == 'linux-x64'
         run: bash -n scripts/install-linux.sh
@@ -45,6 +43,8 @@ jobs:
       - name: Install Linux Qt runtime dependencies
         if: matrix.label == 'linux-x64'
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libegl1 libgl1 libxkbcommon0 libdbus-1-3 libnss3 libnspr4 libxcomposite1 libxdamage1 libxrandr2 libgbm1
+      - name: Verify embedded native desktop entrypoint
+        run: python -c "from tihulu_flight_radar.native import NativeRadarWindow; print(NativeRadarWindow.__name__)"
       - name: Smoke-test Qt desktop window
         if: matrix.label == 'linux-x64'
         env:
