@@ -257,15 +257,18 @@ def make_handler(bridge: Bridge, port: int):
             if not self._guard():
                 return
             path = urlsplit(self.path)
-            if path.path in ("/", "/index.html", "/app.js", "/style.css"):
+            if path.path in ("/", "/index.html", "/app.js", "/style.css", "/manifest.webmanifest", "/icon.svg", "/sw.js"):
                 name = "index.html" if path.path == "/" else path.path[1:]
                 file = STATIC_DIR / name
                 if not file.is_file():
                     self._send(HTTPStatus.NOT_FOUND, {"error": "Web asset missing."})
                     return
                 raw = file.read_bytes()
-                mime = "text/html" if name.endswith(".html") else (
-                    "text/javascript" if name.endswith(".js") else "text/css")
+                mime = ("text/html" if name.endswith(".html") else
+                        "application/javascript" if name.endswith(".js") else
+                        "text/css" if name.endswith(".css") else
+                        "application/manifest+json" if name.endswith(".webmanifest") else
+                        "image/svg+xml")
                 self._headers(HTTPStatus.OK, mime + "; charset=utf-8", len(raw))
                 self.wfile.write(raw)
                 return
