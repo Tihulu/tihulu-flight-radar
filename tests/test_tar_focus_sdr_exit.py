@@ -5,7 +5,7 @@ import pytest
 
 from tihulu_flight_radar import control
 from tihulu_flight_radar.core import DataError
-from tihulu_flight_radar.tar_map import GERMANY, focused_tar_url
+from tihulu_flight_radar.tar_map import COLOGNE, focused_tar_url
 
 
 def aircraft(code="3c1234", lat=50.9, lon=7.1, seen=1, seen_pos=1):
@@ -34,11 +34,11 @@ def test_tar_camera_selects_nearest_genuine_local_aircraft_and_preserves_other_p
 def test_tar_camera_ignores_stale_positions_and_uses_germany_default():
     data={"aircraft":[aircraft(seen=180), aircraft(seen_pos=150)]}
     q=params(focused_tar_url("http://localhost/tar1090/?SiteLat=39&SiteLon=-99&zoom=4",data))
-    assert q["tihuluFocusLat"] == [f"{GERMANY[0]:.6f}"]
+    assert q["tihuluFocusLat"] == [f"{COLOGNE[0]:.6f}"]
     assert "SiteLat" not in q
-    assert q["tihuluFocusLon"] == [f"{GERMANY[1]:.6f}"]
+    assert q["tihuluFocusLon"] == [f"{COLOGNE[1]:.6f}"]
     assert "SiteLon" not in q
-    assert q["zoom"] == ["7"]
+    assert q["zoom"] == ["9"]
     assert "icao" not in q
 
 
@@ -85,3 +85,11 @@ def test_failed_sdr_release_is_not_silently_reported_as_success(monkeypatch):
     receiver=control.ReceiverController()
     with pytest.raises(DataError,match="insufficient"):
         receiver.close(release_local_service=True)
+
+def test_authorized_location_has_priority_over_nearest_radio_plane():
+    data={"aircraft":[aircraft("3c1234", 50.9, 7.1)]}
+    q=params(focused_tar_url("http://localhost/tar1090/", data,
+                             receiver=(39.9, 32.9)))
+    assert q["tihuluFocusLat"] == ["39.900000"]
+    assert q["tihuluFocusLon"] == ["32.900000"]
+    assert "icao" not in q
