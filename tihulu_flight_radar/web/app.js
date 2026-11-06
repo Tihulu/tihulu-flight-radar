@@ -486,16 +486,32 @@ $("stop").onclick=()=>control("stop");
 $("restart").onclick=()=>control("restart");
 $("mode").onchange=()=>{state.autoFocused=false;refresh()};
 $("focus").onclick=()=>focusAir(true);
-$("germany").onclick=()=>{
- state.lat=GERMANY.lat;state.lon=GERMANY.lon;state.zoom=7;state.moved=true;
- state.centerLabel="Germany default map · not receiver location";paint();
+function chooseRegion(point,label,zoom=8){
+ state.lat=point.lat;state.lon=point.lon;
+ state.queryLat=point.lat;state.queryLon=point.lon;
+ state.zoom=zoom;state.moved=true;state.autoFocused=false;
+ state.centerLabel=label+" · Internet search region, not physical receiver";
+ paint();
+ if(state.connected)refresh();
+}
+$("cologne").onclick=()=>chooseRegion(COLOGNE,"Cologne",9);
+$("germany").onclick=()=>chooseRegion(GERMANY,"Germany",7);
+$("searchHere").onclick=()=>{
+ state.queryLat=state.lat;state.queryLon=state.lon;
+ state.moved=true;
+ state.centerLabel="Internet search moved to map view · receiver location unchanged";
+ paint();
+ if(state.connected)refresh();
 };
 $("locate").onclick=()=>{
  if(!navigator.geolocation){notice("Browser geolocation not available.");return}
  navigator.geolocation.getCurrentPosition(p=>{
   state.lat=p.coords.latitude;state.lon=p.coords.longitude;
-  state.zoom=10;state.moved=true;state.centerLabel="Explicit browser GPS location";
-  paint();notice("Map moved to your permitted browser location.");
+  state.queryLat=state.lat;state.queryLon=state.lon;
+  state.zoom=10;state.moved=true;state.centerLabel="Explicit permitted GPS search region";
+  paint();
+  notice("Map and Internet search moved with your permission; SDR receiver site unchanged.");
+  if(state.connected)refresh();
  },e=>notice("Browser location unavailable: "+e.message),{timeout:7000});
 };
 $("zoomIn").onclick=()=>{state.zoom=Math.min(12,state.zoom+1);state.moved=true;paint()};
