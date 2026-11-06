@@ -1150,7 +1150,11 @@ function chooseRegion(point,label,zoom=8){
  state.zoom=zoom;state.moved=true;state.autoFocused=false;
  state.centerLabel=label+" · Internet search region, not physical receiver";
  paint();
- if(state.connected)refresh();
+ // Do not lose a manual location choice when the previous region is loading.
+ if(state.connected){
+  if(state.fetching)state.startupQueryDirty=true;
+  else void refresh();
+ }
 }
 $("cologne").onclick=()=>chooseRegion(COLOGNE,"Cologne",9);
 $("germany").onclick=()=>chooseRegion(GERMANY,"Germany",7);
