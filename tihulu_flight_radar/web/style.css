@@ -105,3 +105,18 @@ html.native .internet-panel>.usb-hint{display:none}
  .internet-controls>.field,.internet-controls #networkApply{flex:1 1 100%}
  .internet-panel{padding:11px}
 }
+
+/* The genuine, bundled tar1090 aircraft interface, not a second map clone.
+ * Runs over the exact real RF and Internet aircraft shown by Flight Radar. */
+.tar-browser-shell[hidden]{display:none!important}
+.tar-browser-shell{position:fixed;inset:0;z-index:6000;background:#0b1522;
+ display:flex;flex-direction:column;min-height:0}
+.tar-browser-title{display:flex;flex-wrap:wrap;align-items:center;gap:10px;
+ justify-content:space-between;background:#101d2d;border-bottom:1px solid #36546d;
+ padding:7px 13px;color:#f0f6ff;font-size:12px}
+.tar-browser-title>span{color:#adcae1;font-size:11px}
+.tar-browser-title button{margin-left:auto;flex-shrink:0}
+#fullTarFrame{border:0;flex:1 1 auto;width:100%;min-height:0;
+ background:#14212e;color-scheme:dark}
+body.tar-open{overflow:hidden}
+@media(max-width:620px){.tar-browser-title>span{display:none}.tar-browser-title{padding:6px;gap:5px}}
