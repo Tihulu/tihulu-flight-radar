@@ -26,6 +26,7 @@ on:
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
+# Tar1090 source-layer fixes: test-confirmed lexical OLMap, immediate visibility and responsive legend layout.
 # Two URLs, one source: this repo's browser source is mirrored by the
 # TIHULU-TEXT-CENTER sync workflow to /flight_radar/.
 # Pages must be enabled once at Settings -> Pages -> Source: Deploy from branch gh-pages / (root).
