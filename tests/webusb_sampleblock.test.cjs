@@ -59,3 +59,21 @@ test("PWA has diagnostic controls, valid module references and updated offline c
  assert.match(sw,/vendor\/rtlsdr\.mjs/);
  assert.match(bridge,/usb_tools\.mjs/);
 });
+
+test("Verified Linux DVB recovery is explicit, limited to Nooelec, and never auto-runs in browser",()=>{
+ const script=fs.readFileSync(path.join(__dirname,"../scripts/rtl-sdr-usb-interface.sh"),"utf8");
+ const manual=fs.readFileSync(path.join(__dirname,"../docs/RTL_SDR_WEBUSB_LINUX_OWNERSHIP.md"),"utf8");
+ assert.match(script,/mode="\$\{1:-status\}"/);
+ assert.match(script,/idVendor/);
+ assert.match(script,/idProduct/);
+ assert.match(script,/0bda/);
+ assert.match(script,/2838/);
+ assert.match(script,/dvb_usb_rtl28xxu/);
+ assert.match(script,/matches\[@\]/);
+ assert.match(script,/unbind/);
+ assert.match(script,/bind/);
+ assert.doesNotMatch(script,/killall|modprobe\s+-r|blacklist|chmod\s+777/);
+ assert.match(manual,/user explicitly unbound/);
+ assert.match(manual,/Do not unplug\/replug/);
+ assert.match(manual,/1-4:1\.0/);
+});
