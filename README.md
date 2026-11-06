@@ -31,13 +31,13 @@ user's Nooelec receiver yet.
 The known-good **0.3.1** source snapshot is archived at
 [`legacy/v0.3.1`](https://github.com/Tihulu/tihulu-flight-radar/tree/legacy/v0.3.1)
 (exact commit `67280cd84feb89faec6a80f5fe2a55ce5f7b89e6`).
-The new opt-in **0.3.2.dev0** Internet-provider preview is archived at
-[`preview/v0.3.2-dev0`](https://github.com/Tihulu/tihulu-flight-radar/tree/preview/v0.3.2-dev0)
-(source commit `c1e9c2c849cab681c863d4f63d538c1a940397f9`).
+The new opt-in **0.3.2.dev1** Internet-only original-tar1090 preview is archived at
+[`preview/v0.3.2-dev1`](https://github.com/Tihulu/tihulu-flight-radar/tree/preview/v0.3.2-dev1)
+(source commit `ff934a67f0c4b93e23997d01307ad89bc9fbdb95`).
 
 **Close the app before switching.** Download the version switcher once:
 ```bash
-curl -fLsS https://raw.githubusercontent.com/Tihulu/tihulu-flight-radar/preview/v0.3.2-dev0/scripts/popos-version-switch.sh -o "$HOME/tihulu-flight-switch.sh"
+curl -fLsS https://raw.githubusercontent.com/Tihulu/tihulu-flight-radar/preview/v0.3.2-dev1/scripts/popos-version-switch.sh -o "$HOME/tihulu-flight-switch.sh"
 ```
 Then replace the old installed pipx application with the preview:
 ```bash
@@ -57,7 +57,7 @@ prove the same source commit. Full details:
 [Pop!_OS version install and rollback](docs/POP_OS_VERSION_SWITCH_AND_LEGACY.md).
 
 
-## Optional multi-source preview — 0.3.2.dev0 (6 Nov 2026)
+## Multi-source base functionality (introduced in 0.3.2.dev0; retained in 0.3.2.dev1)
 
 **The existing installed Pop!_OS 0.3.1 is the user-verified stable baseline.
 Do not auto-upgrade or silently replace it.** The following features are in the
