@@ -1,8 +1,8 @@
 name: Publish Flight Radar GitHub Pages
-# Publish Flight Radar 0.3.2.dev4, Satellite-style DE/TR city selector and antenna-optional tar1090.
+# Publish from main to both Pages websites, after web checks, retaining the 0.3.1 legacy branch.
 on:
   push:
-    branches: [feature/github-pages-local-bridge-2026-11-06, feature/tar1090-internet-only-2026-11-06]
+    branches: [main, feature/github-pages-local-bridge-2026-11-06]
     paths:
       - "tihulu_flight_radar/web/**"
       - "tihulu_flight_radar/network_sources.py"
@@ -16,6 +16,7 @@ on:
       - "tests/multi_sources.test.cjs"
       - "tests/tar_layers_regression.test.cjs"
       - "tests/location_selector.test.cjs"
+      - "tests/release_main.test.cjs"
       - "tests/test_multi_sources.py"
       - "tests/webusb_sampleblock.test.cjs"
       - "tests/tar_full_browser.test.cjs"
@@ -53,6 +54,7 @@ jobs:
       - name: Validate standalone app JavaScript and static assets
         run: |
           test -s tihulu_flight_radar/web/index.html
+          test -s tihulu_flight_radar/web/install.html
           test -s tihulu_flight_radar/web/style.css
           node --check tihulu_flight_radar/web/multi_sources.js
           node --check tihulu_flight_radar/web/flight_location_ui.mjs
@@ -77,7 +79,7 @@ jobs:
           PY
           bash -n scripts/rtl-sdr-usb-interface.sh
           node --check deploy/cloudflare-worker.mjs
-          node --test tests/web_bridge.test.cjs tests/pages_tar.test.cjs tests/browser_adsb.test.cjs tests/browser_source.test.cjs tests/aircraft_visuals.test.cjs tests/webusb_sampleblock.test.cjs tests/internet_sources.test.cjs tests/multi_sources.test.cjs tests/tar_layers_regression.test.cjs tests/location_selector.test.cjs tests/tar_full_browser.test.cjs
+          node --test tests/web_bridge.test.cjs tests/pages_tar.test.cjs tests/browser_adsb.test.cjs tests/browser_source.test.cjs tests/aircraft_visuals.test.cjs tests/webusb_sampleblock.test.cjs tests/internet_sources.test.cjs tests/multi_sources.test.cjs tests/tar_layers_regression.test.cjs tests/location_selector.test.cjs tests/release_main.test.cjs tests/tar_full_browser.test.cjs
           python3 -m json.tool tihulu_flight_radar/web/manifest.webmanifest >/dev/null
           test -s tihulu_flight_radar/web/icon.svg
           test -s tihulu_flight_radar/web/sw.js
@@ -93,7 +95,7 @@ jobs:
           test -s tihulu_flight_radar/web/vendor/RTLSDR-LICENSE.txt
           grep -q 'app.js' tihulu_flight_radar/web/index.html
   deploy:
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/feature/github-pages-local-bridge-2026-11-06'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: web-check
     runs-on: ubuntu-24.04
     permissions:
@@ -126,6 +128,7 @@ jobs:
           rsync -a --delete --exclude=.git tihulu_flight_radar/web/ pages/
           touch pages/.nojekyll
           test -s pages/index.html
+          test -s pages/install.html
           test -s pages/cities-de-tr.json
           test -s pages/flight_location_ui.mjs
           test -s pages/location_search.mjs
