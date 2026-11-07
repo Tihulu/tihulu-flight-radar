@@ -178,3 +178,10 @@ body.tar-open{overflow:hidden}
  .location-dialog{border-radius:9px;padding:12px;max-height:97dvh}
  .location-fields{grid-template-columns:1fr}
  .location-wide{grid-column:auto}}
+
+/* Navigation to the canonical main installer; keep full tar button accessible. */
+.masthead .connection .install-link{display:inline-flex;align-items:center;white-space:nowrap;
+ padding:8px 11px;border:1px solid #4d7788;border-radius:9px;color:#b7e9fb;
+ background:#183243;text-decoration:none;font-size:.84rem;font-weight:700}
+.masthead .connection .install-link:hover,.masthead .connection .install-link:focus-visible{background:#245268}
+@media(max-width:650px){.masthead .connection .install-link{white-space:normal}}
