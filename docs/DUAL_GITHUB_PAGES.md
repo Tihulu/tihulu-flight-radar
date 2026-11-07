@@ -12,9 +12,7 @@ TEXT CENTER mirrors its generated browser files, **not** a fork or second
 application. Existing native Windows / Pop!_OS / Debian / macOS M-series /
 Raspberry Pi software stays in the Flight Radar repo.
 
-Active source until draft PR #6 is merged:
-`feature/github-pages-local-bridge-2026-11-06`.
-Update both workflows together if/when it is approved into `main`.
+**Canonical release branch: `main`.** Topic branches and archived previews remain readable but neither Pages publishing workflow should point at a draft feature branch after release. The immutable legacy path is `legacy/v0.3.1`.
 
 ### Standalone publication
 
@@ -78,6 +76,6 @@ On every user-requested update:
    service worker cache and USB permission grants.
 5. Confirm genuine RF and Internet source integrity and no fake aircraft.
 
-Do not combine repositories or remove feature branch work before a
-reviewed merge. No website can silently stop systemd, unbind
+Do not combine repositories or delete preserved legacy branches. No website can silently stop systemd, unbind
 `dvb_usb_rtl28xxu`, or bypass browser WebUSB permissions.
+\nSite install guide: `tihulu_flight_radar/web/install.html` (one-line main installer, links to both web radars and rollback to legacy). The main branch README mirrors those commands.\n
