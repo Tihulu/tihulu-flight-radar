@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0d1828">
+<meta name="description" content="Install Tihulu Flight Radar for Pop!_OS, Ubuntu and Debian, or open the browser radar. Restore legacy 0.3.1 any time.">
+<title>Install · TIHULU Flight Radar</title>
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+*{box-sizing:border-box}body{margin:0;background:#0b1421;color:#e7f1ff;line-height:1.6}
+header,main,footer{max-width:980px;margin:auto;padding:0 22px}
+header{display:flex;justify-content:space-between;align-items:center;padding-top:24px;padding-bottom:22px;gap:20px}
+a{color:#80ddfc}a:hover{color:#c2f3ff}.logo{color:#f2f8ff;font-weight:800;text-decoration:none;letter-spacing:.08em}
+nav{display:flex;gap:18px;flex-wrap:wrap;font-size:.9rem}
+.hero{padding:62px 0 48px;border-bottom:1px solid #2b4159}
+.eyebrow{color:#8ab7d4;font-size:.8rem;text-transform:uppercase;letter-spacing:.17em;font-weight:700}
+h1{font-size:clamp(2.3rem,6vw,4.4rem);letter-spacing:-.045em;line-height:1.09;margin:13px 0 17px}
+h2{font-size:1.38rem;margin:0 0 10px}p{color:#b9ccdc;margin:8px 0 18px}
+.hero p{max-width:650px;font-size:1.07rem}
+.links{display:flex;flex-wrap:wrap;gap:12px;margin:25px 0}
+.btn{border:1px solid #52748b;border-radius:10px;padding:10px 17px;display:inline-flex;align-items:center;
+gap:7px;color:#f0f9ff;text-decoration:none;font-weight:650;background:#17283a;cursor:pointer;font-size:.95rem}
+.btn.primary{background:#15786f;border-color:#31aa98}.btn:hover{filter:brightness(1.15)}
+section{padding:28px 0;border-bottom:1px solid #243a51}
+.chip{display:inline-block;border:1px solid #39556d;border-radius:999px;color:#accde1;font-size:.75rem;padding:4px 10px}
+.command{display:flex;gap:8px;align-items:stretch;margin:17px 0;min-width:0}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;flex:1;margin:0;padding:16px;border-radius:10px;
+border:1px solid #3b5671;background:#102239;color:#e0f2fc;font:14px/1.6 ui-monospace,Consolas,Monaco,monospace}
+button.copy{background:#1d4253;color:#e2fbff;border:1px solid #4c8e9a;border-radius:10px;
+padding:0 15px;font-size:.86rem;font-weight:700;cursor:pointer}
+button.copy:hover{background:#236276}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.panel{background:#111f30;border:1px solid #304960;border-radius:12px;padding:20px}
+.panel h3{margin:0 0 8px;font-size:1.04rem}.panel p{margin:0;font-size:.92rem}
+code{color:#d6f3ff}
+footer{padding-top:24px;padding-bottom:40px;color:#8eaabe;font-size:.84rem}
+@media(max-width:690px){.grid{grid-template-columns:1fr}.command{flex-direction:column}button.copy{min-height:40px}
+.hero{padding-top:35px}header{flex-direction:column;align-items:flex-start}}
+</style>
+</head>
+<body>
+<header>
+<a class="logo" href="./">✈ TIHULU FLIGHT RADAR</a>
+<nav aria-label="Site navigation">
+<a href="./">Web radar</a>
+<a href="./?view=tar1090">Full tar1090</a>
+<a href="https://github.com/Tihulu/tihulu-flight-radar">GitHub source</a>
+</nav>
+</header>
+<main>
+<div class="hero">
+<div class="eyebrow">Desktop · Web · Real aircraft</div>
+<h1>Track aircraft.<br>Choose your source.</h1>
+<p>Get the Pop!_OS / Ubuntu / Debian desktop app in one command, or open the radar in a browser. The native app receives USB ADS-B through the operating system and <code>readsb</code> — <strong>not WebUSB</strong>.</p>
+<div class="links">
+<a class="btn primary" href="./">Open live web radar</a>
+<a class="btn" href="./?view=tar1090">Open full tar1090</a>
+</div>
+<span class="chip">Current desktop code: 0.3.2.dev4</span>
+<span class="chip">Legacy 0.3.1 preserved</span>
+</div>
+<section aria-labelledby="linux">
+<h2 id="linux">Install or update Linux desktop</h2>
+<p>Run as your regular user in a terminal. The same command replaces an earlier pipx installation; it does not install a second app or purge <code>readsb</code>, <code>tar1090</code>, SDR drivers, receiver settings or recordings. Review the <a href="https://github.com/Tihulu/tihulu-flight-radar/blob/main/scripts/install-linux.sh">installer source</a> before running.</p>
+<div class="command">
+<pre id="linux-cmd">bash -c 'set -o pipefail; curl -fLsS https://raw.githubusercontent.com/Tihulu/tihulu-flight-radar/main/scripts/install-linux.sh | bash'</pre>
+<button class="copy" type="button" data-copy="linux-cmd">Copy command</button>
+</div>
+<p>The installer may ask for sudo to install system dependencies and a narrowly scoped receiver-service rule. It does <strong>not</strong> start the SDR automatically. Find <strong>Tihulu Flight Radar</strong> in your applications menu afterward.</p>
+</section>
+<section aria-labelledby="restore">
+<h2 id="restore">Restore legacy 0.3.1</h2>
+<p>Want your previous stable version back? The old source is pinned to an exact Git commit and remains available independently of future changes to <code>main</code>.</p>
+<div class="command">
+<pre id="legacy-cmd">bash -c 'set -euo pipefail; curl -fLsS https://raw.githubusercontent.com/Tihulu/tihulu-flight-radar/main/scripts/popos-version-switch.sh -o "$HOME/tihulu-flight-switch.sh"; bash "$HOME/tihulu-flight-switch.sh" legacy'</pre>
+<button class="copy" type="button" data-copy="legacy-cmd">Copy command</button>
+</div>
+<p><a href="https://github.com/Tihulu/tihulu-flight-radar/tree/legacy/v0.3.1">Archived legacy 0.3.1 source</a> · <a href="https://github.com/Tihulu/tihulu-flight-radar/blob/main/docs/POP_OS_VERSION_SWITCH_AND_LEGACY.md">Version-switch guide</a></p>
+</section>
+<section aria-labelledby="platforms">
+<h2 id="platforms">Platform options</h2>
+<div class="grid">
+<div class="panel"><h3>Pop!_OS / Ubuntu / Debian</h3>
+<p>One-line installer above. Native Qt window, local <code>readsb</code> receiver, multiple Internet networks and full tar1090.</p></div>
+<div class="panel"><h3>Windows x64 / macOS Apple Silicon</h3>
+<p>Portable desktop previews appear as GitHub Actions artifacts when cross-platform builds pass. USB hardware needs an appropriate OS driver and working local decoder.</p>
+<p><a href="https://github.com/Tihulu/tihulu-flight-radar/actions/workflows/build.yml">Cross-platform builds</a></p></div>
+<div class="panel"><h3>Browser / GitHub Pages</h3>
+<p>No installation. Internet ADS-B sources can work without an antenna; direct SDR reception is an optional WebUSB path on supported browsers.</p>
+<p><a href="./">Open standalone web radar</a></p></div>
+<div class="panel"><h3>Satellite / TEXT CENTER</h3>
+<p>Flight Radar is also available inside the shared TIHULU TEXT CENTER interface and uses the same browser source files.</p>
+<p><a href="https://tihulu.github.io/TIHULU-TEXT-CENTER/flight_radar/">Open TEXT CENTER radar</a></p></div>
+</div>
+</section>
+<section aria-labelledby="integrity">
+<h2 id="integrity">Real data, identifiable sources</h2>
+<p>Internet-only planes are marked <strong>I</strong>, physically received ADS-B planes <strong>R</strong>, and matched planes <strong>I/R</strong>. Matching ICAO24 records are displayed once. API quotas, browser CORS policies and receiver availability can limit coverage; the app never fabricates aircraft.</p>
+</section>
+</main>
+<footer>TIHULU Flight Radar · <a href="https://github.com/Tihulu/tihulu-flight-radar">Open-source project</a> · Offline place data and original upstream tar1090 retain their separate attribution and licenses.</footer>
+<script>
+for(const button of document.querySelectorAll("[data-copy]")){
+ button.addEventListener("click",async()=>{
+  const content=document.getElementById(button.dataset.copy)?.textContent||"";
+  if(!content)return;
+  try{await navigator.clipboard.writeText(content);button.textContent="Copied";setTimeout(()=>button.textContent="Copy command",1800);}
+  catch{button.textContent="Select command to copy";}
+ });
+}
+</script>
+</body>
+</html>
