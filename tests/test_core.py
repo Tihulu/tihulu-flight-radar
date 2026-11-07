@@ -57,3 +57,15 @@ def test_url_validation():
     for url in ("file:///etc/passwd", "ftp://host/data", "http://user:pass@host/x", ""):
         with pytest.raises(DataError):
             validate_remote_url(url)
+
+
+def test_tar1090_backend_requires_recent_real_aircraft_json():
+    from tihulu_flight_radar.core import tar1090_data_fresh
+
+    now = time.time()
+    assert tar1090_data_fresh({"now": now - 2, "aircraft": []}, now=now)
+    assert not tar1090_data_fresh({"now": now - 120, "aircraft": []}, now=now)
+    assert not tar1090_data_fresh({"aircraft": []}, now=now)
+    assert not tar1090_data_fresh("<html>tar1090 served, backend dead</html>", now=now)
+    assert not tar1090_data_fresh({"now": now, "aircraft": None}, now=now)
+    assert not tar1090_data_fresh({"now": now + 60, "aircraft": []}, now=now)

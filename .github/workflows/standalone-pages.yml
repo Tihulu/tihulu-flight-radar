@@ -3,7 +3,7 @@ name: Publish standalone Flight Radar GitHub Pages (canonical source)
 on:
   workflow_dispatch:
   schedule:
-    # Recovery publish in case a feature-branch push was skipped/delayed.
+    # Hourly recovery of the canonical main browser build if a push publish failed.
     - cron: '19 * * * *'
   push:
     branches: [main]
@@ -11,8 +11,7 @@ on:
       - .github/workflows/standalone-pages.yml
       - AGENTS.md
 
-# Same output and source SHA as TEXT CENTER/flight_radar. Until draft PR #6
-# merges, the maintained browser implementation is on the feature branch.
+# Same output and source SHA as TEXT CENTER/flight_radar. Main is the canonical release branch.
 permissions:
   contents: write
 
@@ -31,7 +30,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: Tihulu/tihulu-flight-radar
-          ref: feature/github-pages-local-bridge-2026-11-06
+          ref: main
           path: flight
           persist-credentials: false
       - uses: actions/setup-node@v4
@@ -42,19 +41,23 @@ jobs:
           set -euo pipefail
           cd flight
           bash scripts/build-browser-assets.sh
+          node --check tihulu_flight_radar/web/flight_location_ui.mjs
+          node --check tihulu_flight_radar/web/location_search.mjs
           node --check tihulu_flight_radar/web/app.js
           node --check tihulu_flight_radar/web/browser_usb.mjs
           node --check tihulu_flight_radar/web/adsb_worker.mjs
           node --check tihulu_flight_radar/web/sw.js
-          node --test tests/web_bridge.test.cjs tests/pages_tar.test.cjs tests/browser_adsb.test.cjs tests/browser_source.test.cjs tests/aircraft_visuals.test.cjs tests/webusb_sampleblock.test.cjs tests/internet_sources.test.cjs
+          node --test tests/web_bridge.test.cjs tests/pages_tar.test.cjs tests/browser_adsb.test.cjs tests/browser_source.test.cjs tests/aircraft_visuals.test.cjs tests/webusb_sampleblock.test.cjs tests/internet_sources.test.cjs tests/multi_sources.test.cjs tests/tar_layers_regression.test.cjs tests/location_selector.test.cjs tests/release_main.test.cjs tests/tar_full_browser.test.cjs
           test -s tihulu_flight_radar/web/vendor/rtlsdr.mjs
+          test -s tihulu_flight_radar/web/install.html
+          test -s tihulu_flight_radar/web/cities-de-tr.json
       - name: Build pinned upstream full tar1090 frontend
         run: cd flight && bash scripts/build-web-tar1090.sh
       - name: Stamp same browser source revision as TEXT CENTER
         run: |
           set -euo pipefail
           sha="$(git -C flight rev-parse HEAD)"
-          printf '{"repo":"Tihulu/tihulu-flight-radar","source_ref":"feature/github-pages-local-bridge-2026-11-06","source_sha":"%s"}\n' "$sha" > flight/tihulu_flight_radar/web/source-revision.json
+          printf '{"repo":"Tihulu/tihulu-flight-radar","source_ref":"main","source_sha":"%s"}\n' "$sha" > flight/tihulu_flight_radar/web/source-revision.json
           echo "Canonical source: $sha"
       - uses: actions/checkout@v4
         with:
@@ -66,6 +69,8 @@ jobs:
           rsync -a --delete --exclude=.git flight/tihulu_flight_radar/web/ pages/
           touch pages/.nojekyll
           test -s pages/index.html
+          test -s pages/install.html
+          test -s pages/cities-de-tr.json
           test -s pages/tar1090/index.html
           test -s pages/source-revision.json
           git -C pages config user.name 'github-actions[bot]'

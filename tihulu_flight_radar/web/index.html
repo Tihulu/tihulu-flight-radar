@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#111822">
+<meta name="description" content="Tihulu Flight Radar — genuine ADS-B from browser WebUSB, optional Internet and paired receiver.">
+<title>Tihulu Flight Radar — Web</title>
+<link rel="stylesheet" href="./style.css">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="./icon.svg">
+</head><body>
+<header class="masthead">
+ <div class="brand"><span class="brandmark" aria-hidden="true">✈</span><div><strong>TIHULU FLIGHT RADAR</strong><small>REAL OBSERVATIONS · WEB & LOCAL RECEIVER</small></div></div>
+ <div class="connection"><a class="install-link" href="./install.html" title="Desktop one-line installer, Windows/macOS builds and 0.3.1 rollback">Install desktop</a><button id="openTarPrimary" type="button" title="Full original tar1090 map with real Internet-only or radio aircraft; no SDR required">Full tar1090 map</button><span id="connectionDot" class="dot"></span><span id="connectionLabel" role="status">Not paired</span></div>
+</header>
+<main>
+ <section class="usb-direct-panel" aria-label="Direct browser USB receiver">
+  <div class="usb-topline">
+   <strong><span aria-hidden="true">📡</span> Direct 1090 MHz USB receiver</strong>
+   <span class="usb-pill">Brave / Chrome / Edge · HTTPS</span>
+  </div>
+  <div class="usb-controls">
+   <button id="usbStart" class="primary" disabled>Choose RTL-SDR &amp; start</button>
+   <button id="usbStop" disabled>Hard stop / release USB</button>
+   <span id="usbStatus" role="status" aria-live="polite">Checking direct browser USB capability…</span>
+  </div>
+  <p class="usb-hint">No desktop app, Python server or pairing token required. This page reads genuine ADS-B on 1090 MHz and decodes verified messages inside your browser. It stops USB on tab hide/close. If a desktop readsb decoder still owns your single SDR, WebUSB cannot claim it.</p>
+  <details id="usbHelp" class="usb-help">
+   <summary>USB cannot connect? Check permissions and driver conflicts (no installation)</summary>
+   <div class="usb-check-actions">
+    <button id="usbCheck" type="button">Check USB permissions (read-only)</button>
+    <button id="usbClaimTest" type="button">Test interface claim (open → claim → release)</button>
+    <button id="usbCopy" type="button">Copy diagnostics</button>
+   </div>
+   <pre id="usbReport" role="status" aria-live="polite">The permission check does not open the USB receiver. The separate interface test briefly opens and releases a previously permitted receiver, without RF tuning or sampling.</pre>
+   <p class="usb-hint">Verified Pop!_OS / Nooelec 0bda:2838 fix: if <code>readsb</code> is inactive but the USB tree shows <code>Driver=dvb_usb_rtl28xxu</code>, the Linux DVB driver may still own interface 0. <a href="https://github.com/Tihulu/tihulu-flight-radar/blob/feature/github-pages-local-bridge-2026-11-06/docs/RTL_SDR_WEBUSB_LINUX_OWNERSHIP.md" target="_blank" rel="noopener noreferrer">See the safe, device-verified release/restore guide</a>. Never assume every PC uses <code>1-4:1.0</code>. After an explicit unbind, keep the USB plugged in until the browser test; unplugging it may rebind the driver. This website cannot run sudo or modify kernel drivers.</p>
+  </details>
+ </section>
+ <section class="internet-panel" aria-label="Internet aircraft source">
+  <div class="internet-panel-head">
+   <strong>Internet aircraft overlay</strong>
+   <span id="networkStatus" role="status" aria-live="polite">Loading live aircraft from adsb.lol via the browser relay…</span>
+  </div>
+  <div class="internet-controls">
+  <label class="field">Internet source
+   <select id="onlinePreset" aria-label="Internet aircraft source">
+    <option value="multi" selected>Combine selected public networks (one marker per aircraft)</option>
+     <option value="adsblol-relay">adsb.lol — original working source (single)</option>
+    <option value="intelsky">IntelSky — direct browser API (military/government only)</option>
+    <option value="airlabs">AirLabs (optional personal API key · broader flights)</option>
+    <option value="custom">Custom HTTPS/CORS ADS-B feed (full network if supplied)</option>
+    <option value="off">Off — radio only</option>
+   </select>
+  </label>
+  <div id="multiProviderLayers" class="multi-provider-layers" role="group" aria-label="Individual Internet source layers">
+    <span class="layer-heading">Internet layers — select individually or combine</span>
+    <label><input type="checkbox" id="netAdsbLol" checked> adsb.lol <small id="statusAdsbLol">Original feed</small></label>
+    <label><input type="checkbox" id="netAdsbFi" checked> adsb.fi <small id="statusAdsbFi">Personal/non-commercial</small></label>
+    <label><input type="checkbox" id="netOpenSky"> OpenSky <small id="statusOpenSky">Quota-limited · 5 min refresh</small></label>
+    <label><input type="checkbox" id="netIntelSky"> IntelSky <small id="statusIntelSky">Limited military/government coverage</small></label>
+    <label class="unavailable"><input type="checkbox" disabled> Airplanes.live <small>Public API restricted to feeders; not queried</small></label>
+    <button type="button" id="allOnlineLayers">Select all available</button>
+   </div>
+   <label class="field feed">Custom feed (HTTPS, optional) <input id="onlineFeedUrl" type="url" placeholder="https://your-feed.example/api/aircraft" spellcheck="false" aria-label="CORS-enabled Internet feed endpoint" disabled></label>
+  <label class="field" id="airlabsKeyField" hidden>AirLabs API key (this tab only)
+   <input id="airlabsKey" type="password" autocomplete="off" placeholder="Your own AirLabs API key" aria-label="AirLabs personal API key">
+  </label>
+   <button id="networkApply" type="button">Enable / refresh Internet layer</button>
+  </div>
+  <p class="usb-hint"><strong>General flights:</strong> Combine mode queries selected networks, then removes duplicate ICAO24 aircraft. OpenSky is subject to daily API quotas and adsb.fi is for personal, non-commercial use. Other providers may temporarily be blocked by CORS or rate limits. On GitHub Pages, real adsb.lol aircraft load automatically without an antenna or local app, through an independent public cors.dev relay because its API does not permit direct GitHub Pages requests. The relay receives your browser IP and an approximately 10 km-rounded map center, <strong>never raw USB IQ</strong>; it may be rate-limited or unavailable. Data © adsb.lol (ODbL 1.0). Select IntelSky for direct, keyless but limited military/government coverage; AirLabs requires your own key. Your SDR continues independently if any Internet service fails.</p>
+ </section>
+ <details class="bridge-advanced"><summary>Optional: paired receiver / Internet feed settings (advanced)</summary>
+ <div class="toolbar">
+  <label class="field">Bridge URL <input id="bridgeUrl" value="http://127.0.0.1:8510" spellcheck="false" aria-label="Local bridge URL"></label>
+  <label class="field token">Session pairing token <input id="token" type="password" placeholder="Paste token from local bridge terminal" autocomplete="off"></label>
+  <button id="connect" class="primary">Connect source</button><button id="disconnect">Disconnect</button>
+  <label class="field">Source mode <select id="mode">
+   <option value="auto">Auto (local first)</option><option value="antenna">Antenna only</option>
+   <option value="internet">Internet only</option><option value="hybrid">Hybrid</option>
+  </select></label>
+  <p class="source-key-warning">AirLabs keys are sent to AirLabs in a request URL and are visible in browser developer tools. Never embed a shared key in GitHub Pages. Free API plans have limited quotas; this app retains no key after the tab closes.</p>
+  <button id="refresh">Refresh now</button><button id="installApp" hidden>Install web app</button><button id="legacyTar" title="Opens the full original tar1090 interface even with no antenna; uses an external readsb backend only when verified">Full tar1090 / optional external</button>
+ </div>
+ </details>
+ <div class="notice" id="sourceHelp">Browser-first radar: choose RTL-SDR above for direct WebUSB reception, or use an authorized HTTPS CORS-enabled Internet feed (advanced) without USB. A paired readsb bridge remains optional for Firefox/Safari or professional receiver features. The built-in IntelSky browser source covers a limited set of military/government contacts and may have no aircraft in your search region; it is NOT a full general ADS-B network. General ADS-B flights can be tried through the labeled community relay; a private owner-hosted HTTPS/CORS relay is recommended for reliable coverage. Real hardware requires exclusive OS USB access. <a href="https://github.com/Tihulu/tihulu-flight-radar/blob/main/docs/GITHUB_PAGES_AND_LOCAL_BRIDGE.md" target="_blank" rel="noopener noreferrer">Setup guide</a></div>
+ <div class="metrics" aria-label="Live source statistics">
+  <div class="metric"><span>Local aircraft</span><strong id="localCount">—</strong></div>
+  <div class="metric"><span>Online aircraft</span><strong id="onlineCount">—</strong></div>
+  <div class="metric"><span>Unique aircraft</span><strong id="combinedCount">—</strong></div>
+  <div class="metric"><span>Last update</span><strong id="lastUpdate" class="small">—</strong></div>
+ </div>
+ <div class="layout">
+  <section class="map-panel" aria-label="Aircraft map">
+   <div class="mapbar">
+    <div class="overlays" aria-label="Map source filters">
+      <label><input id="showAntenna" type="checkbox" checked><i class="key antenna"></i> Antenna</label>
+      <label><input id="showInternet" type="checkbox" checked><i class="key internet"></i> Internet</label>
+      <label><input id="showBoth" type="checkbox" checked><i class="key both"></i> Both</label>
+      <label><input id="showTracks" type="checkbox" checked> Tracks</label>
+      <label><input id="showTiles" type="checkbox" checked> OSM tiles</label>
+    </div>
+    <div class="maptools">
+      <button id="fullTar1090" type="button" title="Open the complete bundled upstream tar1090 with live in-browser RF and Internet data">Full tar1090 · Internet or Radio</button><button id="expandMap" aria-pressed="false" title="Expand this independent browser radar map, even with readsb stopped">Full radar map</button><button id="focus">Focus aircraft</button><button id="cologne">Cologne</button>
+      <button id="germany">Germany</button><button id="placeOpen" type="button" title="Choose country, state or province, city/district, or coordinates">Choose place</button><button id="locate">Use my location</button>
+      <button id="searchHere" title="Fetch Internet aircraft around the current map view, without changing your receiver location">Search here</button>
+      <button id="zoomIn" aria-label="Zoom in">+</button><button id="zoomOut" aria-label="Zoom out">−</button>
+    </div>
+   </div>
+   <div class="aircraft-legend" aria-label="Aircraft symbols and altitude color key">
+     <span><strong>R</strong> radio</span><span><strong>I</strong> Internet</span><span><strong>I/R</strong> both sources</span>
+     <span class="altitude-label">Aircraft color · altitude</span>
+     <div class="altitude-ramp" role="img" aria-label="Altitude from orange at ground level, yellow and green at lower heights, cyan and blue, to purple and pink at 40000 feet"></div>
+     <span class="altitude-label">0–40,000 ft · grey = unknown</span>
+   </div>
+   <canvas id="map" role="img" aria-label="Live geographic aircraft map, with offline coordinate grid"></canvas>
+   <div class="mapfooter"><span id="mapLabel">Germany default view · no receiver position assumed</span><span><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a> · <span id="sourceCredits">Source attribution shown after connection</span></span></div>
+  </section>
+  <aside class="side">
+   <h2>Receiver</h2>
+   <p id="receiverStatus" class="muted">WebUSB can receive directly in supported browsers. A paired bridge is optional.</p>
+   <div class="buttons"><button id="start">Start</button><button id="stop">Stop</button><button id="restart">Restart</button></div>
+   <h2>Sources</h2><p id="feedStatus" class="muted">No source connected.</p>
+   <h2>Aircraft <span id="visibleCount" class="muted">0</span></h2>
+   <div class="tablewrap"><table><thead><tr><th>Flight / ICAO</th><th>Altitude</th><th>Speed</th><th>Source</th></tr></thead><tbody id="aircraftRows"></tbody></table></div>
+   <h2>Selected aircraft</h2><pre id="details" class="details">Select an aircraft to inspect its received fields and source provenance.</pre>
+  </aside>
+ </div>
+ <section id="tarBrowserShell" class="tar-browser-shell" hidden aria-label="Full tar1090 aircraft map and details interface">
+ <div class="tar-browser-title">
+  <strong>tar1090 — complete aircraft map, search, filters and details</strong>
+  <span>Full original tar1090 — Internet-only, radio-only or combined · antenna optional · photos require Internet</span>
+  <button id="placeTarOpen" type="button" title="Change the aircraft search region without requiring an antenna">Choose place</button>
+   <button id="closeFullTar" type="button" aria-label="Close full tar1090 and return to Flight Radar">Close full tar1090</button>
+ </div>
+ <iframe id="fullTarFrame" title="Original tar1090 aircraft map, photo, registration, airline and aircraft information" referrerpolicy="same-origin" loading="lazy"></iframe>
+</section>
+<section id="locationPicker" class="location-picker" role="dialog" aria-modal="true" aria-labelledby="locationPickerTitle" hidden>
+  <div class="location-dialog">
+   <header class="location-heading">
+    <div><strong id="locationPickerTitle">Choose aircraft search location</strong>
+     <p>Same offline Germany / Türkiye directory as Satellite Center · no antenna required</p>
+    </div>
+    <button id="placeClose" type="button" aria-label="Close location chooser">Close</button>
+   </header>
+   <div class="location-fields">
+    <label>Country
+     <select id="placeCountry"><option value="DE">Germany</option><option value="TR">Türkiye</option><option value="all">All countries (offline DE/TR, worldwide search online)</option></select>
+    </label>
+    <label>State / Province (Bundesland / İl)
+     <select id="placeRegion"><option value="">Choose a state / province</option></select>
+    </label>
+    <label class="location-wide">City / town / district / municipality
+     <select id="placeTown"><option value="">Choose state first</option></select>
+    </label>
+    <label class="location-wide">Search place (offline, accented or accent-free)
+     <input id="placeQuery" type="search" autocomplete="off" spellcheck="false"
+      placeholder="Köln, Hürth, İzmir, Karaburun, Bornova…" aria-controls="placeSuggestions">
+    </label>
+    <div id="placeSuggestions" class="location-results location-wide" role="listbox" aria-label="Place matches" hidden></div>
+    <p id="placeSelection" class="location-wide location-selection">Choose a place to change the Internet search center.</p>
+    <label>Latitude (WGS84)
+     <input id="placeLatitude" type="number" min="-90" max="90" step="any" inputmode="decimal" placeholder="50.938">
+    </label>
+    <label>Longitude (WGS84)
+     <input id="placeLongitude" type="number" min="-180" max="180" step="any" inputmode="decimal" placeholder="6.960">
+    </label>
+    <label>Internet search radius
+     <select id="placeRadius">
+      <option value="25">25 NM · 46 km</option><option value="50">50 NM · 93 km</option>
+      <option value="100" selected>100 NM · 185 km</option><option value="150">150 NM · 278 km</option>
+      <option value="250">250 NM · 463 km</option>
+     </select>
+    </label>
+   </div>
+   <p id="placeStatus" class="location-status" role="status" aria-live="polite">Loading offline places…</p>
+   <div class="location-actions">
+    <button id="placeApply" class="primary" type="button">Use selected place</button>
+    <button id="placeGps" type="button">Use device location (GPS)</button>
+    <button id="placeOnline" type="button">Search worldwide online</button>
+   </div>
+   <p class="location-footnote">Selecting a place changes only the map view and Internet aircraft query, never the physical SDR receiver location. Offline catalog: 8,084 approximate settlement points, not an exhaustive administrative boundary registry. GPS and online geocoding run only when requested. <a href="./CITY_DATA_LICENSE.md" target="_blank" rel="noopener noreferrer">Data license / ODbL</a>.</p>
+  </div>
+ </section>
+ <footer><span id="message" role="status">Ready — choose USB above or configure an Internet feed. No artificial flights are generated.</span><span>Offline-first · <a href="https://github.com/Tihulu/tihulu-flight-radar" target="_blank" rel="noopener noreferrer">GitHub source</a></span></footer>
+</main>
+<script src="./multi_sources.js" defer></script>
+<script src="./app.js" defer></script>
+<script type="module" src="./browser_usb.mjs"></script>
+</body></html>

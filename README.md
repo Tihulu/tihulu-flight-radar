@@ -1,139 +1,105 @@
-# Tihulu Flight Radar
+# TIHULU Flight Radar
 
-English-language, local-first ADS-B / Mode S receiver desktop software.
+**Real ADS-B / Mode S aircraft tracking — desktop and web.** Internet sources, optional local RTL-SDR reception, the complete original tar1090 map, and deduplicated I / R / I/R aircraft markers.
 
-**Version 0.3.1 (development preview).** Uses real receiver data only. It never
-creates simulated aircraft or positions. ADS-B broadcasts may contain locations;
-Mode S does not guarantee location. MLAT positioning requires synchronized
-multiple receivers and is **not** calculated by this app.
+[**Open web radar**](https://tihulu.github.io/tihulu-flight-radar/) · [**Full tar1090 map**](https://tihulu.github.io/tihulu-flight-radar/?view=tar1090) · [**Install & restore site**](https://tihulu.github.io/tihulu-flight-radar/install.html) · [**TEXT CENTER radar**](https://tihulu.github.io/TIHULU-TEXT-CENTER/flight_radar/)
 
-## Targets and current limitations
+## Install or update — Pop!_OS, Ubuntu, Debian
 
-| OS | Desktop UI | Direct RTL-SDR | Remote receiver |
-| --- | --- | --- | --- |
-| Debian / Ubuntu / Pop!_OS x64 | Qt / PySide6 | Existing readsb/tar1090 systemd, or local readsb executable | Yes |
-| macOS Apple Silicon (M1/M2/M3/M4) | Qt / PySide6 | Homebrew readsb and compatible RTL-SDR | Yes |
-| Windows x64 | Qt / PySide6 | Only with a separately supplied working readsb binary and USB driver; not packaged or validated | Yes |
-| Raspberry Pi Linux ARM64 | Python source | Existing readsb daemon or separately installed readsb | Yes |
-
-The build workflow produces preview artifacts on Ubuntu Linux x64, Debian 12
-x64, Windows x64 and macOS ARM64 runners. A successful build **does not** prove direct USB reception
-on every device. No drivers, decoder binaries, or permission policies are bundled.
-
-## Debian .deb preview
-
-The Debian 12 workflow produces an unsigned Debian package as well as a
-portable application folder. Install with:
-
-    sudo apt install ./tihulu-flight-radar_0.3.1_amd64.deb
-
-The new package does not overwrite the earlier tihulu-adsb-radar v0.2.0.
-It adds a documented restricted sudoers rule for sudo-group administrators
-allowing *only* start/stop/enable/disable of readsb and tar1090. This avoids
-password prompts after the one-time package installation. Review
-packaging/linux/sudoers.conf before installation. The app does not install
-a decoder or RTL-SDR driver by itself.
-
-## Linux installation (Pop!_OS, Ubuntu, Debian)
-
-Install or upgrade from GitHub **main** with the
-[interactive Linux installer](scripts/install-linux.sh). It installs the
-Python application through pipx, adds a COSMIC/XDG Applications launcher
-and icon, removes only the obsolete `tihulu-adsb-radar` and duplicate
-`tihulu-flight-radar` Debian packages if present, and grants the current
-Linux account narrowly scoped `readsb`/`tar1090` service controls.
-
-The ADS-B receiver services are **not removed**. Run as your normal user:
+**One terminal command, as your regular user (not `sudo bash`):**
 
 ```bash
-f="$(mktemp)" && curl -fLsS https://raw.githubusercontent.com/Tihulu/tihulu-flight-radar/main/scripts/install-linux.sh -o "$f" && bash "$f"; rm -f "$f"
+bash -c 'set -o pipefail; curl -fLsS https://raw.githubusercontent.com/Tihulu/tihulu-flight-radar/main/scripts/install-linux.sh | bash'
 ```
 
-Review the installer source before running scripts that request sudo.
-Afterward launch from **COSMIC Applications → Tihulu Flight Radar**
-or use `~/.local/bin/tihulu-flight-radar`.
-## Development run
+This installs the **current `main` desktop build** into the *existing* `pipx` installation (`pipx install --force`). Run it again to update. It refreshes the COSMIC/Linux application shortcuts instead of installing another Flight Radar. You may be asked for administrator permission to install system dependencies and a narrowly scoped `readsb`/`tar1090` service-control rule. The installer **does not purge, restart or auto-claim your SDR, readsb, tar1090, recordings or receiver configuration**. Review [the complete script](scripts/install-linux.sh) before executing a downloaded shell script.
 
-Requires Python 3.11+ (3.12 recommended).
+The default shortcut starts a **PySide6 / Qt WebEngine desktop application**. Qt WebEngine renders the interface; the physical RTL-SDR is managed through Linux SDR drivers and native `readsb`, **not through browser WebUSB**.
 
-1. Create a virtual environment: python -m venv .venv
-2. Activate it (Linux/macOS): source .venv/bin/activate
-   (Windows PowerShell): .venv\Scripts\Activate.ps1
-3. Install: python -m pip install -e ".[test]"
-4. Launch: tihulu-flight-radar
-5. Test: python -m pytest -q
+After installation:
 
-All visible UI copy, messages, docs and workflows are in English.
+```bash
+tihulu-flight-radar
+# Check the installed Python package:
+~/.local/share/pipx/venvs/tihulu-flight-radar/bin/python -c "import tihulu_flight_radar; print(tihulu_flight_radar.__version__)"
+```
 
-## Receiver modes
+The `main` code currently reports **0.3.2.dev4**. This is an *active development build*, not a physically certified hardware release.
 
-- **Linux services**: controls an already installed readsb + tar1090 systemd
-  service pair. The app uses exactly four narrowly defined commands for
-  start/stop/enable/disable with sudo -n. To avoid password prompts, the
-  existing v0.2.0 Debian package grants ONLY those commands to members of
-  the sudo group via its sudoers drop-in. On other Linux installations,
-  configure equivalent limited authorization. Never grant unrestricted sudo.
-- **Direct readsb**: launches the separately installed readsb process with
-  RTL-SDR at 1090 MHz and a temporary JSON output directory. Does not
-  use systemd or request administrator credentials. The app terminates the
-  child process on exit. Linux users should STOP the readsb systemd service
-  before using this mode with the same dongle.
-- **Remote JSON**: enter the full URL to a receiver's readsb
-  aircraft.json. Works on all desktop platforms, including Windows without
-  local RTL-SDR. The remote receiver remains independently controlled.
+### Go back to legacy 0.3.1
 
-macOS Apple Silicon: install Homebrew, then run brew install readsb.
-Connect the NESDR dongle and select Direct readsb; never run another SDR
-client at the same time. No app admin password is required for this mode.
-Windows: use Remote JSON unless a separately tested native readsb executable
-and WinUSB RTL-SDR driver are available.
+The last user-confirmed working 0.3.1 source is permanently recorded at [`legacy/v0.3.1`](https://github.com/Tihulu/tihulu-flight-radar/tree/legacy/v0.3.1), exact commit `67280cd84feb89faec6a80f5fe2a55ce5f7b89e6`. Roll back with **one line**, after closing the app:
 
-## Receiver health and restart
+```bash
+bash -c 'set -euo pipefail; curl -fLsS https://raw.githubusercontent.com/Tihulu/tihulu-flight-radar/main/scripts/popos-version-switch.sh -o "$HOME/tihulu-flight-switch.sh"; bash "$HOME/tihulu-flight-switch.sh" legacy'
+```
 
-Start / Stop / Restart operations are serialized and the readsb systemd state
-is verified after each transition. An active decoder is **not** proof of
-actual RF reception. The UI now distinguishes a running decoder from
-receiving ADS-B messages and offers **Receiver diagnostics** on Linux
-(read-only systemd / journal output). A newly started readsb service may
-have zero messages for a while, especially with antenna, interference
-or exclusive USB ownership problems.
+The legacy command replaces the current pipx app, **not** the external receiver services or recordings. To reinstall the archived 0.3.2.dev4 preview, run `bash "$HOME/tihulu-flight-switch.sh" preview`. See the [full upgrade/rollback guide](docs/POP_OS_VERSION_SWITCH_AND_LEGACY.md).
 
-When start fails or message counts remain zero, check receiver ownership,
-antenna orientation and the last readsb logs. Do not assume an active service
-implies aircraft data. See
-[Survival Kit handoff notes](docs/SURVIVAL_KIT_FLIGHT_RADAR_HANDOFF_2026-11-05.md)
-for integration acceptance criteria.
+## Use the web app
 
-## Interface, flight data and map
+- **Standalone radar:** https://tihulu.github.io/tihulu-flight-radar/
+- **Full original tar1090:** https://tihulu.github.io/tihulu-flight-radar/?view=tar1090
+- **Shared TEXT CENTER mirror:** https://tihulu.github.io/TIHULU-TEXT-CENTER/flight_radar/
+- **Install and download landing page:** https://tihulu.github.io/tihulu-flight-radar/install.html
 
-Version 0.3.1 restores the earlier GTK4 v0.2 dashboard capabilities **without replacing or removing the full tar1090 aircraft viewer**. The English-language Qt UI shows the four original live statistics (aircraft, positioned aircraft, messages/second, total messages), mean RSSI, Start/Stop/Restart, boot settings, local LAN tar1090 URL, a full tar1090 map button, automatic timestamped quick JSON export and Save As export. It additionally has a live aircraft list and full readsb observation details including raw received JSON.
+The browser version runs without a desktop installation. Internet-only aircraft can appear without an antenna when the selected networks are available. Direct USB reception in the browser **is a separate optional WebUSB path** requiring a supported Chromium-based browser and access to the SDR; it is not how the native desktop receives RF.
 
-The **built-in map** complements, rather than replaces, the full tar1090 viewer. It opens even when there is no active decoder, no aircraft or no valid coordinates. Initial camera priority:
+The website and desktop keep genuine source provenance: **I** = Internet only, **R** = received by physical radio, **I/R** = the same valid ICAO24 aircraft in both. Multiple Internet networks are deduplicated by ICAO24. Outages and CORS/API rate limits may reduce coverage; no synthetic aircraft are inserted.
 
-1. Real fresh aircraft positions: focus the nearest valid aircraft relative to receiver/GPS coordinates, or to the labeled Germany map center if no real reference location exists.
-2. No fresh aircraft position: center on real explicitly saved receiver coordinates or permitted browser GPS location.
-3. Neither aircraft positions nor an authorized reference: show Germany (51.1657°N, 10.4515°E) as a **default map view**, not as a claimed receiver position.
+## Features
 
-The map buttons include Focus nearest aircraft, Show Germany, Center receiver, Use my location and Set receiver position. Selecting a positioned aircraft in the desktop table can open the built-in map focused on it. Manual zoom/pan is respected until the user requests recentering.
+- **Real ADS-B and Mode S:** Local `readsb` receiver, optional network decoder, and authenticated loopback companion. RF/Internet/Both overlays and detailed per-aircraft information.
+- **Full original tar1090:** Aircraft table, search, filters, metadata, live map, altitude colors and source labels. Can open Internet-only with no SDR.
+- **Independent Internet sources:** Preserve `adsb.lol`; optional `adsb.fi`, OpenSky Network and limited IntelSky layers. Source quotas/terms apply. `Airplanes.live` is not queried without compatible access.
+- **Country/state/locality location search:** Satellite Center's 8,084-point offline catalog: 7,104 places across Germany's 16 Bundesländer and 980 places across Türkiye's 81 provinces. Choose a city/locality, manual WGS84 coordinates or opt-in device GPS/online geocoding. These are approximate settlement coordinates, **not an exhaustive official Kreis/ilçe registry**.
+- **Multi-platform:** Qt app on Pop!_OS/Ubuntu/Debian, Windows x64 and macOS Apple Silicon; ARM64 Raspberry Pi bridge/source support. Drivers and a suitable `readsb` are required for local hardware. Successful CI builds do not prove every device works.
 
-The embedded HTTP map stays on loopback only (prefers 127.0.0.1:8505 for stable browser settings; uses an ephemeral port if occupied). It shows only genuine fresh aircraft position markers and short session tracks. OpenStreetMap tiles are optional and require internet; without tiles, a geographic coordinate grid remains available. The installed full tar1090 viewer retains its own detailed interface and LAN exposure according to the receiver installation.
+## Windows, macOS and Debian package previews
 
-See the [feature preservation and Survival Kit checklist](docs/FEATURE_PARITY_AND_SURVIVAL_KIT_GATE.md). This document is a non-regression requirement for the integrated Survival Kit responsive Flight Radar Center.
+When cross-platform CI passes, portable bundles appear under [**Cross-platform CI and preview builds**](https://github.com/Tihulu/tihulu-flight-radar/actions/workflows/build.yml). Download artifacts from the relevant successful workflow run. Debian x64 preview packages are named `tihulu-flight-radar_0.3.2.dev4_amd64.deb`. These are **unsigned previews**; native USB drivers/decoder are not bundled.
 
-## Data and security
+## Receiver safety and data integrity
 
-- Reads /run/readsb/aircraft.json in Linux services mode.
-- Remote JSON is a user-provided HTTP(S) URL; avoid using untrusted endpoints.
-- Exports only a raw received JSON snapshot chosen by the user.
-- Stale data is rejected. Missing aircraft positions are never inferred.
-- No cloud account or feed uploads. The UI stops polling when closed; systemd receiver
-  background service startup remains a user-controlled opt-in.
-- Two applications cannot claim the same physical RTL-SDR simultaneously.
+- A **physical SDR is never required** to view Internet aircraft or open the map.
+- In the native desktop the SDR is handled by Linux/`readsb` (or the platform's equivalent), **not WebUSB**. The same SDR cannot be claimed simultaneously by `readsb` and browser WebUSB.
+- The browser local receiver bridge binds to loopback and its non-static API requires a pairing token. Hardware controls are disabled by default unless explicitly requested.
+- No fabricated RF signal levels, aircraft positions, MLAT or radio messages. Static aircraft metadata is not proof of reception.
+- Browser-only public CORS relays are experimental; neither exact availability nor global coverage is guaranteed.
+- Preserve legacy 0.3.1 and the original tar1090 upstream copyright/license notices.
 
-## Roadmap
+## Architecture
 
-- Signed Windows installer and notarized macOS DMG.
-- Verified Windows local SDR backend and driver installer guidance.
-- Raspberry Pi packages and headless Survival Kit Radio/SDR Center backend.
-- Offline MBTiles packages, aircraft history database, signal graphs and
-  multiple receiver support.
+| Component | Technology |
+| --- | --- |
+| Desktop UI | Python 3.11+, PySide6 / Qt WebEngine |
+| Radio decoding | Native `readsb` / RTL-SDR OS drivers (optional) |
+| Browser frontend | HTML, CSS, JavaScript, optional browser WebUSB |
+| Native/browser bridge | Local Python HTTP API on `127.0.0.1`, authenticated for aircraft/control APIs |
+| Maps | Original upstream tar1090 and shared Flight Radar interface |
+| Internet data | Selected providers, timestamps, independent caches and ICAO24 deduplication |
+
+**Canonical source:** `Tihulu/tihulu-flight-radar` → `tihulu_flight_radar/web/`. The TEXT CENTER deployment is a **generated mirror**, not a second source repository. All reviewed changes should land on **`main`** and publish to both GitHub Pages origins using [the dual-publication contract](docs/DUAL_GITHUB_PAGES.md).
+
+## Development and test
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -e ".[test]"
+python -m pytest -q
+node --test tests/*.test.cjs
+```
+
+Cross-platform Actions test Linux, Debian, macOS Apple Silicon and Windows. For Pages builds, see `.github/workflows/pages.yml`; for a local-only bridge see [the bridge guide](docs/GITHUB_PAGES_AND_LOCAL_BRIDGE.md). The app does not bundle or install SDR drivers or a decoder.
+
+## Additional documentation
+
+- [Pop!_OS upgrade and pinned rollback](docs/POP_OS_VERSION_SWITCH_AND_LEGACY.md)
+- [Full tar1090 and antenna-optional behavior](docs/ANTENNA_OPTIONAL_TAR1090.md)
+- [Dual GitHub Pages publication and parity](docs/DUAL_GITHUB_PAGES.md)
+- [Browser WebUSB ownership and Linux USB conflicts](docs/RTL_SDR_WEBUSB_LINUX_OWNERSHIP.md)
+- [GitHub Pages and paired local bridge](docs/GITHUB_PAGES_AND_LOCAL_BRIDGE.md)
+- [Internet source limitations](docs/TAR1090_WEBUSB_AND_INTERNET_SOURCES.md)
+
+**Attribution:** The bundled original tar1090 frontend remains under its upstream GPL-2.0-or-later licensing and attribution; see `tihulu_flight_radar/web/tar1090/UPSTREAM-GPL-LICENSE.txt` in generated artifacts. The Satellite Center place dataset has separate [ODbL provenance](tihulu_flight_radar/web/CITY_DATA_LICENSE.md). This repository does not currently supply a blanket license for all original project code.

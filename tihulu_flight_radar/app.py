@@ -11,16 +11,15 @@ import platform
 import subprocess
 import sys
 import time
-import webbrowser
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.parse import quote
 
-from PySide6.QtCore import QSettings, Qt, QTimer
+from PySide6.QtCore import QSettings, Qt, QTimer, QUrl
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import (
     QApplication, QAbstractItemView, QCheckBox, QComboBox, QFileDialog,
-    QFrame, QGridLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
+    QFrame, QGridLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QDialog,
     QMainWindow, QMessageBox, QPushButton, QScrollArea, QTableWidget,
     QTableWidgetItem, QToolButton, QVBoxLayout, QWidget,
 )
@@ -30,6 +29,7 @@ from .control import MODES, ReceiverController, service_action
 from .core import (DataError, detect_sdr_processes, export_json, find_tar1090_url,
                    lan_ip, summarize, recently_seen, position_is_fresh)
 from .map_server import LocalMapServer
+from .tar_map import focused_tar_url
 
 
 STYLE = """
@@ -138,9 +138,11 @@ def aircraft_fields(aircraft: dict) -> list[str]:
 
 
 class RadarWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, controller=None, owns_receiver=True):
         super().__init__()
-        self.controller = ReceiverController()
+        self.controller = controller if controller is not None else ReceiverController()
+        self._owns_receiver = owns_receiver
+        self._map_dialogs = []
         self.pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="tihulu-radar")
         self.snapshot_future = None
         self.action_future = None
@@ -312,6 +314,14 @@ class RadarWindow(QMainWindow):
         self.boot_checkbox.setVisible(platform.system() == "Linux")
         self.boot_checkbox.toggled.connect(self._toggle_boot)
         settings.addWidget(self.boot_checkbox)
+        self.release_checkbox = QCheckBox("Release local SDR when app closes")
+        self.release_checkbox.setChecked(
+            self.settings.value("release_sdr_on_exit", True, type=bool)
+        )
+        self.release_checkbox.toggled.connect(
+            lambda value: self.settings.setValue("release_sdr_on_exit", value)
+        )
+        settings.addWidget(self.release_checkbox)
         self.diagnostics_button = QPushButton("View receiver diagnostics")
         self.diagnostics_button.setVisible(platform.system() == "Linux")
         self.diagnostics_button.clicked.connect(self._show_diagnostics)
@@ -435,13 +445,18 @@ class RadarWindow(QMainWindow):
             try:
                 url = self.map_future.result()
                 if url:
-                    webbrowser.open(url)
-                    self.info.setText("Full tar1090 aircraft map opened.")
+                    target = focused_tar_url(url, self.last_data)
+                    self._show_embedded_map(target, "Full tar1090 aircraft map")
+                    self.info.setText("Full tar1090 focused on recent aircraft or Germany.")
                 else:
-                    QMessageBox.information(
-                        self, "Full map unavailable",
-                        "tar1090 is not reachable. Open the built-in map instead, "
-                        "or check the tar1090/lighttpd services."
+                    # The static tar1090 HTML can be served even while readsb
+                    # is stopped for WebUSB. Use the actual in-app radar
+                    # instead of opening a grey tar1090 without aircraft.json.
+                    self._open_map()
+                    self.info.setText(
+                        "tar1090 has no fresh readsb aircraft.json backend. "
+                        "Opened the live built-in map instead; stop browser "
+                        "WebUSB before starting readsb on the same SDR."
                     )
             except Exception as exc:
                 self.info.setText(f"Map discovery failed: {exc}")
@@ -611,8 +626,29 @@ class RadarWindow(QMainWindow):
         dialog.setDetailedText(json.dumps(aircraft, indent=2, ensure_ascii=False))
         dialog.exec()
 
+    def _show_embedded_map(self, url: str, title: str):
+        """Render the radar inside the Qt application, not a system browser."""
+        from PySide6.QtWebEngineWidgets import QWebEngineView
+        from .tar_overlay import TarOverlayView
+        dialog = QDialog(self)
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
+        dialog.setWindowTitle(title)
+        dialog.resize(1170, 800)
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(0, 0, 0, 0)
+        view = (TarOverlayView(dialog, assume_tar=True) if title.startswith("Full tar1090")
+                else QWebEngineView(dialog))
+        layout.addWidget(view)
+        view.setUrl(QUrl(url))
+        self._map_dialogs.append(dialog)
+        dialog.destroyed.connect(
+            lambda *_: self._map_dialogs.remove(dialog)
+            if dialog in self._map_dialogs else None
+        )
+        dialog.show()
+
     def _open_map(self):
-        webbrowser.open(self.map_server.url)
+        self._show_embedded_map(self.map_server.url, "Built-in ADS-B aircraft map")
 
     def _open_tar1090(self):
         if self.map_future is None:
@@ -635,7 +671,10 @@ class RadarWindow(QMainWindow):
         if not icao:
             self._open_map()
             return
-        webbrowser.open(self.map_server.url + "?aircraft=" + quote(icao, safe=""))
+        self._show_embedded_map(
+            self.map_server.url + "?aircraft=" + quote(icao, safe=""),
+            "Selected ADS-B aircraft map",
+        )
 
     def _show_diagnostics(self):
         if platform.system() != "Linux":
@@ -699,8 +738,16 @@ class RadarWindow(QMainWindow):
 
     def closeEvent(self, event):
         self.timer.stop()
+        for dialog in list(self._map_dialogs):
+            dialog.close()
         self.map_server.close()
-        self.controller.close()
+        if self._owns_receiver:
+            try:
+                self.controller.close(
+                    release_local_service=self.release_checkbox.isChecked()
+                )
+            except DataError as exc:
+                QMessageBox.warning(self, "Receiver release warning", str(exc))
         self.pool.shutdown(wait=False, cancel_futures=True)
         super().closeEvent(event)
 
