@@ -78,4 +78,5 @@ On every user-requested update:
 
 Do not combine repositories or delete preserved legacy branches. No website can silently stop systemd, unbind
 `dvb_usb_rtl28xxu`, or bypass browser WebUSB permissions.
-\nSite install guide: `tihulu_flight_radar/web/install.html` (one-line main installer, links to both web radars and rollback to legacy). The main branch README mirrors those commands.\n
+
+Site install guide: `tihulu_flight_radar/web/install.html` (one-line main installer, links to both web radars and rollback to legacy). The main branch README mirrors those commands.
