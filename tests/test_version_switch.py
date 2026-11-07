@@ -12,6 +12,7 @@ LEGACY = "67280cd84feb89faec6a80f5fe2a55ce5f7b89e6"
 PREVIEW = "def7a62ff6951951bc3a432b93da3251c7ea4162"
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="Pop!_OS Bash script execution is Linux-only; Windows bash.exe can be a WSL shim")
 def test_switcher_is_valid_bash_and_help_never_installs():
     shell = subprocess.run(["bash", "-n", str(SWITCH)],
                            capture_output=True, text=True, check=False)
@@ -37,6 +38,7 @@ def test_pinned_git_sources_and_single_replacement_are_explicit():
     assert "sudo systemctl stop readsb" not in installer
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="Pop!_OS installer is not executed on Windows")
 def test_invalid_switch_command_must_not_touch_system():
     outcome = subprocess.run(["bash", str(SWITCH), "something-not-a-version"],
                              capture_output=True, text=True, check=False)
