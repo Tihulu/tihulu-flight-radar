@@ -2,8 +2,8 @@
 
 ## Full upstream tar1090 without an antenna — 0.3.2.dev1 contract
 
-- New preview is pinned at source SHA `ff934a67f0c4b93e23997d01307ad89bc9fbdb95`
-  via `preview/v0.3.2-dev1`; legacy 0.3.1 stays frozen at
+- New preview is pinned at source SHA `def7a62ff6951951bc3a432b93da3251c7ea4162`
+  via `preview/v0.3.2-dev4`; legacy 0.3.1 stays frozen at
   `67280cd84feb89faec6a80f5fe2a55ce5f7b89e6`. Never delete/replace
   that legacy branch or make a rollback script silently install from `main`.
 - Original tar1090 interface **must open with Internet-only aircraft and zero
@@ -32,7 +32,7 @@
 
 ## User-verified 0.3.1 stable baseline and optional multi-provider preview (Nov 6, 2026)
 
-Preserve the user's installed Pop!_OS `0.3.1` binary; the native `0.3.2.dev1`
+Preserve the user's installed Pop!_OS `0.3.1` binary; the native `0.3.2.dev4`
 branch is **opt-in only**. On actual user hardware, antenna (R) and Internet
 (I) planes already work, and the same ICAO shows once as I/R. This is a hard
 regression gate across Linux, macOS, Windows, Pi and both Pages origins.
@@ -54,7 +54,7 @@ The **same browser build** must be published at BOTH addresses:
 
 Canonical browser source: `tihulu_flight_radar/web/` in `Tihulu/tihulu-flight-radar`. Preserve its direct WebUSB 1090 MHz reception, genuine RF/Internet/Both provenance, altitude colors, tar1090 backend-health gating, PWA, filters, Hard Stop/USB release, and existing native Windows/Linux/macOS/Pi clients. Never silently auto-claim SDR from a different app. No simulated aircraft data.
 
-**Active reviewed source ref (Nov 6, 2026):** `feature/github-pages-local-bridge-2026-11-06` (draft PR #6). Until approved merge, do not assume `main` has the current browser implementation. Once PR #6 is merged, *atomically update both publishing workflows and this document to `main`*. Do not delete the feature ref before verifying both live sites.
+**Canonical release source (Nov 7, 2026):** `main`. Development continues on topic branches and merges to `main` only after CI and provenance tests. Keep `legacy/v0.3.1` immutable. Both standalone Pages and TEXT CENTER sync must build from `main`; update neither site by hand. The original preview/feature branches remain readable as historical sources.
 
 ## Mandatory dual publication on every browser update
 
@@ -72,3 +72,10 @@ Full upstream tar1090 frontend is bundled from pinned GPL-2.0-or-later source vi
 Mirror details: `docs/DUAL_GITHUB_PAGES.md` in this repository and `docs/FLIGHT_RADAR_DUAL_PAGES.md` in TEXT CENTER.
 
 This file is a durable handoff instruction for every coding agent and future development conversation. It supplements rather than overrides existing project preservation/release requirements.
+
+## Main release and install parity
+
+- Root README and `web/install.html` must show the tested one-line Linux installer from `main`, and a one-line **legacy 0.3.1** restore path. The installed 0.3.1 working baseline remains available at exact SHA `67280cd84feb89faec6a80f5fe2a55ce5f7b89e6`.
+- Desktop installation remains a **single existing pipx environment** with native `readsb` SDR reception; Qt WebEngine is display-only, never the desktop RF/WebUSB capture path. Do not reset receiver services or settings.
+- Main `pages.yml` publishes to gh-pages; main `standalone-pages.yml` is optional scheduled recovery; TEXT CENTER mirror must check out `main` in lockstep. Always verify both source-revision SHA values and actual Pages deployments.
+- Keep GitHub Actions Windows shell test skip limited to execution of Linux-only Pop!_OS shell scripts; static safety/integrity checks run on all platforms.
