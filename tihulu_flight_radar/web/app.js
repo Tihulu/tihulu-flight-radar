@@ -817,13 +817,14 @@ function rememberRfPlanes(){
      a.seen>10||a.seen_pos>5)continue;
   const record=TihuluRFCoverage.recordedCircle(a,now);
   if(!record)continue;
-  // Keep multiple separated RF positions from the same plane while fixed:
-  // only store meaningful movement, not the same snapshot every 15 seconds.
+  // Only store direct radio positions. Use real ground speed / heading
+  // to choose spatially useful successive fixes and reject impossible jumps.
+  // Never project RF positions from velocity (map animation is separate).
   const same=[...rfHistory.values()].filter(r=>r.hex===record.hex);
   const previous=same.length?same[same.length-1]:null;
-  if(previous&&TihuluRFCoverage.distanceKm(previous,record)<12&&
-     now-previous.capturedAtMs<10*60*1000)continue;
-  const key=record.hex+":"+Math.floor(now/1000);
+  const decision=TihuluRFCoverage.trackSampleDecision(previous,record);
+  if(!decision.keep)continue;
+  const key=record.hex+":"+Math.round(record.capturedAtMs);
   rfHistory.set(key,record);changed=true;
  }
  // Fixed-site history is session-only, never persisted.
