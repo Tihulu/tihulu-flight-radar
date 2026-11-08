@@ -1190,6 +1190,12 @@ function paintRfLocator(result){
  ctx.fillText(rfCoordinateText(result.region),x+18,y+4);
  ctx.restore();
 }
+function displayedAircraftPoint(a){
+ // Same display-only prediction as the icon; not an RF observation.
+ const projected=$("smoothMotion").checked
+  ?TihuluMapMotion.displayedPosition(a,state.dataReceivedAt,Date.now()):null;
+ return {lat:projected?.lat??a.lat,lon:projected?.lon??a.lon};
+}
 function renderPopup(a){
  const popup=$("aircraftPopup");
  if(!a){popup.hidden=true;return}
@@ -1252,7 +1258,8 @@ function positionPopup(a){
  const panel=popup.parentElement, cw=panel.clientWidth, ch=panel.clientHeight;
  let x=cw-340,y=canvas.offsetTop+12;
  if(isPositioned(a)){
-  const [px,py]=xy(a.lat,a.lon);
+  const pos=displayedAircraftPoint(a);
+  const [px,py]=xy(pos.lat,pos.lon);
   if(px>=0&&px<=canvas.clientWidth&&py>=0&&py<=canvas.clientHeight){
    x=canvas.offsetLeft+px+22;y=canvas.offsetTop+py-30;
   }
@@ -1712,12 +1719,32 @@ function paintRfCoverage(result){
  }
  ctx.restore();
 }
+// Record clickable silhouettes, source badges, and callsign labels from
+// the positions actually painted, not another fresh motion projection.
+let paintedAircraftHits=[];
+function pickPaintedAircraft(hits,x,y,touchSlack=0){
+ let best=null,score=Infinity;
+ for(const hit of hits){
+  const dx=x-hit.x,dy=y-hit.y,d=Math.hypot(dx,dy);
+  const plane=d<=24+touchSlack;
+  const badge=dx>=7-touchSlack&&dx<=hit.badgeRight+touchSlack&&
+   dy>=6-touchSlack&&dy<=29+touchSlack;
+  const label=dx>=17-touchSlack&&dx<=21+hit.labelWidth+touchSlack&&
+   dy>=-25-touchSlack&&dy<=-3+touchSlack;
+  if(!plane&&!badge&&!label)continue;
+  // Prefer physical silhouettes to a neighboring overlapping text label.
+  const priority=plane?d:badge?25+Math.abs(dy-16)*.1:35+Math.abs(dy+12)*.1;
+  if(priority<score){score=priority;best=hit;}
+ }
+ return best;
+}
 function paint(){
  const w=canvas.clientWidth,h=canvas.clientHeight;
  if(!w||!h)return;
  const model=coverageResult();
  updateRfBest(model);
  focusRfModelWhenReady(model);
+ paintedAircraftHits=[]; // no stale live airplane hit targets
  ctx.clearRect(0,0,w,h);ctx.fillStyle="#102231";ctx.fillRect(0,0,w,h);
  tiles();grid();
  if($("showRfCoverage").checked||rfLocatorActive||rfSelectedPlanes.size)paintRfCoverage(model);
@@ -1741,6 +1768,10 @@ function paint(){
   const [x,y]=xy(shown?.lat??a.lat,shown?.lon??a.lon);
   if(x< -15||x>w+15||y< -15||y>h+15)continue;
   markers++;
+  const label=(a.flight||a.hex||"Aircraft").trim();
+  paintedAircraftHits.push({hex:a.hex,x,y,
+   badgeRight:aircraftSourceBadge(a)==="I/R"?42:29,
+   labelWidth:Math.min(170,Math.max(24,label.length*7.4))});
   paintAircraft(ctx,a,x,y);
   if(shown?.projected){
    // Dashed halo explicitly distinguishes predicted motion from an RF fix.
@@ -1750,7 +1781,7 @@ function paint(){
   }
   ctx.font="12px system-ui";ctx.fillStyle="#fff";
   ctx.shadowColor="#102030";ctx.shadowBlur=3;
-  ctx.fillText((a.flight||a.hex||"Aircraft").trim(),x+19,y-10);
+  ctx.fillText(label,x+19,y-10);
   ctx.shadowBlur=0;
  }
  paintRfBestPin(model); // historical best model, separate from live tracking.
@@ -1758,13 +1789,23 @@ function paint(){
  if(!markers){
   ctx.fillStyle="rgba(13,23,33,.9)";ctx.fillRect(12,12,Math.min(420,w-24),38);
   ctx.fillStyle="#d6e7f7";ctx.font="13px system-ui";
-  ctx.fillText("No fresh aircraft positions in selected layers",22,36);
+  ctx.fillText("No live planes here · RF model may use past observations",22,36);
  }
  $("mapLabel").textContent=state.centerLabel;
  renderCoverageStatus();
+ // Keep nonmodal aircraft details next to the moving icon, even if the
+ // RF-centered map pans. Do not auto-focus the camera on the aircraft.
+ if(state.selected&&!$("aircraftPopup").hidden){
+  const selected=state.data.find(a=>a.hex===state.selected);
+  if(selected&&isPositioned(selected))positionPopup(selected);
+ }
 }
 canvas.addEventListener("pointerdown",e=>{
- state.pointer=[e.clientX,e.clientY,state.lon,state.lat,false];
+ if(e.pointerType==="mouse"&&e.button!==0)return;
+ const rect=canvas.getBoundingClientRect();
+ const hit=pickPaintedAircraft(paintedAircraftHits,
+  e.clientX-rect.left,e.clientY-rect.top,e.pointerType==="touch"?8:2);
+ state.pointer=[e.clientX,e.clientY,state.lon,state.lat,false,hit?.hex??null];
  canvas.setPointerCapture(e.pointerId);
 });
 canvas.addEventListener("pointermove",e=>{
@@ -1783,19 +1824,18 @@ canvas.addEventListener("pointermove",e=>{
 canvas.addEventListener("pointerup",e=>{
  if(!state.pointer)return;
  const p=state.pointer;state.pointer=null;
- if(p[4]||Math.hypot(e.clientX-p[0],e.clientY-p[1])>8)return;
- let best=null,bestD=18;
- for(const a of state.data){
-  if(!visible(a)||!isPositioned(a))continue;
-  const shown=$("smoothMotion").checked
-   ?TihuluMapMotion.displayedPosition(a,state.dataReceivedAt,Date.now())
-   :null;
-  const [x,y]=xy(shown?.lat??a.lat,shown?.lon??a.lon);
-  const d=Math.hypot(x-(e.clientX-canvas.getBoundingClientRect().left),y-(e.clientY-canvas.getBoundingClientRect().top));
-  if(d<bestD){bestD=d;best=a}
- }
- if(best)choose(best);else closePopup();
+ if(p[4]||Math.hypot(e.clientX-p[0],e.clientY-p[1])>10)return;
+ const rect=canvas.getBoundingClientRect();
+ const hit=pickPaintedAircraft(paintedAircraftHits,
+  e.clientX-rect.left,e.clientY-rect.top,e.pointerType==="touch"?8:2);
+ // If the aircraft moved during the click, prefer the marker pressed.
+ const hex=p[5]||hit?.hex;
+ const a=hex?state.data.find(row=>row.hex===hex):null;
+ if(a&&visible(a)&&isPositioned(a))choose(a);
+ else closePopup();
 });
+canvas.addEventListener("pointercancel",()=>{state.pointer=null;});
+canvas.addEventListener("lostpointercapture",()=>{state.pointer=null;});
 function adjustMapZoom(delta){
  const next=Math.max(2,Math.min(12,state.zoom+delta));
  if(next===state.zoom)return;
