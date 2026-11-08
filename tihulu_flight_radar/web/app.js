@@ -980,6 +980,12 @@ $("rfExportEvidence").onclick=()=>{
     sampledSpreadKm:model.region.extentKm,confidence:null,accuracyMeters:null}:null,
    contributors:model.aircraftDistances||[]
   },
+  bestSessionModel:rfBest?{...rfBest,
+   // Past best ≠ current fix, neither provides GPS error probability.
+   confidence:null,accuracyMeters:null}:null,
+  illustrationOnly:{gaussianPsfEnabled:$("rfGaussianBand").checked,
+   assumedHorizonSigmaKm:Number($("rfSigmaKm").value),
+   notCalibrated:true,notReceiverLocationAccuracy:true},
   currentlyVerifiedLocalRf:live,
   sessionRfHistory:$("rfRemember").checked?[...rfHistory.values()]:[]
  };
