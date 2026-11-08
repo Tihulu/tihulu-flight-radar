@@ -32,14 +32,14 @@ signal or guess the receiver's position.
 
 Only rows with `position_source="antenna"`, independently positioned
 `observations.antenna`, valid fresh age fields and plausible aircraft
-altitude enter the conservative radio-horizon model. It requires **three**
+altitude enter the conservative radio-horizon model. It requires **four**
 distinct independently positioned ICAO24 aircraft before displaying
 model constraints, never an arbitrary count of online planes. The rough maximum line-of-sight radius uses
 4/3 effective Earth radius, a 30-m maximum ground receiver height and an
 extra 30-km allowance; this is a *demonstration bound*, not an RF
 range measurement. Its grid-cell intersection is merely a possible
 coverage area and may be very broad, disconnected, or wrong when the
-propagation model is inaccurate. The explicit **RF locate · 3+ aircraft**
+propagation model is inaccurate. The default-on **RF area**
 control computes a centroid of those possible grid cells without taking
 a receiver latitude/longitude, GPS permission, or public aircraft data.
 The value shown is a **model-dependent plausible-area center**, not an
@@ -74,7 +74,7 @@ aggregator `now`/age fields, browser `Date.now` or `performance.now`.
   both use the same fixed-site history (up to 2 hours) when enabled.
 - The optional centroid marker and its displayed coordinates are labeled
   model outputs, never actual measured receiver coordinates.
-- Node regression tests cover three genuine RF observations, rejected
+- Node regression tests cover four genuine RF observations, rejected
   Internet/misprovenanced rows, timing placeholders, sample indices and UI.
 - **Hardware validation is pending** for physical Nooelec NESDR SMArt v5,
   Pop!_OS COSMIC Qt window, browser USB, timestamp continuity and RF
@@ -136,8 +136,8 @@ API call, artificial aircraft, remote time server or hidden service dependency.
   in the current session; historical records are explicitly labeled as
   historical rather than passed back as fresh live plane positions.
 - More RF aircraft can shrink the **model-dependent feasible region**. The
-  map still draws at most six rings to avoid visual clutter, while up to 64
-  independent records constrain their geometric intersection.
+  map draws at most three pale-blue optional horizon outlines (OFF by default), while up to 64
+  genuine position observations from at least four independent aircraft constrain the feasible area. Multiple positions of a single aircraft never inflate the independent-aircraft threshold.
 - Increasing aircraft count does **not guarantee increasing geolocation
   accuracy**. Radio-horizon ranges are assumptions, not time-of-flight
   distances, so this version never returns a receiver GPS fix or accuracy
@@ -148,27 +148,42 @@ download dialogs require testing on the target computer. CI simulation is not
 a substitute for hardware calibration.
 
 
-## Offline RF possible-area locator (3+ aircraft)
+## Offline RF possible-area locator (4+ aircraft; default-on)
 
-When receiving local ADS-B frames, open Flight Radar and press
-**RF locate · 3+ aircraft**. No latitude/longitude input, GPS permission,
-browser geolocation API, external map tile, or remote aircraft provider is
-needed to compute the model. The receiver must remain stationary if its
-optional two-hour history is enabled. The GUI shows a crosshair at the
-*centroid of modeled feasible grid cells*, latitude/longitude of this
-*model centroid*, number of independently positioned antenna aircraft,
-and the maximum radial spread of sampled feasible cells, rounded up to
-10 km. Disable **RF coverage rings** to hide rings while retaining the
-crosshair, or enable it to inspect the same constraints. Clicking again
-hides the model marker.
+The cyan feasible-area overlay is enabled by default, independently of the
+optional outer radio-horizon outlines. **Focus RF area** recenters the map
+only when explicitly clicked; discovering new radio planes does not hijack
+the user's manual map position. The model requires at least **four distinct
+independently positioned local RF aircraft**, with source provenance and fresh
+ages verified, before an area is produced. The total 'Local aircraft' counter
+can be larger because Mode S detections do not all include coordinates.
 
-This is **not geolocation by ADS-B trilateration**. At most, upper-bound
-horizon intersections identify a model-dependent *possible region*.
-With three or hundreds of aircraft, one uncalibrated RTL-SDR still lacks
-the transmit-time and calibrated distance information to identify its
-own true position. A centroid is one descriptive point among many
-possible receiver positions, not a validated estimate or accuracy
-metric. If no common region exists or fewer than three independently
-positioned *local RF* aircraft are available, no point is shown.
-The map camera moves to this model centroid without changing the saved
-Internet search region or asserting that it is the physical receiver.
+With the stationary-receiver history option enabled (session-only), multiple
+genuinely received positions along an aircraft's trajectory are recorded when
+separated by meaningful distance or time. They give additional *constraints*,
+but a single aircraft never counts as several independent aircraft. Up to
+64 observations over two hours are used. Clear history whenever the receiver
+or antenna changes site. No Internet, GPS, manually entered receiver position,
+or external tiles are required for this experiment.
+
+The translucent cyan polygon approximates the **intersection of feasible
+radio-horizon regions**. Its marker is the **model-dependent sample centroid**
+and its extent is **not** a GPS fix, measured RF range, statistical
+confidence interval, or validated accuracy. The horizon model can be
+incorrect under obstructed or anomalous propagation. This is not TDOA/MLAT
+trilateration; there is no exact transmission epoch in ordinary 1090ES.
+If insufficient distinct local aircraft or incompatible constraints are
+present, no receiver location is asserted.
+
+The normal aircraft map now opt-out animates *display-only* short-horizon
+motion using actual received position, speed and heading. A dashed halo
+distinguishes the projected icon, which is never used for RF coverage,
+provenance, tracks or exports. Native `readsb` RSSI, if present, is displayed
+as an uncalibrated relative signal indicator in the aircraft timing panel,
+never converted to fictional kilometers. The RF Timing Laboratory may show
+zero calibrated sample-index frames while the native readsb feed still
+contains genuine positioned RF aircraft.
+
+Independent tests enforce these rules in `tests/aircraft_popup_rf_coverage.test.cjs`
+and `tests/map_motion.test.cjs`. Hardware validation with the user's SDR is
+still pending; GitHub Actions do not confirm real RF reception.
