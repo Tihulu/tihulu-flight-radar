@@ -137,7 +137,8 @@ test("RF model is offline and the toggle doesn't depend on GPS or ring checkbox"
  assert.match(html,/id="rfLocate"/);
  assert.match(html,/id="rfLocateStatus"/);
  assert.match(js,/function paintRfLocator\(result\)/);
- assert.match(js,/paintRfLocator\(model\); \/\/ independent of the optional ring display/);
+ assert.match(js,/paintRfLocator\(model\);/);
+ assert.match(js,/paintRfBestPin\(model\);/);
  assert.match(js,/function focusRfModelWhenReady\(result\)/);
  assert.match(js,/function paintRfCoverage\(result\)/);
  assert.match(js,/rfConvexHull\(coords\)/);
