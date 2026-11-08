@@ -96,6 +96,7 @@
       <label><input id="showInternet" type="checkbox" checked><i class="key internet"></i> Internet</label>
       <label><input id="showBoth" type="checkbox" checked><i class="key both"></i> Both</label>
       <label><input id="showTracks" type="checkbox" checked> Tracks</label>
+      <label title="Experimental RF radio-horizon feasibility region, not measured range or a GPS fix"><input id="showRfCoverage" type="checkbox"> RF coverage rings</label>
       <label><input id="showTiles" type="checkbox" checked> OSM tiles</label>
     </div>
     <div class="maptools">
@@ -112,6 +113,27 @@
      <span class="altitude-label">0–40,000 ft · grey = unknown</span>
    </div>
    <canvas id="map" role="img" aria-label="Live geographic aircraft map, with offline coordinate grid"></canvas>
+    <section id="aircraftPopup" class="aircraft-popup" role="dialog" aria-label="Aircraft details" aria-modal="false" hidden>
+     <header class="aircraft-popup-head">
+      <div><strong id="popupFlight">Aircraft</strong><small id="popupIcao">ICAO24 —</small></div>
+      <button id="popupClose" type="button" aria-label="Close aircraft details">×</button>
+     </header>
+     <p id="popupSources" class="aircraft-popup-sources"></p>
+     <div class="aircraft-popup-grid">
+      <div><span>Altitude</span><strong id="popupAltitude">—</strong></div>
+      <div><span>Ground speed</span><strong id="popupSpeed">—</strong></div>
+      <div><span>Heading</span><strong id="popupHeading">—</strong></div>
+      <div><span>Vertical rate</span><strong id="popupVerticalRate">—</strong></div>
+      <div><span>Aircraft type</span><strong id="popupType">—</strong></div>
+      <div><span>Squawk</span><strong id="popupSquawk">—</strong></div>
+     </div>
+     <p class="aircraft-popup-meta"><span id="popupPosition">Position unavailable</span><span id="popupSeen"></span></p>
+     <div class="aircraft-popup-actions">
+      <button id="popupCenter" type="button">Center</button>
+      <button id="popupCopy" type="button">Copy ICAO</button>
+      <button id="popupRaw" type="button">Raw JSON</button>
+     </div>
+    </section>
    <div class="mapfooter"><span id="mapLabel">Germany default view · no receiver position assumed</span><span><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a> · <span id="sourceCredits">Source attribution shown after connection</span></span></div>
   </section>
   <aside class="side">
@@ -119,9 +141,15 @@
    <p id="receiverStatus" class="muted">WebUSB can receive directly in supported browsers. A paired bridge is optional.</p>
    <div class="buttons"><button id="start">Start</button><button id="stop">Stop</button><button id="restart">Restart</button></div>
    <h2>Sources</h2><p id="feedStatus" class="muted">No source connected.</p>
-   <h2>Aircraft <span id="visibleCount" class="muted">0</span></h2>
-   <div class="tablewrap"><table><thead><tr><th>Flight / ICAO</th><th>Altitude</th><th>Speed</th><th>Source</th></tr></thead><tbody id="aircraftRows"></tbody></table></div>
-   <h2>Selected aircraft</h2><pre id="details" class="details">Select an aircraft to inspect its received fields and source provenance.</pre>
+   <div class="aircraft-table-title"><h2>Aircraft <span id="visibleCount" class="muted">0</span></h2>
+    <label for="unitSystem">Units <select id="unitSystem" aria-label="Flight information units"><option value="aviation">Aviation · ft / kt</option><option value="metric">Metric · m / km/h</option></select></label>
+   </div>
+   <div class="tablewrap"><table><thead><tr><th>Flight / ICAO</th><th id="altitudeColumn">Altitude (ft)</th><th id="speedColumn">Speed (kt)</th><th>Source</th></tr></thead><tbody id="aircraftRows"></tbody></table></div>
+   <section class="rf-coverage-panel" aria-label="Experimental RF coverage constraints">
+    <strong>Receiver coverage estimate</strong><span id="rfCoverageStatus" aria-live="polite">RF position data required. One SDR alone cannot determine a receiver's coordinates.</span>
+    <small>Only fresh antenna-positioned aircraft count. Rings show approximate radio-horizon limits, not measured ranges. Reverse MLAT requires synchronized external reference receivers.</small>
+   </section>
+   <details id="rawAircraftPanel" class="raw-aircraft-panel"><summary>Selected aircraft · Raw / debug JSON</summary><pre id="details" class="details">Select an aircraft to inspect its received fields and source provenance.</pre></details>
   </aside>
  </div>
  <section id="tarBrowserShell" class="tar-browser-shell" hidden aria-label="Full tar1090 aircraft map and details interface">
@@ -183,6 +211,7 @@
  <footer><span id="message" role="status">Ready — choose USB above or configure an Internet feed. No artificial flights are generated.</span><span>Offline-first · <a href="https://github.com/Tihulu/tihulu-flight-radar" target="_blank" rel="noopener noreferrer">GitHub source</a></span></footer>
 </main>
 <script src="./multi_sources.js" defer></script>
+<script src="./receiver_coverage.js" defer></script>
 <script src="./app.js" defer></script>
 <script type="module" src="./browser_usb.mjs"></script>
 </body></html>
