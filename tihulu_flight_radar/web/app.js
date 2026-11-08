@@ -845,16 +845,16 @@ function renderCoverageStatus(){
  const result=coverageResult();
  const label=$("rfCoverageStatus");
  const info={
-  insufficient:result.count+" independently positioned antenna aircraft (live and allowed fixed-site history). Need at least 3 for a modeled possible area.",
+  insufficient:result.count+"/4 independently positioned local RF aircraft ("+(result.liveCount||0)+" live, "+(result.historyCount||0)+" stationary-history). Internet-only aircraft, missing radio positions and Mode S without coordinates cannot qualify.",
   no_overlap:"Radio-horizon model has no common overlap. Check altitude/age/source validity.",
   unresolved:"Possible region too thin or fragmented for current grid. No coordinate fix.",
-  region:"Possible modeled coverage · "+result.count+" independent RF aircraft · "+
+  region:"Possible RF area · "+result.count+" verified independently positioned aircraft ("+result.liveCount+" live, "+result.historyCount+" stationary-history) · "+
    (result.constraintsUsed||result.count)+" constraints applied · coarse extent ~"+
     Math.round(result.region.extentKm)+" km. More planes may narrow this area, NOT establish GPS accuracy."
  };
  label.textContent=info[result.status]||"Insufficient evidence";
  const output=$("rfLocateStatus"),button=$("rfLocate");
- button.textContent=rfLocatorActive?"Hide RF estimate":"RF locate · 3+ aircraft";
+ button.textContent=rfLocatorActive?"Hide RF estimate":"RF locate · 4+ aircraft";
  button.setAttribute("aria-pressed",String(rfLocatorActive));
  if(!rfLocatorActive){
   output.textContent="RF locating is off. Press RF locate to display a possible-area center, with or without rings, using local radio aircraft only.";
@@ -868,7 +868,7 @@ function renderCoverageStatus(){
    "No manual latitude/longitude, GPS, or Internet data used.";
  }else{
   output.textContent=result.status==="insufficient"
-   ?"Waiting for 3+ fresh independently positioned antenna aircraft ("+
+   ?"Waiting for 4+ independently positioned antenna aircraft ("+
      result.count+" eligible). Total decoded aircraft may include records without positions."
    :result.status==="no_overlap"
     ?"Conflicting RF horizon constraints: there is no shared feasible area. No coordinate is shown; clear stationary history if the antenna moved."
@@ -896,12 +896,12 @@ function paintRfLocator(result){
  const [x,y]=xy(result.region.lat,result.region.lon);
  if(x<0||x>canvas.clientWidth||y<0||y>canvas.clientHeight)return;
  ctx.save();
- ctx.fillStyle="rgba(16,32,48,.9)";ctx.strokeStyle="#ffdea0";
+ ctx.fillStyle="rgba(8,34,45,.94)";ctx.strokeStyle="#6fe4ef";
  ctx.lineWidth=2.5;ctx.setLineDash([]);
  ctx.beginPath();ctx.arc(x,y,9,0,Math.PI*2);ctx.fill();ctx.stroke();
  ctx.beginPath();ctx.moveTo(x-16,y);ctx.lineTo(x+16,y);
  ctx.moveTo(x,y-16);ctx.lineTo(x,y+16);ctx.stroke();
- ctx.font="bold 11px system-ui";ctx.fillStyle="#ffdea0";
+ ctx.font="bold 11px system-ui";ctx.fillStyle="#97eef5";
  ctx.shadowColor="#0a1a27";ctx.shadowBlur=5;
  ctx.fillText("RF MODEL CENTER · NOT GPS",x+18,y-12);
  ctx.restore();
