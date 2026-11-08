@@ -101,7 +101,7 @@
     </div>
     <div class="maptools">
       <button id="fullTar1090" type="button" title="Open the complete bundled upstream tar1090 with live in-browser RF and Internet data">Full tar1090 · Internet or Radio</button><button id="expandMap" aria-pressed="false" title="Expand this independent browser radar map, even with readsb stopped">Full radar map</button><button id="focus">Focus aircraft</button><button id="cologne">Cologne</button>
-      <button id="germany">Germany</button><button id="placeOpen" type="button" title="Choose country, state or province, city/district, or coordinates">Choose place</button><button id="locate">Use my location</button>
+      <button id="rfLocate" type="button" title="Model-based receiver area from 3+ locally received ADS-B positions. Does not require rings or Internet. Not GPS." class="rf-locate-button">Locate by RF</button><button id="germany">Germany</button><button id="placeOpen" type="button" title="Choose country, state or province, city/district, or coordinates">Choose place</button><button id="locate">Use my location</button>
       <button id="searchHere" title="Fetch Internet aircraft around the current map view, without changing your receiver location">Search here</button>
       <button id="zoomIn" aria-label="Zoom in">+</button><button id="zoomOut" aria-label="Zoom out">−</button>
     </div>
@@ -155,8 +155,17 @@
      <label title="Accumulate only locally verified RF positions while this receiver stays physically fixed"><input id="rfRemember" type="checkbox" checked> Assume stationary receiver · accumulate 2 h of RF observations</label>
      <button id="rfClearHistory" type="button">Clear RF history</button>
     </div>
-    <span id="rfCoverageStatus" aria-live="polite">RF position data required. One SDR alone cannot determine a receiver's coordinates.</span>
-    <small>Only fresh antenna-positioned aircraft count. Rings show approximate radio-horizon limits, not measured ranges. Reverse MLAT requires synchronized external reference receivers.</small>
+    <span id="rfCoverageStatus" aria-live="polite">Three genuine RF-positioned aircraft needed to estimate a possible receiver area.</span>
+    <div class="rf-locate-result" aria-live="polite">
+     <strong>Locate by RF · modelled area, not GPS</strong>
+     <p id="rfLocationStatus">Press Locate by RF after three distinct, locally received aircraft have valid positions.</p>
+     <div id="rfLocationDetails" hidden>
+      <div><span>Representative model centre</span><code id="rfModelCoordinates">—</code></div>
+      <div><span>Model area maximum sampled extent</span><strong id="rfModelExtent">—</strong></div>
+      <div><span>Independent real RF aircraft</span><strong id="rfModelAircraft">—</strong></div>
+     </div>
+    </div>
+    <small>Ring visibility is optional and independent from Locate by RF. The centre is one possible location inside a conservative model region, not a measured receiver coordinate, GPS fix, distance or guaranteed accuracy. More aircraft may narrow model feasibility. The estimate can be wrong if radio propagation or the fixed receiver assumption is wrong.</small>
    </section>
    <section class="rf-lab-panel" aria-label="Offline RF Timing Laboratory">
     <div class="rf-lab-heading"><h2>RF Timing Laboratory</h2><span class="rf-lab-label">Local · offline-capable</span></div>
