@@ -1836,6 +1836,14 @@ canvas.addEventListener("pointerup",e=>{
 });
 canvas.addEventListener("pointercancel",()=>{state.pointer=null;});
 canvas.addEventListener("lostpointercapture",()=>{state.pointer=null;});
+canvas.addEventListener("pointermove",e=>{
+ if(state.pointer)return; // an active drag retains the grabbing cursor
+ const bounds=canvas.getBoundingClientRect();
+ const hit=pickPaintedAircraft(paintedAircraftHits,
+  e.clientX-bounds.left,e.clientY-bounds.top,2);
+ canvas.style.cursor=hit?"pointer":"grab";
+});
+canvas.addEventListener("pointerleave",()=>{if(!state.pointer)canvas.style.cursor="grab";});
 function adjustMapZoom(delta){
  const next=Math.max(2,Math.min(12,state.zoom+delta));
  if(next===state.zoom)return;
