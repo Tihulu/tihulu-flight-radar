@@ -100,7 +100,7 @@ function magnitude(bytes){
  }
  return mag;
 }
-export function extractFrames(raw){
+export function extractFrameCandidates(raw){
  const samples=raw instanceof Uint8Array?raw:new Uint8Array(raw);
  const mag=magnitude(samples), messages=[];
  // 8 us preamble = 16 magnitude samples at 2 Msps.
@@ -120,20 +120,23 @@ export function extractFrames(raw){
    if(one>zero)frame[b>>3]|=1<<(7-(b&7));
   }
   if(confident && (frame[0]>>3===17 || frame[0]>>3===18) && crcValid(frame)){
-   messages.push(frame);
+   messages.push({frame,sampleOffset:j});
    j+=240;
   }
  }
  return messages;
 }
+// Preserve the original external API used by existing browser regression tests.
+export function extractFrames(raw){return extractFrameCandidates(raw).map(v=>v.frame)}
 export class BrowserAircraftStore {
  constructor(){this.rows=new Map();this.messages=0;}
- ingest(frame,time=Date.now()){
+ ingest(frame,time=Date.now(),rfTiming=null){
   const m=decodeFrame(frame,time);
   if(!m)return false;
   let item=this.rows.get(m.hex);
   if(!item){item={hex:m.hex,firstSeen:time,updated:time};this.rows.set(m.hex,item)}
   item.updated=time;
+  if(rfTiming)item.rfTiming=rfTiming;
   this.messages++;
   if(m.flight)item.flight=m.flight;
   if(Number.isFinite(m.alt_baro))item.alt_baro=m.alt_baro;
@@ -158,6 +161,7 @@ export class BrowserAircraftStore {
   return [...this.rows.values()].map(a=>{
    const row={hex:a.hex,flight:a.flight||undefined,alt_baro:a.alt_baro,
      seen:Math.max(0,(now-a.updated)/1000)};
+   if(a.rfTiming)row.rf_timing={...a.rfTiming};
    if(Number.isFinite(a.positionTime) && now-a.positionTime<60000){
     row.lat=a.lat;row.lon=a.lon;
     row.seen_pos=Math.max(0,(now-a.positionTime)/1000);
@@ -166,16 +170,34 @@ export class BrowserAircraftStore {
   });
  }
 }
-let store,tail=new Uint8Array(0),bytes=0,lastPublish=0;
+let store,tail=new Uint8Array(0),bytes=0,lastPublish=0,totalSamples=0,lastFrameSample=-1;
 function onIQ(buffer){
  if(!store)store=new BrowserAircraftStore();
  const incoming=new Uint8Array(buffer);
  if(incoming.byteLength<2 || incoming.byteLength>2*1024*1024)return;
  const joined=new Uint8Array(tail.byteLength+incoming.byteLength);
  joined.set(tail,0);joined.set(incoming,tail.byteLength);
- const messages=extractFrames(joined);
+ const messages=extractFrameCandidates(joined);
  const now=Date.now();
- for(const msg of messages)store.ingest(msg,now);
+ // Real ADC sample offsets in sequential WebUSB chunks, nominal 2 Msps.
+ // USB completion and JS Date.now() are NOT an absolute RF arrival timestamp.
+ // An RTL2832U does not supply GPS-synchronized UTC timestamps here.
+ const firstSample=totalSamples-tail.byteLength/2;
+ for(const m of messages){
+  const absoluteIndex=firstSample+m.sampleOffset;
+  if(absoluteIndex<0 || absoluteIndex<=lastFrameSample)continue;
+  lastFrameSample=absoluteIndex; // prevent double-counting a frame also present in the overlap tail
+  store.ingest(m.frame,now,{
+   arrival_sample_index:absoluteIndex,
+   sample_period_us:1e6/SAMPLE_RATE,
+   decoder_observed_unix_ms:now,
+   transmit_timestamp_utc:null,
+   receiver_hardware_utc:null,
+   timing_clock:"unsynchronized RTL-SDR sample counter",
+   timestamp_accuracy:"sample-index quantization only; UTC accuracy unknown"
+  });
+ }
+ totalSamples+=incoming.byteLength/2;
  // Keep 256 IQ samples, enough to reconstruct a packet crossing chunks.
  tail=joined.slice(Math.max(0,joined.length-512));
  bytes+=incoming.byteLength;
@@ -197,6 +219,6 @@ if(typeof self!=="undefined" && typeof self.addEventListener==="function"){
     self.postMessage({type:"ack"});
    }
   }
-  if(msg.type==="reset"){store=new BrowserAircraftStore();tail=new Uint8Array(0);bytes=0;lastPublish=0;}
+  if(msg.type==="reset"){store=new BrowserAircraftStore();tail=new Uint8Array(0);bytes=0;lastPublish=0;totalSamples=0;lastFrameSample=-1;}
  });
 }
