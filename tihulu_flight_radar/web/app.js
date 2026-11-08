@@ -915,6 +915,7 @@ $("rfClearHistory").onclick=()=>{
 function renderCoverageStatus(){
  const result=coverageResult();
  renderRfPlaneLayers(result);
+ if(result!==rfLastProgressModel){
  const evidence=$("rfEvidence");
  if(result.status==="region"){
   const items=result.aircraftDistances||[];
@@ -929,8 +930,12 @@ function renderCoverageStatus(){
    name.textContent=(item.flight||item.hex)+" · "+item.hex.toUpperCase()+
     " · "+item.sampleCount+" real fix"+(item.sampleCount===1?"":"es");
    const numbers=document.createElement("span");
-   numbers.textContent=Math.round(item.centerDistanceKm)+" km center-to-aircraft / "+
-    Math.round(item.horizonKm)+" km assumed horizon";
+   const age=Number.isFinite(item.approximatePositionAgeSeconds)
+    ?item.approximatePositionAgeSeconds.toFixed(1)+" s position age":"unknown age";
+   const speed=Number.isFinite(item.speedKt)
+    ?" · "+item.speedKt.toFixed(0)+" kt RF speed":"";
+   numbers.textContent=Math.round(item.centerDistanceKm)+" km model center-to-plane / "+
+    Math.round(item.horizonKm)+" km horizon · "+age+speed;
    line.append(name,numbers);evidence.append(line);
   }
   const note=document.createElement("small");
@@ -944,7 +949,6 @@ function renderCoverageStatus(){
    (result.count||0)+" independent eligible radio aircraft; "+
    "4 required. The map does not infer its center from a single airplane.";
  }
- if(result!==rfLastProgressModel){
   rfLastProgressModel=result;
   if(result.status==="region"){
    const r=result.region;
