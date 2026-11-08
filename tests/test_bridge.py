@@ -256,3 +256,30 @@ def test_tar_status_is_bearer_protected_and_does_not_claim_an_sdr(monkeypatch):
         server.shutdown()
         server.server_close()
         thread.join(timeout=3)
+
+
+def test_bridge_antenna_reports_stopped_decoder_instead_of_missing_file():
+    bridge = Bridge(token="test")
+    bridge.receiver.configure("Linux services")
+    bridge.receiver.snapshot = lambda: (_ for _ in ()).throw(
+        DataError("Receiver data file not found."))
+    bridge.receiver.status = lambda: (False, "readsb: inactive · tar1090: inactive")
+    result = bridge.snapshot("antenna", 50.938, 6.96, 100)
+    local = result["sources"]["antenna"]
+    assert local["state"] == "decoder_stopped"
+    assert "readsb: inactive" in local["error"]
+    assert "Start the local receiver" in local["error"]
+    assert result["counts"]["antenna"] == 0
+
+
+def test_bridge_active_decoder_waits_for_first_json_without_inventing_aircraft():
+    bridge = Bridge(token="test")
+    bridge.receiver.configure("Linux services")
+    bridge.receiver.snapshot = lambda: (_ for _ in ()).throw(
+        DataError("Receiver data file not found."))
+    bridge.receiver.status = lambda: (True, "readsb: active · tar1090: active")
+    result = bridge.snapshot("antenna", 50.938, 6.96, 100)
+    local = result["sources"]["antenna"]
+    assert local["state"] == "decoder_waiting_for_json"
+    assert "JSON output directory" in local["error"]
+    assert result["aircraft"] == []
