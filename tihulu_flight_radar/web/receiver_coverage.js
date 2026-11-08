@@ -88,7 +88,10 @@ const TihuluRFCoverage = (() => {
    seen.add(old.hex);
   }
   records.sort((a,b)=>a.ageSeconds-b.ageSeconds);
-  if(records.length<4)return {status:"insufficient",count:records.length,circles:[],region:null};
+  // Three independent, verified RF-positioned aircraft are sufficient to
+  // *attempt* a coarse horizon-feasibility intersection; they do not provide
+  // three independently measured ranges or a true trilateration fix.
+  if(records.length<3)return {status:"insufficient",count:records.length,circles:[],region:null};
   // Bound workload: choose newest independent RF aircraft, max 6 rings.
   // Apply more genuinely independent RF constraints as aircraft count grows;
   // only draw six circles to avoid visual clutter. This is not true accuracy.
@@ -97,23 +100,48 @@ const TihuluRFCoverage = (() => {
   // Equirectangular bounds only choose a candidate search grid; actual cell
   // acceptance always checks geodesic distances to every ring.
   const minLat=Math.max(...constraints.map(c=>c.lat-c.radiusKm/110.5));
-  const maxLat=Math.min(...circles.map(c=>c.lat+c.radiusKm/110.5));
-  const minLon=Math.max(...circles.map(c=>c.lon-c.radiusKm/(111.2*Math.max(0.2,Math.cos(c.lat*RAD)))));
-  const maxLon=Math.min(...circles.map(c=>c.lon+c.radiusKm/(111.2*Math.max(0.2,Math.cos(c.lat*RAD)))));
+  const maxLat=Math.min(...constraints.map(c=>c.lat+c.radiusKm/110.5));
+  const minLon=Math.max(...constraints.map(c=>c.lon-c.radiusKm/(111.2*Math.max(0.2,Math.cos(c.lat*RAD)))));
+  const maxLon=Math.min(...constraints.map(c=>c.lon+c.radiusKm/(111.2*Math.max(0.2,Math.cos(c.lat*RAD)))));
   if(minLat>=maxLat||minLon>=maxLon)return {status:"no_overlap",count:records.length,constraintsUsed:constraints.length,circles,region:null};
-  const points=[];
-  for(let i=0;i<=40;i++)for(let j=0;j<=40;j++){
-   const p={lat:minLat+(maxLat-minLat)*i/40,lon:minLon+(maxLon-minLon)*j/40};
-   if(constraints.every(c=>distanceKm(p,c)<=c.radiusKm))points.push(p);
+  // Two-pass geographic sampling: broad grid followed by a tighter local
+  // scan of the accepted envelope. The samples are feasibility *tests*,
+  // not a statistical posterior, confidence region or location accuracy.
+  function sampleGrid(bounds,steps){
+   const accepted=[];
+   for(let i=0;i<=steps;i++)for(let j=0;j<=steps;j++){
+    const p={lat:bounds.minLat+(bounds.maxLat-bounds.minLat)*i/steps,
+     lon:bounds.minLon+(bounds.maxLon-bounds.minLon)*j/steps};
+    if(constraints.every(c=>distanceKm(p,c)<=c.radiusKm))accepted.push(p);
+   }
+   return accepted;
   }
-  if(!points.length)return {status:"unresolved",count:records.length,constraintsUsed:constraints.length,circles,region:null};
-  // Centre of *geometric possibility area*, not a receiver coordinate fix.
-  const center={lat:points.reduce((s,p)=>s+p.lat,0)/points.length,
-   lon:points.reduce((s,p)=>s+p.lon,0)/points.length};
+  const initial={minLat,maxLat,minLon,maxLon};
+  let points=sampleGrid(initial,48);
+  if(!points.length)return {status:"unresolved",count:records.length,
+   constraintsUsed:constraints.length,circles,region:null};
+  const latStep=(maxLat-minLat)/48,lonStep=(maxLon-minLon)/48;
+  const fine={
+   minLat:Math.max(minLat,Math.min(...points.map(p=>p.lat))-latStep),
+   maxLat:Math.min(maxLat,Math.max(...points.map(p=>p.lat))+latStep),
+   minLon:Math.max(minLon,Math.min(...points.map(p=>p.lon))-lonStep),
+   maxLon:Math.min(maxLon,Math.max(...points.map(p=>p.lon))+lonStep)
+  };
+  const finePoints=sampleGrid(fine,48);
+  if(finePoints.length)points=finePoints;
+  // A raw centroid may fall outside a disconnected feasible area. Use the
+  // closest accepted *feasible* sample instead, and label it as MODEL CENTRE.
+  const centroid={lat:points.reduce((n,p)=>n+p.lat,0)/points.length,
+   lon:points.reduce((n,p)=>n+p.lon,0)/points.length};
+  const center=points.reduce((best,p)=>
+   distanceKm(p,centroid)<distanceKm(best,centroid)?p:best,points[0]);
   const extentKm=Math.max(...points.map(p=>distanceKm(center,p)));
   return {status:"region",count:records.length,constraintsUsed:constraints.length,circles,
    region:{...center,extentKm:Math.ceil(extentKm/10)*10,
-    sampleCount:points.length,possibleSamples:points}};
+    sampleCount:points.length,possibleSamples:points,
+    model:"conservative_radio_horizon_intersection",
+    receiver_position_measured:false,accuracy_km:null}};
+
  }
  return {point,distanceKm,horizonKm,horizonPoints,eligible,recordedCircle,compute};
 })();
