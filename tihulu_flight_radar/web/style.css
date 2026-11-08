@@ -268,3 +268,33 @@ html.native .desktop-installed-label{display:inline-flex;align-items:center;
  padding:7px 10px;font-size:12px;white-space:nowrap}
 html.native #connectionLabel{max-width:340px;overflow-wrap:anywhere}
 html.native #receiverStatus[data-pair-state="failed"]{color:#ffbc99}
+
+/* Session-based radio feasibility display: controls never imply GPS accuracy. */
+.rf-follow-label,.rf-view-controls label{
+ display:inline-flex;align-items:center;gap:5px;white-space:normal;
+ font-size:11px;color:#c8edf7;cursor:pointer}
+.rf-follow-label{border:1px solid #326b83;background:#10364a;
+ border-radius:7px;padding:7px}
+.rf-follow-label input,.rf-view-controls input,.rf-aircraft-layer input{
+ accent-color:#59d3e4;cursor:pointer}
+.rf-view-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+ gap:7px;margin:7px 0;padding:8px;border:1px solid #31576b;
+ border-radius:8px;background:#102b3a}
+.rf-progress{display:block;padding:7px 8px;border-left:2px solid #6de3ee;
+ font-size:11px;line-height:1.5;color:#b8e3ee;background:#0c2230}
+.rf-plane-layers{margin:7px 0;padding:8px;border:1px solid #31576b;
+ border-radius:8px;background:#0e2434}
+.rf-plane-layers summary{cursor:pointer;color:#b9e9f4;font-size:12px;
+ font-weight:600}
+.rf-aircraft-actions{display:flex;gap:7px;margin:8px 0}
+.rf-aircraft-actions button{flex:1 1 0;padding:6px;font-size:11px}
+.rf-aircraft-layers{max-height:175px;overflow-y:auto;display:flex;
+ flex-direction:column;gap:4px;color:#b4d6e4;font-size:11px}
+.rf-aircraft-layer{display:flex;align-items:center;gap:7px;padding:5px 6px;
+ border:1px solid #305064;border-radius:5px;background:#142f40;
+ font-size:11px;color:#e4f3f8;cursor:pointer;min-width:0}
+.rf-aircraft-layer>span:last-child{overflow-wrap:anywhere}
+.rf-aircraft-swatch{display:inline-block;width:10px;height:10px;flex:0 0 10px;
+ border-radius:2px;border:1px solid rgba(255,255,255,.5)}
+@media(max-width:620px){.rf-view-controls{grid-template-columns:1fr 1fr}
+ .rf-aircraft-layers{max-height:135px}}
