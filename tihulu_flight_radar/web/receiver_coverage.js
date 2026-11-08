@@ -222,6 +222,9 @@ const TihuluRFCoverage = (() => {
    geometryStatus,aircraftDistances,
    required:MIN_INDEPENDENT,constraintsUsed:constraints.length,circles,aircraftCircles,
    region:{...center,extentKm:Math.max(10,Math.ceil(extentKm/10)*10),
+     // Keep unrounded model spread for best-so-far comparisons. It is
+     // NOT observed physical geolocation accuracy or calibrated uncertainty.
+     rawExtentKm:extentKm,
     sampleCount:points.length,possibleSamples:points,
     kind:"possible-area-centroid",accuracyMeters:null,confidence:null}};
  }
