@@ -619,6 +619,13 @@ window.tihuluNativeConnect=async function(base, token){
  document.documentElement.classList.add("native");
  const pairingPanel=document.querySelector(".bridge-advanced");
  if(pairingPanel)pairingPanel.open=true;
+ const indicator=document.querySelector(".desktop-installed-label")||
+   document.createElement("span");
+ indicator.className="desktop-installed-label";
+ indicator.textContent="Desktop app · installed";
+ const header=document.querySelector(".masthead .connection");
+ if(header&&!indicator.isConnected)header.prepend(indicator);
+ $("connectionLabel").textContent="Pairing desktop receiver…";
  // Desktop explicitly opts into both observed RF and public online layers.
  $("mode").value="hybrid";
  $("bridgeUrl").value=base;
@@ -743,8 +750,12 @@ async function connect(){
    notice("Internet source unavailable: "+e.message+". Retrying automatically; no aircraft will be shown without fresh observations.");
   }else{
    state.connected=false;state.token="";state.connectionKind="none";
-   connection(false,"Not connected");
-   notice("Connection failed: "+e.message+". Check bridge pairing or feed CORS/availability.");
+   connection(false,window.tihuluNativeDesktop
+     ?"Desktop receiver pairing failed":"Not connected");
+   $("receiverStatus").dataset.pairState="failed";
+   $("receiverStatus").textContent="Receiver pairing failed: "+String(e.message||e)+
+     ". Internet-only aircraft may still appear, but native SDR controls are unavailable.";
+   notice("Connection failed: "+e.message+". Check native bridge/receiver permissions.");
   }
  }
 }
