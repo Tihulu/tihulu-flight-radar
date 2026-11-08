@@ -170,7 +170,7 @@ export class BrowserAircraftStore {
   });
  }
 }
-let store,tail=new Uint8Array(0),bytes=0,lastPublish=0,totalSamples=0;
+let store,tail=new Uint8Array(0),bytes=0,lastPublish=0,totalSamples=0,lastFrameSample=-1;
 function onIQ(buffer){
  if(!store)store=new BrowserAircraftStore();
  const incoming=new Uint8Array(buffer);
@@ -185,7 +185,8 @@ function onIQ(buffer){
  const firstSample=totalSamples-tail.byteLength/2;
  for(const m of messages){
   const absoluteIndex=firstSample+m.sampleOffset;
-  if(absoluteIndex<0)continue;
+  if(absoluteIndex<0 || absoluteIndex<=lastFrameSample)continue;
+  lastFrameSample=absoluteIndex; // prevent double-counting a frame also present in the overlap tail
   store.ingest(m.frame,now,{
    arrival_sample_index:absoluteIndex,
    sample_period_us:1e6/SAMPLE_RATE,
@@ -218,6 +219,6 @@ if(typeof self!=="undefined" && typeof self.addEventListener==="function"){
     self.postMessage({type:"ack"});
    }
   }
-  if(msg.type==="reset"){store=new BrowserAircraftStore();tail=new Uint8Array(0);bytes=0;lastPublish=0;totalSamples=0;}
+  if(msg.type==="reset"){store=new BrowserAircraftStore();tail=new Uint8Array(0);bytes=0;lastPublish=0;totalSamples=0;lastFrameSample=-1;}
  });
 }
