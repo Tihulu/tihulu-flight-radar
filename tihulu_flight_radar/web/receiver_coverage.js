@@ -63,25 +63,28 @@ const TihuluRFCoverage = (() => {
   records.sort((a,b)=>a.ageSeconds-b.ageSeconds);
   if(records.length<4)return {status:"insufficient",count:records.length,circles:[],region:null};
   // Bound workload: choose newest independent RF aircraft, max 6 rings.
-  const circles=records.slice(0,6);
+  // Apply more genuinely independent RF constraints as aircraft count grows;
+  // only draw six circles to avoid visual clutter. This is not true accuracy.
+  const constraints=records.slice(0,64);
+  const circles=constraints.slice(0,6);
   // Equirectangular bounds only choose a candidate search grid; actual cell
   // acceptance always checks geodesic distances to every ring.
-  const minLat=Math.max(...circles.map(c=>c.lat-c.radiusKm/110.5));
+  const minLat=Math.max(...constraints.map(c=>c.lat-c.radiusKm/110.5));
   const maxLat=Math.min(...circles.map(c=>c.lat+c.radiusKm/110.5));
   const minLon=Math.max(...circles.map(c=>c.lon-c.radiusKm/(111.2*Math.max(0.2,Math.cos(c.lat*RAD)))));
   const maxLon=Math.min(...circles.map(c=>c.lon+c.radiusKm/(111.2*Math.max(0.2,Math.cos(c.lat*RAD)))));
-  if(minLat>=maxLat||minLon>=maxLon)return {status:"no_overlap",count:records.length,circles,region:null};
+  if(minLat>=maxLat||minLon>=maxLon)return {status:"no_overlap",count:records.length,constraintsUsed:constraints.length,circles,region:null};
   const points=[];
   for(let i=0;i<=40;i++)for(let j=0;j<=40;j++){
    const p={lat:minLat+(maxLat-minLat)*i/40,lon:minLon+(maxLon-minLon)*j/40};
-   if(circles.every(c=>distanceKm(p,c)<=c.radiusKm))points.push(p);
+   if(constraints.every(c=>distanceKm(p,c)<=c.radiusKm))points.push(p);
   }
-  if(!points.length)return {status:"unresolved",count:records.length,circles,region:null};
+  if(!points.length)return {status:"unresolved",count:records.length,constraintsUsed:constraints.length,circles,region:null};
   // Centre of *geometric possibility area*, not a receiver coordinate fix.
   const center={lat:points.reduce((s,p)=>s+p.lat,0)/points.length,
    lon:points.reduce((s,p)=>s+p.lon,0)/points.length};
   const extentKm=Math.max(...points.map(p=>distanceKm(center,p)));
-  return {status:"region",count:records.length,circles,
+  return {status:"region",count:records.length,constraintsUsed:constraints.length,circles,
    region:{...center,extentKm:Math.ceil(extentKm/10)*10,
     sampleCount:points.length,possibleSamples:points}};
  }
