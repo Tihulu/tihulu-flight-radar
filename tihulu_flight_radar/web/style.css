@@ -298,3 +298,15 @@ html.native #receiverStatus[data-pair-state="failed"]{color:#ffbc99}
  border-radius:2px;border:1px solid rgba(255,255,255,.5)}
 @media(max-width:620px){.rf-view-controls{grid-template-columns:1fr 1fr}
  .rf-aircraft-layers{max-height:135px}}
+
+/* Transparent evidence for independent RF constraints. Not a GPS fix. */
+.rf-evidence{margin-top:6px;border:1px solid #35687c;background:#0c2637;
+ border-radius:8px;padding:9px;font-size:11px;line-height:1.45;color:#c8e7ee}
+.rf-evidence>strong{display:block;color:#8ce6f0;margin-bottom:6px;
+ font-size:11px}
+.rf-evidence-line{display:flex;justify-content:space-between;align-items:center;
+ flex-wrap:wrap;gap:4px 10px;border-top:1px solid #325366;padding:6px 0;
+ font-variant-numeric:tabular-nums}
+.rf-evidence-line>span:first-child{color:#e3f3f7;font-weight:600}
+.rf-evidence-line>span:last-child{color:#9fcedc}
+.rf-evidence>small{display:block;margin-top:7px;color:#b2cbd5;line-height:1.5}
