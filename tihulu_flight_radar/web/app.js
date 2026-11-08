@@ -974,20 +974,25 @@ $("rfLocate").onclick=()=>{
  if(rfLocatorActive)notice("RF possible-area overlay enabled: positioned antenna aircraft only. Use Focus RF area to center the map; not GPS.");
 };
 $("rfFocus").onclick=()=>{
- rfLocatorActive=true;rfLocatorFocused=false;paint();
+ rfLocatorActive=true;rfLocatorFocused=false;rfLastFollowModel=null;paint();
  notice("Map centered on a modeled RF feasible area, NOT your measured position.");
 };
 function focusRfModelWhenReady(result){
- if(!rfLocatorActive||rfLocatorFocused||result.status!=="region")return;
+ if(!rfLocatorActive||result.status!=="region")return;
+ if(rfLocatorFocused && (!rfFollowCenter||rfLastFollowModel===result))return;
  const r=result.region,km=r.extentKm;
+ const initialFocus=!rfLocatorFocused;
+ // Don't force zoom on every new RF observation: the center can move,
+ // but manual zoom remains in the user's control while following.
  state.lat=r.lat;state.lon=r.lon;
- state.zoom=km>850?4:km>420?5:km>200?6:km>95?7:km>45?8:km>22?9:10;
+ if(initialFocus)state.zoom=km>850?4:km>420?5:km>200?6:km>95?7:km>45?8:km>22?9:10;
  state.moved=true;state.autoFocused=false;
- state.centerLabel="RF possible-area model center · NOT measured GPS · approx. "+Math.round(km)+" km model extent";
- rfLocatorFocused=true;
+ state.centerLabel="Following RF possible-area center · NOT GPS · sampled spread ~"+
+  Math.round(km)+" km";
+ rfLocatorFocused=true;rfLastFollowModel=result;
 }
 function paintRfLocator(result){
- if(!rfLocatorActive||result.status!=="region")return;
+ if(!rfLocatorActive||result.status!=="region"||!$("rfModelPin").checked)return;
  const [x,y]=xy(result.region.lat,result.region.lon);
  if(x<0||x>canvas.clientWidth||y<0||y>canvas.clientHeight)return;
  ctx.save();
@@ -1469,7 +1474,7 @@ canvas.addEventListener("pointerdown",e=>{
 canvas.addEventListener("pointermove",e=>{
  if(!state.pointer)return;
  const p=state.pointer,state_zoom=2**state.zoom*256;
- state.moved=true;state.lon=p[2]-(e.clientX-p[0])/state_zoom*360;
+ disableRfFollow();state.moved=true;state.lon=p[2]-(e.clientX-p[0])/state_zoom*360;
  const target=mercY(p[3])*state_zoom-(e.clientY-p[1]);
  state.lat=Math.max(-85,Math.min(85,Math.atan(Math.sinh(Math.PI*(1-2*target/state_zoom)))*180/Math.PI));
  state.centerLabel="Manual map position";paint();
@@ -1491,7 +1496,7 @@ canvas.addEventListener("pointerup",e=>{
  if(best)choose(best);else closePopup();
 });
 canvas.addEventListener("wheel",e=>{
- e.preventDefault();state.moved=true;state.zoom=Math.max(2,Math.min(12,state.zoom+(e.deltaY<0?1:-1)));paint();
+ e.preventDefault();disableRfFollow();state.moved=true;state.zoom=Math.max(2,Math.min(12,state.zoom+(e.deltaY<0?1:-1)));paint();
 },{passive:false});
 // Provider selection is explicit and never creates a hidden proxy/key.
 const preset=$("onlinePreset");
@@ -1739,8 +1744,9 @@ $("start").onclick=()=>control("start");
 $("stop").onclick=()=>control("stop");
 $("restart").onclick=()=>control("restart");
 $("mode").onchange=()=>{state.autoFocused=false;refresh()};
-$("focus").onclick=()=>{focusAir(true);state.moved=true;};
+$("focus").onclick=()=>{disableRfFollow();focusAir(true);state.moved=true;};
 function chooseRegion(point,label,zoom=8){
+ disableRfFollow();
  state.lat=point.lat;state.lon=point.lon;
  state.queryLat=point.lat;state.queryLon=point.lon;
  state.zoom=zoom;state.moved=true;state.autoFocused=false;
@@ -1802,6 +1808,7 @@ import("./flight_location_ui.mjs").then(mod=>{
  }
 });
 $("searchHere").onclick=()=>{
+ disableRfFollow();
  state.queryLat=state.lat;state.queryLon=state.lon;
  state.moved=true;
  state.centerLabel="Internet search moved to map view · receiver location unchanged";
@@ -1811,6 +1818,7 @@ $("searchHere").onclick=()=>{
 $("locate").onclick=()=>{
  if(!navigator.geolocation){notice("Browser geolocation not available.");return}
  navigator.geolocation.getCurrentPosition(p=>{
+  disableRfFollow();
   state.lat=p.coords.latitude;state.lon=p.coords.longitude;
   state.queryLat=state.lat;state.queryLon=state.lon;
   state.zoom=10;state.moved=true;state.centerLabel="Explicit permitted GPS search region";
@@ -1819,8 +1827,8 @@ $("locate").onclick=()=>{
   if(state.connected)refresh();
  },e=>notice("Browser location unavailable: "+e.message),{timeout:7000});
 };
-$("zoomIn").onclick=()=>{state.zoom=Math.min(12,state.zoom+1);state.moved=true;paint()};
-$("zoomOut").onclick=()=>{state.zoom=Math.max(2,state.zoom-1);state.moved=true;paint()};
+$("zoomIn").onclick=()=>{disableRfFollow();state.zoom=Math.min(12,state.zoom+1);state.moved=true;paint()};
+$("zoomOut").onclick=()=>{disableRfFollow();state.zoom=Math.max(2,state.zoom-1);state.moved=true;paint()};
 for(const id of selectors)$(id).onchange=()=>{
  if(id==="showTiles" && $("showTiles").checked)state.tileFailures=0;
  renderTable();paint();
