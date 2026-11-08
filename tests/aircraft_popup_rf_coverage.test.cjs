@@ -66,6 +66,12 @@ test("Session RF history contributes independent old aircraft only at a fixed re
  assert.equal(eligible.liveCount,2);
  assert.equal(eligible.historyCount,2);
  assert.equal(eligible.status,"region");
+ const trajectory={...record1,lat:record1.lat+0.2,lon:record1.lon+0.2,
+  capturedAtMs:Date.now()-60000};
+ const withTrack=coverage.compute(current,[record1,record2,trajectory]);
+ assert.equal(withTrack.count,4); // NOT 5 airplanes
+ assert.equal(withTrack.constraintsUsed,5); // five real received positions
+ assert.equal(coverage.compute(current,[record1,trajectory]).status,"insufficient");
  assert.equal(coverage.compute(current,[record1,{...record2,capturedAtMs:Date.now()-3*3600000}]).status,"insufficient");
  assert.equal(coverage.compute(current,[record1,record1]).status,"insufficient");
 });
@@ -80,6 +86,7 @@ test("Unit selectors, close-on-outside click, raw JSON and timing claims in comm
  assert.match(js,/popupClose/);
  assert.match(js,/closePopup\(\)/);
  assert.match(js,/observations\?\.antenna/);
+ assert.match(js,/Local RF signal strength indicator/);
  assert.match(js,/Transmit–receive delay: not computable/);
  assert.match(css,/\.aircraft-popup\[hidden\]/);
 });
