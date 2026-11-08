@@ -71,9 +71,10 @@ const state = {
   usbSnapshot:{aircraft:[],messages:0,updatedAt:0},internetSnapshot:null,
   usbMessageCount:0,
   pointer:null, tracks:new Map(), tiles:new Map(), tileFailures:0, fetching:false, timer:null,
-  centerLabel:"Cologne startup fallback · awaiting location permission / radio aircraft"
+  centerLabel:"Cologne startup fallback · awaiting location permission / radio aircraft",
+  units:"aviation"
 };
-const selectors = ["showAntenna","showInternet","showBoth","showTracks","showTiles"];
+const selectors = ["showAntenna","showInternet","showBoth","showTracks","showTiles","showRfCoverage"];
 const multiInternet = TihuluMultiSources.createManager();
 const multiIds = ["adsblol","adsbfi","opensky","intelsky"];
 const layerFields = {adsblol:"netAdsbLol",adsbfi:"netAdsbFi",opensky:"netOpenSky",intelsky:"netIntelSky"};
@@ -595,6 +596,127 @@ function updateCounters(counts){
 function formatTime(value){
  return Number.isFinite(value)?new Date(value*1000).toLocaleTimeString():"—";
 }
+// The source schema normalizes altitudes to feet and ground speed to knots.
+const flightValue=v=>typeof v==="number"&&Number.isFinite(v)?v:null;
+function showAltitude(a,unit=true){
+ const raw=aircraftAltitude(a);
+ return raw===null?"—":new Intl.NumberFormat("en",{maximumFractionDigits:0})
+  .format(state.units==="metric"?raw*0.3048:raw)+(unit?(state.units==="metric"?" m":" ft"):"");
+}
+function showSpeed(a,unit=true){
+ const kts=flightValue(a?.gs);
+ return kts===null?"—":new Intl.NumberFormat("en",{maximumFractionDigits:1})
+  .format(state.units==="metric"?kts*1.852:kts)+(unit?(state.units==="metric"?" km/h":" kt"):"");
+}
+function showVerticalRate(a){
+ const raw=flightValue(a?.baro_rate)??flightValue(a?.geom_rate);
+ return raw===null?"—":new Intl.NumberFormat("en",{maximumFractionDigits:0})
+  .format(state.units==="metric"?raw*0.3048:raw)+(state.units==="metric"?" m/min":" ft/min");
+}
+function renderCoverageStatus(){
+ const result=TihuluRFCoverage.compute(state.data);
+ const label=$("rfCoverageStatus");
+ const info={
+  insufficient:result.count+" independent fresh RF-positioned aircraft. Need at least 4 for coverage comparison.",
+  no_overlap:"Radio-horizon model has no common overlap. Check altitude/age/source validity.",
+  unresolved:"Possible region too thin or fragmented for current grid. No coordinate fix.",
+  region:"Potential coverage area only · "+result.count+" eligible RF aircraft · coarse extent ~"+
+    Math.round(result.region.extentKm)+" km. Not a calculated receiver position."
+ };
+ label.textContent=info[result.status]||"Insufficient evidence";
+ return result;
+}
+function renderPopup(a){
+ const popup=$("aircraftPopup");
+ if(!a){popup.hidden=true;return}
+ $("popupFlight").textContent=String(a.flight||a.hex||"Aircraft").trim();
+ $("popupIcao").textContent="ICAO24 "+String(a.hex||"—").toUpperCase()+
+   (a.r?" · "+String(a.r):"");
+ $("popupSources").textContent=aircraftSourceBadge(a)+" · "+category(a)+
+   (a.internet_providers?.length?" · "+a.internet_providers.map(id=>
+   TihuluMultiSources.META[id]?.name||id).join(", "):"")+
+   " · displayed position: "+(a.position_source||"unknown");
+ $("popupAltitude").textContent=showAltitude(a);
+ $("popupSpeed").textContent=showSpeed(a);
+ const hdg=flightValue(a.track)??flightValue(a.true_heading);
+ $("popupHeading").textContent=hdg===null?"—":hdg.toFixed(0)+"°";
+ $("popupVerticalRate").textContent=showVerticalRate(a);
+ $("popupType").textContent=String(a.t||a.type||a.flight_source_fields?.aircraft_icao||"—");
+ $("popupSquawk").textContent=String(a.squawk||"—");
+ $("popupPosition").textContent=isPositioned(a)
+  ?a.lat.toFixed(5)+"°, "+a.lon.toFixed(5)+"°":"No fresh position";
+ $("popupSeen").textContent=Number.isFinite(a.seen)
+  ?"Last received "+a.seen.toFixed(1)+" s ago":"No observation age";
+ const rf=a.observations?.antenna;
+ const timing=rf?.rf_timing;
+ const lines=[
+  "Aircraft transmit UTC: unavailable — ordinary ADS-B contains no precise departure timestamp.",
+  "Receiver arrival UTC: not calibrated; USB buffering and transfer latency unknown."
+ ];
+ if(timing && Number.isSafeInteger(timing.arrival_sample_index)){
+  lines.push("RF preamble sample index: "+timing.arrival_sample_index.toLocaleString("en")+
+    " · nominal sample interval "+timing.sample_period_us+" µs.");
+  if(Number.isFinite(timing.decoder_observed_unix_ms))
+   lines.push("Decoder processed UTC: "+new Date(timing.decoder_observed_unix_ms).toISOString()+
+    " (software processing timestamp, NOT measured RF arrival).");
+ }else{
+  lines.push("Per-message sample-index timing unavailable from this receiver/backend.");
+ }
+ lines.push("Transmit–receive delay: not computable. Single unsynchronized RTL-SDR cannot solve location by flight timestamps.");
+ $("popupTiming").textContent=lines.join("\n");
+ popup.hidden=false;
+ positionPopup(a);
+}
+function positionPopup(a){
+ const popup=$("aircraftPopup");
+ if(popup.hidden)return;
+ const panel=popup.parentElement, cw=panel.clientWidth, ch=panel.clientHeight;
+ let x=cw-340,y=canvas.offsetTop+12;
+ if(isPositioned(a)){
+  const [px,py]=xy(a.lat,a.lon);
+  if(px>=0&&px<=canvas.clientWidth&&py>=0&&py<=canvas.clientHeight){
+   x=canvas.offsetLeft+px+22;y=canvas.offsetTop+py-30;
+  }
+ }
+ const width=Math.min(328,cw-16),height=Math.min(popup.scrollHeight,Math.min(ch*.74,510));
+ popup.style.left=Math.max(8,Math.min(x,cw-width-8))+"px";
+ popup.style.top=Math.max(8,Math.min(y,ch-height-8))+"px";
+}
+function closePopup(){
+ if($("aircraftPopup").hidden)return;
+ $("aircraftPopup").hidden=true;state.selected=null;renderTable();paint();
+}
+$("unitSystem").onchange=e=>{
+ state.units=e.target.value==="metric"?"metric":"aviation";
+ $("altitudeColumn").textContent="Altitude ("+(state.units==="metric"?"m":"ft")+")";
+ $("speedColumn").textContent="Speed ("+(state.units==="metric"?"km/h":"kt")+")";
+ renderTable();
+ const found=state.data.find(a=>a.hex===state.selected);
+ if(found)renderPopup(found);
+};
+$("popupClose").onclick=closePopup;
+$("popupCenter").onclick=()=>{
+ const found=state.data.find(a=>a.hex===state.selected);
+ if(found&&isPositioned(found)){
+  state.lat=found.lat;state.lon=found.lon;state.moved=true;
+  state.centerLabel="Focused on selected "+(found.flight||found.hex);
+  paint();positionPopup(found);
+ }
+};
+$("popupCopy").onclick=()=>{
+ if(state.selected && navigator.clipboard?.writeText)
+  navigator.clipboard.writeText(state.selected.toUpperCase()).catch(()=>notice("Clipboard unavailable"));
+};
+$("popupRaw").onclick=()=>{
+ $("rawAircraftPanel").open=true;
+ $("rawAircraftPanel").scrollIntoView({behavior:"smooth",block:"nearest"});
+};
+document.addEventListener("pointerdown",e=>{
+ if(!$("aircraftPopup").hidden && !$("aircraftPopup").contains(e.target) &&
+    !canvas.contains(e.target) && !$("aircraftRows").contains(e.target))closePopup();
+});
+window.addEventListener("keydown",e=>{if(e.key==="Escape")closePopup()});
+
 function renderTable(){
  const rows=$("aircraftRows"); rows.replaceChildren();
  const displayed=state.data.filter(visible);
@@ -604,7 +726,7 @@ function renderTable(){
   if(state.selected && a.hex===state.selected)tr.className="selected";
   for(const [index,value] of [
    (a.flight||"—").trim()+" / "+(a.hex||"—"),
-   a.alt_baro??a.alt_geom??"—",a.gs??"—",
+   showAltitude(a,false),showSpeed(a,false),
    aircraftSourceBadge(a)+" · "+category(a)+
      (a.internet_providers?.length?" · "+a.internet_providers.map(id=>
        TihuluMultiSources.META[id]?.name||id).join(", "):"")
@@ -615,26 +737,27 @@ function renderTable(){
    if(index===1)td.style.color=altitudeColor(a);
    tr.append(td);
   }
-  tr.onclick=()=>choose(a);
+  tr.onclick=()=>choose(a,{center:true});
   rows.append(tr);
  }
  if(state.selected){
   const found=state.data.find(a=>a.hex===state.selected);
-  if(!found)$("details").textContent="Selected aircraft no longer in the latest snapshot.";
+  if(!found){$("details").textContent="Selected aircraft no longer in the latest snapshot.";renderPopup(null);state.selected=null;}
+  else if(!$("aircraftPopup").hidden)renderPopup(found);
  }
 }
-function choose(a){
+function choose(a,{center=false}={}){
  state.selected=a.hex||null;
  $("details").textContent=JSON.stringify({
   callsign:a.flight||null,icao24:a.hex||null,sources:a.sources,
   internet_providers:a.internet_providers||[],
   displayed_position_source:a.position_source,observations:a.observations
  },null,2);
- if(isPositioned(a)){
+ if(center&&isPositioned(a)){
   state.lat=a.lat;state.lon=a.lon;state.zoom=Math.max(state.zoom,9);
   state.moved=true;state.centerLabel="Selected "+(a.flight||a.hex||"aircraft");
  }
- renderTable();paint();
+ renderTable();paint();renderPopup(a);
 }
 function feedSummary(feed){
  const l=feed?.antenna||{},i=feed?.internet||{};
@@ -853,11 +976,37 @@ function tiles(){
    ctx.drawImage(t.img,(tx-x0)*256,(ty-y0)*256,256,256);
  }
 }
+function paintRfCoverage(){
+ const result=TihuluRFCoverage.compute(state.data);
+ if(result.circles.length<4)return;
+ ctx.save();ctx.lineWidth=1.5;ctx.strokeStyle="rgba(250,199,91,.55)";
+ ctx.setLineDash([7,5]);
+ for(const ring of result.circles){
+  const path=TihuluRFCoverage.horizonPoints(ring,96);
+  ctx.beginPath();
+  path.forEach((p,i)=>{const [x,y]=xy(p.lat,p.lon);if(i)ctx.lineTo(x,y);else ctx.moveTo(x,y)});
+  ctx.stroke();
+ }
+ ctx.setLineDash([]);
+ if(result.region){
+  // Possible receiver *area*, not a receiver marker or an inferred GPS fix.
+  const r=result.region;
+  const points=TihuluRFCoverage.horizonPoints({...r,radiusKm:r.extentKm},96);
+  ctx.fillStyle="rgba(255,214,109,.12)";ctx.strokeStyle="rgba(255,214,109,.8)";
+  ctx.beginPath();
+  points.forEach((p,i)=>{const [x,y]=xy(p.lat,p.lon);if(i)ctx.lineTo(x,y);else ctx.moveTo(x,y)});
+  ctx.closePath();ctx.fill();ctx.stroke();
+  const [x,y]=xy(r.lat,r.lon);ctx.font="bold 11px system-ui";
+  ctx.fillStyle="#ffe3a8";ctx.fillText("POSSIBLE AREA · NOT A GPS FIX",x+10,y);
+ }
+ ctx.restore();
+}
 function paint(){
  const w=canvas.clientWidth,h=canvas.clientHeight;
  if(!w||!h)return;
  ctx.clearRect(0,0,w,h);ctx.fillStyle="#102231";ctx.fillRect(0,0,w,h);
  tiles();grid();
+ if($("showRfCoverage").checked)paintRfCoverage();
  if($("showTracks").checked){
   for(const [key,points] of state.tracks.entries()){
    if(points.length<2)continue;
@@ -887,6 +1036,7 @@ function paint(){
   ctx.fillText("No fresh aircraft positions in selected layers",22,36);
  }
  $("mapLabel").textContent=state.centerLabel;
+ renderCoverageStatus();
 }
 canvas.addEventListener("pointerdown",e=>{
  state.pointer=[e.clientX,e.clientY,state.lon,state.lat];
@@ -911,7 +1061,7 @@ canvas.addEventListener("pointerup",e=>{
   const d=Math.hypot(x-(e.clientX-canvas.getBoundingClientRect().left),y-(e.clientY-canvas.getBoundingClientRect().top));
   if(d<bestD){bestD=d;best=a}
  }
- if(best)choose(best);
+ if(best)choose(best);else closePopup();
 });
 canvas.addEventListener("wheel",e=>{
  e.preventDefault();state.moved=true;state.zoom=Math.max(2,Math.min(12,state.zoom+(e.deltaY<0?1:-1)));paint();
@@ -1189,7 +1339,7 @@ function applyPlaceToFlightRadar(place,persistBridge=true){
   }).catch(err=>notice("Map selected, but local preference could not be saved: "+err.message));
  }
  state.tracks.clear(); // avoid carrying visible trails from an old area
- state.selected=null;
+ state.selected=null;$("aircraftPopup").hidden=true;
  chooseRegion({lat:place.lat,lon:place.lon},
    place.label+" · "+radius+" NM search",Number(place.zoom)||9);
  // The full original tar1090 iframe uses camera URL parameters at startup.
