@@ -96,21 +96,12 @@ function isPositioned(a){
 }
 // Pure startup choice; only the radio-sourced position qualifies as RF.
 // A merged aircraft whose position came from the Internet is not radio GPS.
-function chooseStartupTarget(geo, aircraft){
- const valid=p=>p && Number.isFinite(p.lat) && Number.isFinite(p.lon) &&
-   Math.abs(p.lat)<=90 && Math.abs(p.lon)<=180;
+// Map startup is NEVER a one-plane RF receiver site estimate.
+// Only the independent four-aircraft horizon solver may focus the RF model.
+function chooseStartupTarget(geo,aircraft){
+ const valid=p=>p&&Number.isFinite(p.lat)&&Number.isFinite(p.lon)&&
+  Math.abs(p.lat)<=90&&Math.abs(p.lon)<=180;
  if(valid(geo))return {lat:geo.lat,lon:geo.lon,zoom:10,rank:3,source:"location"};
- const available=(Array.isArray(aircraft)?aircraft:[]).filter(a=>
-  valid(a) && a.position_source==="antenna" &&
-  a.sources?.includes("antenna") && Number.isFinite(a.seen) && a.seen<=60 &&
-  Number.isFinite(a.seen_pos) && a.seen_pos<=60);
- const square=a=>{
-  const dx=(a.lon-COLOGNE.lon)*Math.cos(COLOGNE.lat*Math.PI/180);
-  const dy=a.lat-COLOGNE.lat;return dx*dx+dy*dy;
- };
- available.sort((a,b)=>square(a)-square(b));
- if(available.length)return {lat:available[0].lat,lon:available[0].lon,
-   zoom:10,rank:2,source:"antenna",flight:available[0].flight||available[0].hex};
  return {lat:COLOGNE.lat,lon:COLOGNE.lon,zoom:9,rank:1,source:"cologne"};
 }
 function applyStartupPriority(){
@@ -124,7 +115,7 @@ function applyStartupPriority(){
  state.autoFocused=true;
  state.centerLabel=selected.source==="location"
    ? "Your permitted current location · startup"
-   : "Nearest actual radio aircraft "+(selected.flight||"")+" · startup";
+   : "Cologne default map (not an inferred receiver position)";
  state.startupQueryDirty=state.connected;
  paint();
 }
@@ -809,7 +800,7 @@ function showVerticalRate(a){
 const rfHistory=new Map();
 let rfHistoryRevision=0,coverageCacheRows=null,coverageCacheResult=null,coverageCacheRevision=-1;
 let rfLocatorActive=true,rfLocatorFocused=true; // layer on; camera is not automatically stolen
-let rfFollowCenter=false,rfLastFollowModel=null,rfLastProgressModel=null;
+let rfFollowCenter=true,rfLastFollowModel=null,rfLastProgressModel=null;
 let rfLastRegion=null,rfModelProgressText="Waiting for positioned RF aircraft.";
 const rfSelectedPlanes=new Set();
 let rfAircraftListSignature="";
@@ -997,7 +988,7 @@ function focusRfModelWhenReady(result){
  state.lat=r.lat;state.lon=r.lon;
  if(initialFocus)state.zoom=km>850?4:km>420?5:km>200?6:km>95?7:km>45?8:km>22?9:10;
  state.moved=true;state.autoFocused=false;
- state.centerLabel="Following RF possible-area center · NOT GPS · sampled spread ~"+
+ state.centerLabel="4+ AIRCRAFT RF MODEL CENTER · NOT GPS · sampled spread ~"+
   Math.round(km)+" km";
  rfLocatorFocused=true;rfLastFollowModel=result;
 }
