@@ -17,7 +17,7 @@ from PySide6.QtCore import Qt, QUrl, QSettings, QTimer
 from PySide6.QtGui import QAction
 from PySide6.QtWebEngineCore import QWebEnginePermission
 from PySide6.QtWebEngineWidgets import QWebEngineView
-from PySide6.QtWidgets import QApplication, QDialog, QMainWindow, QMessageBox, QVBoxLayout
+from PySide6.QtWidgets import QApplication, QDialog, QMainWindow, QMessageBox, QVBoxLayout, QFileDialog
 
 from .bridge import Bridge, make_handler
 
@@ -107,6 +107,9 @@ class NativeRadarWindow(QMainWindow):
         self.web = EmbeddedRadarView(self)
         self.setCentralWidget(self.web)
         self.web.loadFinished.connect(self._paired_on_loaded)
+        # Qt WebEngine may not save blob: downloads without an explicit
+        # downloadRequested handler. Keep exports in a user-chosen local path.
+        self.web.page().profile().downloadRequested.connect(self._save_web_download)
         self.web.page().permissionRequested.connect(self._location_permission_requested)
         # This desktop installation can start in the selected region without
         # misrepresenting it as the real antenna position or requesting GPS.
@@ -242,6 +245,26 @@ class NativeRadarWindow(QMainWindow):
             + json.dumps(self.bridge.token) + "); }"
         )
         self.web.page().runJavaScript(code)
+
+    def _save_web_download(self, request):
+        """Confirm a local destination for a user-initiated browser download.
+
+        This is especially important for JSON/CSV RF timing laboratory exports
+        from a blob: URL. No data is sent to an external service.
+        """
+        filename = Path(request.downloadFileName()).name or "flight-radar-export"
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Flight Radar export",
+            str(Path.home() / "Downloads" / filename),
+        )
+        if not path:
+            request.cancel()
+            return
+        target = Path(path).expanduser()
+        request.setDownloadDirectory(str(target.parent))
+        request.setDownloadFileName(target.name)
+        request.accept()
 
     def open_classic(self):
         # Native QWidget, not an external browser. The shared controller avoids
