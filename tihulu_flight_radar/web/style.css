@@ -219,5 +219,5 @@ body.tar-open{overflow:hidden}
 .rf-coverage-panel small{font-size:10px;color:var(--muted);line-height:1.5}
 .aircraft-popup-timing{margin-top:9px;padding:8px;border-top:1px solid #405267}
 .aircraft-popup-timing summary{cursor:pointer;font-size:11px;color:#afd4ee}
-.aircraft-popup-timing p{font-size:10px;color:var(--muted);line-height:1.55;margin:5px 0;overflow-wrap:anywhere}
-@media(max-width:620px){.aircraft-popup{max-height:64vh;left:8px!important;top:8px!important;width:calc(100% - 16px)}}
+.aircraft-popup-timing p{white-space:pre-line;font-size:10px;color:var(--muted);line-height:1.55;margin:5px 0;overflow-wrap:anywhere}
+@media(max-width:620px){.aircraft-popup{max-height:64vh;left:8px!important;top:auto!important;bottom:46px;width:calc(100% - 16px)}}
