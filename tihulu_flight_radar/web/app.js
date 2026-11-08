@@ -67,14 +67,14 @@ const state = {
   startupQueryDirty:false,
   // Camera movement must not change the API search key during feed cooldown.
   queryLat:initialCenter.lat, queryLon:initialCenter.lon, queryRadius:100,
-  lastFreshAt:0, lastData:[],
+  lastFreshAt:0, lastData:[], dataReceivedAt:0,
   usbSnapshot:{aircraft:[],messages:0,updatedAt:0},internetSnapshot:null,
   usbMessageCount:0,
   pointer:null, tracks:new Map(), tiles:new Map(), tileFailures:0, fetching:false, timer:null,
   centerLabel:"Cologne startup fallback · awaiting location permission / radio aircraft",
   units:"aviation"
 };
-const selectors = ["showAntenna","showInternet","showBoth","showTracks","showTiles","showRfCoverage"];
+const selectors = ["showAntenna","showInternet","showBoth","showTracks","showTiles","showRfCoverage","smoothMotion"];
 const multiInternet = TihuluMultiSources.createManager();
 const multiIds = ["adsblol","adsbfi","opensky","intelsky"];
 const layerFields = {adsblol:"netAdsbLol",adsbfi:"netAdsbFi",opensky:"netOpenSky",intelsky:"netIntelSky"};
@@ -771,7 +771,7 @@ async function connect(){
 function disconnect(){
  if(state.connectionKind==="usb")void window.tihuluStopUsb?.();
  if(state.timer)clearInterval(state.timer);
- state.timer=null;state.token="";state.base="";state.onlineFeed="";state.connectionKind="none";state.data=[];state.lastData=[];state.lastFreshAt=0;
+ state.timer=null;state.token="";state.base="";state.onlineFeed="";state.connectionKind="none";state.data=[];state.lastData=[];state.lastFreshAt=0;state.dataReceivedAt=0;
  state.tracks.clear();state.autoFocused=false;
  connection(false,"Disconnected");updateCounters();renderTable();paint();
  $("feedStatus").textContent="No source connected.";
@@ -1120,6 +1120,7 @@ async function refresh(raise=false){
    result=await fetchInternetFeed();
   }
   state.data=Array.isArray(result.aircraft)?result.aircraft:[];
+  state.dataReceivedAt=Date.now();
   state.lastData=state.data.map(a=>({...a}));
   state.lastFreshAt=Date.now();
   updateCounters(result.counts);feedSummary(result.sources);recordTracks();rememberRfPlanes();
@@ -1147,6 +1148,7 @@ async function refresh(raise=false){
     if(Number.isFinite(row.seen_pos))row.seen_pos+=elapsed;
     return row;
   }).filter(a=>Number.isFinite(a.seen)&&a.seen<=60);
+  state.dataReceivedAt=Date.now();
   updateCounters({antenna:state.data.filter(a=>a.sources?.includes("antenna")).length,
                   internet:state.data.filter(a=>a.sources?.includes("internet")).length,
                   combined:state.data.length});
@@ -1257,31 +1259,47 @@ function tiles(){
    ctx.drawImage(t.img,(tx-x0)*256,(ty-y0)*256,256,256);
  }
 }
-function paintRfCoverage(){
- const result=coverageResult();
- if(result.circles.length<3)return;
- ctx.save();ctx.lineWidth=1.5;ctx.strokeStyle="rgba(250,199,91,.55)";
- ctx.setLineDash([7,5]);
- for(const ring of result.circles){
-  const path=TihuluRFCoverage.horizonPoints(ring,96);
-  ctx.beginPath();
-  path.forEach((p,i)=>{const [x,y]=xy(p.lat,p.lon);if(i)ctx.lineTo(x,y);else ctx.moveTo(x,y)});
-  ctx.stroke();
+function rfConvexHull(points){
+ // Convex hull of sampled feasible cells; NOT a GPS confidence ellipse.
+ const sorted=points.slice().sort((a,b)=>a[0]-b[0]||a[1]-b[1]);
+ const cross=(o,a,b)=>(a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]);
+ const lower=[],upper=[];
+ for(const p of sorted){
+  while(lower.length>=2&&cross(lower[lower.length-2],lower[lower.length-1],p)<=0)lower.pop();
+  lower.push(p);
  }
- ctx.setLineDash([]);
- if(result.region){
-  // Show actual feasible grid cells, not a fictitious receiver point.
-  ctx.fillStyle="rgba(255,214,109,.23)";
-  const candidates=result.region.possibleSamples||[];
-  for(let i=0;i<candidates.length;i++){
-   const [x,y]=xy(candidates[i].lat,candidates[i].lon);
-   if(x>=0&&x<=canvas.clientWidth&&y>=0&&y<=canvas.clientHeight)
-    ctx.fillRect(x-3,y-3,6,6);
+ for(let i=sorted.length-1;i>=0;i--){
+  const p=sorted[i];
+  while(upper.length>=2&&cross(upper[upper.length-2],upper[upper.length-1],p)<=0)upper.pop();
+  upper.push(p);
+ }
+ lower.pop();upper.pop();
+ return lower.concat(upper);
+}
+function paintRfCoverage(result){
+ if(result.status==="insufficient")return;
+ ctx.save();
+ if($("showRfCoverage").checked){
+  // Radio-horizon disks are upper bounds, not measured ranges.
+  ctx.lineWidth=1;ctx.strokeStyle="rgba(88,194,219,.29)";
+  ctx.setLineDash([4,9]);
+  for(const ring of result.circles.slice(0,3)){
+   const path=TihuluRFCoverage.horizonPoints(ring,72);
+   ctx.beginPath();
+   path.forEach((p,i)=>{const [x,y]=xy(p.lat,p.lon);if(i)ctx.lineTo(x,y);else ctx.moveTo(x,y)});
+   ctx.stroke();
   }
-  const r=result.region,[x,y]=xy(r.lat,r.lon);
-  ctx.font="bold 11px system-ui";ctx.fillStyle="#ffe3a8";
-  if(x>=0&&x<canvas.clientWidth&&y>=0&&y<canvas.clientHeight)
-   ctx.fillText("MODEL FEASIBLE AREA · NOT GPS",x+10,y);
+  ctx.setLineDash([]);
+ }
+ if(result.status==="region" && (rfLocatorActive||$("showRfCoverage").checked)){
+  const samples=(result.region.possibleSamples||[]).map(p=>xy(p.lat,p.lon));
+  const hull=rfConvexHull(samples);
+  if(hull.length>=3){
+   ctx.beginPath();hull.forEach((p,i)=>{if(!i)ctx.moveTo(p[0],p[1]);else ctx.lineTo(p[0],p[1])});
+   ctx.closePath();
+   ctx.fillStyle="rgba(30,178,205,.19)";ctx.fill();
+   ctx.strokeStyle="rgba(100,232,236,.82)";ctx.lineWidth=2.4;ctx.stroke();
+  }
  }
  ctx.restore();
 }
@@ -1292,7 +1310,7 @@ function paint(){
  focusRfModelWhenReady(model);
  ctx.clearRect(0,0,w,h);ctx.fillStyle="#102231";ctx.fillRect(0,0,w,h);
  tiles();grid();
- if($("showRfCoverage").checked)paintRfCoverage();
+ if($("showRfCoverage").checked||rfLocatorActive)paintRfCoverage(model);
  if($("showTracks").checked){
   for(const [key,points] of state.tracks.entries()){
    if(points.length<2)continue;
@@ -1307,10 +1325,19 @@ function paint(){
  let markers=0;
  for(const a of state.data){
   if(!visible(a)||!isPositioned(a))continue;
-  const [x,y]=xy(a.lat,a.lon);
+  const shown=$("smoothMotion").checked
+   ?TihuluMapMotion.displayedPosition(a,state.dataReceivedAt,Date.now())
+   :null;
+  const [x,y]=xy(shown?.lat??a.lat,shown?.lon??a.lon);
   if(x< -15||x>w+15||y< -15||y>h+15)continue;
   markers++;
   paintAircraft(ctx,a,x,y);
+  if(shown?.projected){
+   // Dashed halo explicitly distinguishes predicted motion from an RF fix.
+   ctx.save();ctx.strokeStyle="rgba(190,228,245,.5)";
+   ctx.setLineDash([2,4]);ctx.lineWidth=1.2;
+   ctx.beginPath();ctx.arc(x,y,22,0,Math.PI*2);ctx.stroke();ctx.restore();
+  }
   ctx.font="12px system-ui";ctx.fillStyle="#fff";
   ctx.shadowColor="#102030";ctx.shadowBlur=3;
   ctx.fillText((a.flight||a.hex||"Aircraft").trim(),x+19,y-10);
@@ -1344,7 +1371,10 @@ canvas.addEventListener("pointerup",e=>{
  let best=null,bestD=18;
  for(const a of state.data){
   if(!visible(a)||!isPositioned(a))continue;
-  const [x,y]=xy(a.lat,a.lon);
+  const shown=$("smoothMotion").checked
+   ?TihuluMapMotion.displayedPosition(a,state.dataReceivedAt,Date.now())
+   :null;
+  const [x,y]=xy(shown?.lat??a.lat,shown?.lon??a.lon);
   const d=Math.hypot(x-(e.clientX-canvas.getBoundingClientRect().left),y-(e.clientY-canvas.getBoundingClientRect().top));
   if(d<bestD){bestD=d;best=a}
  }
@@ -1564,6 +1594,10 @@ window.addEventListener("message",event=>{
  if(event.data?.type==="tihulu:tar-ready")publishTarBrowserSnapshot();
 });
 window.setInterval(()=>{if(tarFrameOpen && !document.hidden)publishTarBrowserSnapshot()},1200);
+// Display-only aircraft animation; independent of real observation / RF counts.
+window.setInterval(()=>{
+ if(!document.hidden && state.connected && $("smoothMotion").checked)paint();
+},750);
 window.addEventListener("keydown",event=>{
  if(event.key==="Escape" && tarFrameOpen)void setBrowserTar(false);
 });
