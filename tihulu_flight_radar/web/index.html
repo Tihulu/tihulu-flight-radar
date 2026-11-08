@@ -140,7 +140,7 @@
       <button id="popupRaw" type="button">Raw JSON</button>
      </div>
     </section>
-   <div class="mapfooter"><span id="mapLabel">Germany default view · no receiver position assumed</span><span><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a> · <span id="sourceCredits">Source attribution shown after connection</span></span></div>
+   <div class="mapfooter"><span id="mapLabel">Germany default view · no receiver position assumed</span><span id="rfMapCoordinates" class="rf-map-coordinates" aria-live="polite">RF model center: waiting for 4+ local RF aircraft</span><span><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a> · <span id="sourceCredits">Source attribution shown after connection</span></span></div>
   </section>
   <aside class="side">
    <h2>Receiver</h2>
@@ -168,7 +168,8 @@
       <select id="rfSigmaKm" aria-label="Assumed Gaussian horizon edge standard deviation in km"><option value="5">5</option><option value="10">10</option><option value="20" selected>20</option><option value="40">40</option><option value="80">80</option><option value="150">150</option></select>
      </label>
     </div>
-    <span id="rfCoverageStatus" aria-live="polite">Four or more independently positioned local RF aircraft required. A single SDR cannot give a measured location fix.</span>
+    <div id="rfCoordinateReadout" class="rf-coordinate-readout" aria-live="polite"><span>Current RF model center: waiting for 4+ genuine RF aircraft</span><span>Best session center: not yet available</span></div>
+     <span id="rfCoverageStatus" aria-live="polite">Four or more independently positioned local RF aircraft required. A single SDR cannot give a measured location fix.</span>
     <span id="rfProgress" class="rf-progress" aria-live="polite">Model spread and center changes appear here as real RF observations accumulate.</span>
     <span id="rfBestStatus" class="rf-best-status" aria-live="polite">Best model spread: waiting for 4 independently positioned RF aircraft.</span>
     <div id="rfEvidence" class="rf-evidence" aria-live="polite">Waiting for 4+ independent local RF aircraft. No single-aircraft receiver fix.</div>
