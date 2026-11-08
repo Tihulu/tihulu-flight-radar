@@ -27,6 +27,16 @@ test("RF lab processes only real-tagged sample indices, refuses fabricated timin
  assert.equal(session.addBatch([event(3000)]),0);
  assert.equal(session.summary().rejected,3);
 });
+test("Aircraft diversity does not decrease as older frame rows are evicted",()=>{
+ const session=lab.createSession(32);
+ const events=Array.from({length:60},(_,i)=>event(i*2000+10,(0xa00000+i).toString(16)));
+ session.addBatch(events);
+ const report=session.summary();
+ assert.equal(report.unique_aircraft,60);
+ assert.equal(report.unique_retained,32);
+ assert.equal(report.retained,32);
+ assert.equal(report.receiver_position_fix_available,false);
+});
 test("Segment breaks are excluded from interarrival statistics",()=>{
  const session=lab.createSession();
  session.addBatch([event(1),event(2001),event(10000000,"40621d",1),
