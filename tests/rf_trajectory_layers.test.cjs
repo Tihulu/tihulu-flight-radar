@@ -75,7 +75,7 @@ test("RF camera follows new model revisions and keeps zoom after first focus",()
  const second={status:"region",region:{lat:51.1,lon:7.8,extentKm:70}};
  const ctx={state,first,second,Math};
  vm.runInNewContext([
-  "let rfLocatorActive=true,rfLocatorFocused=false,rfFollowCenter=true,rfLastFollowModel=null;",
+  "let rfLocatorActive=true,rfLocatorFocused=false,rfFollowCenter=true,rfLastFollowModel=null,rfUserZoomed=false;",
   source,
   "focusRfModelWhenReady(first);",
   "const oldZoom=state.zoom;",
@@ -110,4 +110,60 @@ test("Solver still uses distinct aircraft after high-density one-aircraft track 
  assert.equal(out.count,4);
  assert.equal(out.constraintsUsed<=64,true);
  assert.equal(out.aircraftCircles.length,4);
+});
+
+test("Plus/minus and wheel zoom preserve four-aircraft RF follow and user scale",()=>{
+ const js=read("app.js");
+ const zoomSource=js.match(/function adjustMapZoom\(delta\)\{[\s\S]*?\n\}/)?.[0];
+ const focusSource=js.match(/function focusRfModelWhenReady\(result\)\{[\s\S]*?\n\}/)?.[0];
+ assert.ok(zoomSource&&focusSource);
+ const state={lat:50,lon:7,zoom:6,moved:false,autoFocused:false,centerLabel:""};
+ const first={status:"region",region:{lat:50.9,lon:7.2,extentKm:350}};
+ const second={status:"region",region:{lat:51.1,lon:7.8,extentKm:290}};
+ const ctx={state,first,second,Math,paint:()=>{}};
+ const result=vm.runInNewContext([
+  "let rfLocatorActive=true,rfLocatorFocused=false,rfFollowCenter=true,rfLastFollowModel=null,rfUserZoomed=false;",
+  zoomSource,focusSource,
+  "focusRfModelWhenReady(first);",
+  "const fitZoom=state.zoom;",
+  "adjustMapZoom(1);",
+  "adjustMapZoom(1);",
+  "const selectedZoom=state.zoom;",
+  "focusRfModelWhenReady(second);",
+  "({fitZoom,selectedZoom,afterZoom:state.zoom,following:rfFollowCenter,",
+  "  lat:state.lat,lon:state.lon,zoomUserAdjusted:rfUserZoomed})"
+ ].join("\n"),ctx);
+ assert.equal(result.selectedZoom,result.fitZoom+2);
+ assert.equal(result.afterZoom,result.selectedZoom);
+ assert.equal(result.following,true);
+ assert.equal(result.zoomUserAdjusted,true);
+ assert.equal(result.lat,second.region.lat);
+ assert.equal(result.lon,second.region.lon);
+ assert.match(js,/\$\("zoomIn"\)\.onclick=\(\)=>adjustMapZoom\(1\)/);
+ assert.match(js,/\$\("zoomOut"\)\.onclick=\(\)=>adjustMapZoom\(-1\)/);
+ assert.match(js,/canvas\.addEventListener\("wheel",e=>\{\s*e\.preventDefault\(\);\s*adjustMapZoom/);
+ const wheel=js.match(/canvas\.addEventListener\("wheel",e=>\{[\s\S]*?\},\{passive:false\}\);/)?.[0];
+ assert.ok(wheel);
+ assert.doesNotMatch(wheel,/disableRfFollow/);
+});
+test("Zoom set before first four-aircraft model remains selected on initial RF focus",()=>{
+ const js=read("app.js");
+ const zoomSource=js.match(/function adjustMapZoom\(delta\)\{[\s\S]*?\n\}/)?.[0];
+ const focusSource=js.match(/function focusRfModelWhenReady\(result\)\{[\s\S]*?\n\}/)?.[0];
+ assert.ok(zoomSource&&focusSource);
+ const state={lat:50,lon:7,zoom:7,moved:false,autoFocused:false,centerLabel:""};
+ const first={status:"region",region:{lat:50.9,lon:7.2,extentKm:350}};
+ const ctx={state,first,Math,paint:()=>{}};
+ const r=vm.runInNewContext([
+  "let rfLocatorActive=true,rfLocatorFocused=false,rfFollowCenter=true,rfLastFollowModel=null,rfUserZoomed=false;",
+  zoomSource,focusSource,
+  "adjustMapZoom(1);",
+  "const chosen=state.zoom;",
+  "focusRfModelWhenReady(first);",
+  "({chosen,zoom:state.zoom,lat:state.lat,lon:state.lon,rfFollowCenter})"
+ ].join("\n"),ctx);
+ assert.equal(r.zoom,r.chosen);
+ assert.equal(r.rfFollowCenter,true);
+ assert.equal(r.lat,first.region.lat);
+ assert.equal(r.lon,first.region.lon);
 });
