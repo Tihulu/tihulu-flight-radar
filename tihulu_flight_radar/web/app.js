@@ -950,6 +950,16 @@ function renderPopup(a){
   "Aircraft transmit UTC: unavailable — ordinary ADS-B contains no precise departure timestamp.",
   "Receiver arrival UTC: not calibrated; USB buffering and transfer latency unknown."
  ];
+ const modeledDistance=TihuluRFCoverage.modelDistanceInterval(coverageResult(),a);
+ if(modeledDistance){
+  lines.push("Conditional aircraft distance from feasible RF grid: ~"+
+    modeledDistance.minKm+"–"+modeledDistance.maxKm+
+    " km. This range assumes the radio-horizon model and its sampled receiver area; "+
+    "NOT a measured slant range, GPS location, confidence interval or radio ranging.");
+ }else if(rf && a.position_source==="antenna"){
+  lines.push("Distance to this aircraft: unavailable; four verified positioned "+
+    "antenna aircraft and a compatible feasible area are required for a conditional model interval.");
+ }
  if(rfRssi!==null)lines.push("Local RF signal strength indicator: "+
   rfRssi.toFixed(1)+" dBFS (readsb relative reading, NOT distance). "+
   "Aircraft transmit power, antenna direction, buildings, gain and fading prevent reliable single-reading ranging.");
