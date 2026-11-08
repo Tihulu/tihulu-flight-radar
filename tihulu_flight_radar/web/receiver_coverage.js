@@ -228,6 +228,23 @@ const TihuluRFCoverage = (() => {
     sampleCount:points.length,possibleSamples:points,
     kind:"possible-area-centroid",accuracyMeters:null,confidence:null}};
  }
+ // An *illustrative* Gaussian point-spread function for the radio-horizon
+ // EDGE only. A horizon is an upper bound, not an observed radio range;
+ // sigma is a user-chosen visualization assumption (km), NOT a calibrated
+ // position error or 68.3% credible receiver-location interval.
+ function gaussianHorizonPsf(radiusKm,sigmaKm,radialDistanceKm){
+  if(!Number.isFinite(radiusKm)||radiusKm<=0||
+     !Number.isFinite(sigmaKm)||sigmaKm<=0||sigmaKm>500||
+     !Number.isFinite(radialDistanceKm)||radialDistanceKm<0)return null;
+  const z=(radialDistanceKm-radiusKm)/sigmaKm;
+  return Math.exp(-0.5*z*z);
+ }
+ function gaussianHorizonBand(radiusKm,sigmaKm){
+  if(gaussianHorizonPsf(radiusKm,sigmaKm,radiusKm)===null)return null;
+  return {innerKm:Math.max(0,radiusKm-sigmaKm),outerKm:radiusKm+sigmaKm,
+   sigmaKm,peakAtKm:radiusKm,edgeRelativeWeight:Math.exp(-0.5),
+   calibrated:false,measuredRange:false,credibleInterval:false};
+ }
  // Conditional distance envelope from *modeled* feasible receiver cells.
  // Never a measured ToA/RSSI distance; sampled grid approximates this envelope.
  function modelDistanceInterval(result,a){
@@ -247,7 +264,8 @@ const TihuluRFCoverage = (() => {
    kind:"model-grid-distance-interval",measured:false};
  }
  return {point,distanceKm,horizonKm,horizonPoints,eligible,recordedCircle,
-  trackSampleDecision,groupAircraftCircles,compute,modelDistanceInterval,MIN_INDEPENDENT};
+  trackSampleDecision,groupAircraftCircles,compute,modelDistanceInterval,
+  gaussianHorizonPsf,gaussianHorizonBand,MIN_INDEPENDENT};
 })();
 if(typeof module!=="undefined"&&module.exports)module.exports=TihuluRFCoverage;
 if(typeof window!=="undefined")window.TihuluRFCoverage=TihuluRFCoverage;
