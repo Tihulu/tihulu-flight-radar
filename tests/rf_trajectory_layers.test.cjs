@@ -24,13 +24,13 @@ test("Recorded RF samples preserve speed/course but never create projected const
 });
 test("Speed-adaptive sampler rejects duplicates, invalid chronology and impossible jumps",()=>{
  const a={...model.recordedCircle(plane("a00001",50,7),100000),positionAgeSeconds:1};
- const near={...a,lon:7.012,capturedAtMs:150000};
- const next={...a,lon:7.15,capturedAtMs:150000};
+ const near={...a,lon:7.012,capturedAtMs:150000,observationTimeMs:149000};
+ const next={...a,lon:7.15,capturedAtMs:150000,observationTimeMs:149000};
  assert.equal(model.trackSampleDecision(null,a).keep,true);
  assert.equal(model.trackSampleDecision(a,near).keep,false);
  assert.equal(model.trackSampleDecision(a,next).keep,true);
- assert.equal(model.trackSampleDecision(a,{...next,capturedAtMs:90000}).reason,"non-monotonic");
- assert.equal(model.trackSampleDecision(a,{...next,lon:16,capturedAtMs:105000}).reason,"implausible-rf-jump");
+ assert.equal(model.trackSampleDecision(a,{...next,capturedAtMs:90000,observationTimeMs:89000}).reason,"non-monotonic");
+ assert.equal(model.trackSampleDecision(a,{...next,lon:16,capturedAtMs:105000,observationTimeMs:104000}).reason,"implausible-rf-jump");
 });
 test("Independent aircraft count is not inflated by along-track samples",()=>{
  const rows=[plane("a00001",50.7,6.7),plane("a00002",50.2,7.5),
