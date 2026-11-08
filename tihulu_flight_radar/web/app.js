@@ -915,6 +915,35 @@ $("rfClearHistory").onclick=()=>{
 function renderCoverageStatus(){
  const result=coverageResult();
  renderRfPlaneLayers(result);
+ const evidence=$("rfEvidence");
+ if(result.status==="region"){
+  const items=result.aircraftDistances||[];
+  evidence.replaceChildren();
+  const heading=document.createElement("strong");
+  heading.textContent="Combined RF horizon constraints · "+items.length+
+   " independent aircraft / "+result.constraintsUsed+" genuine position samples";
+  evidence.append(heading);
+  for(const item of items){
+   const line=document.createElement("div");line.className="rf-evidence-line";
+   const name=document.createElement("span");
+   name.textContent=(item.flight||item.hex)+" · "+item.hex.toUpperCase()+
+    " · "+item.sampleCount+" real fix"+(item.sampleCount===1?"":"es");
+   const numbers=document.createElement("span");
+   numbers.textContent=Math.round(item.centerDistanceKm)+" km center-to-aircraft / "+
+    Math.round(item.horizonKm)+" km assumed horizon";
+   line.append(name,numbers);evidence.append(line);
+  }
+  const note=document.createElement("small");
+  note.textContent="These are independently evaluated RF upper-bound disks. "+
+   "Center-to-plane distances are geometric consequences of the MODEL, "+
+   "not signal travel-time measurements. Snapshot position age is used "+
+   "only for historical time ordering; it is not propagation delay.";
+  evidence.append(note);
+ }else{
+  evidence.textContent="No multi-aircraft RF center yet: "+
+   (result.count||0)+" independent eligible radio aircraft; "+
+   "4 required. The map does not infer its center from a single airplane.";
+ }
  if(result!==rfLastProgressModel){
   rfLastProgressModel=result;
   if(result.status==="region"){
@@ -938,7 +967,8 @@ function renderCoverageStatus(){
   insufficient:result.count+"/4 independently positioned local RF aircraft ("+(result.liveCount||0)+" live, "+(result.historyCount||0)+" stationary-history). Internet-only aircraft, missing radio positions and Mode S without coordinates cannot qualify.",
   no_overlap:"Radio-horizon model has no common overlap. Check altitude/age/source validity.",
   unresolved:"Possible region too thin or fragmented for current grid. No coordinate fix.",
-  region:"Possible RF area · "+result.count+" verified independently positioned aircraft ("+result.liveCount+" live, "+result.historyCount+" stationary-history) · "+
+  region:"MULTI-AIRCRAFT RF MODEL ("+result.geometryStatus+") · "+result.count+
+  " distinct RF aircraft ("+result.liveCount+" live, "+result.historyCount+" stationary-history) · "+
    (result.constraintsUsed||result.count)+" constraints applied · coarse extent ~"+
     Math.round(result.region.extentKm)+" km. More planes may narrow this area, NOT establish GPS accuracy."
  };
@@ -982,7 +1012,7 @@ function focusRfModelWhenReady(result){
  if(!rfLocatorActive||result.status!=="region")return;
  if(rfLocatorFocused && (!rfFollowCenter||rfLastFollowModel===result))return;
  const r=result.region,km=r.extentKm;
- const initialFocus=!rfLocatorFocused;
+ const initialFocus=!rfLocatorFocused||rfLastFollowModel===null;
  // Don't force zoom on every new RF observation: the center can move,
  // but manual zoom remains in the user's control while following.
  state.lat=r.lat;state.lon=r.lon;
