@@ -817,7 +817,18 @@ function rememberRfPlanes(){
      a.seen>10||a.seen_pos>5)continue;
   const record=TihuluRFCoverage.recordedCircle(a,now);
   if(!record)continue;
-  rfHistory.delete(record.hex);rfHistory.set(record.hex,record);changed=true;
+  // Keep multiple separated RF positions from the same plane while fixed:
+  // only store meaningful movement, not the same snapshot every 15 seconds.
+  const same=[...rfHistory.values()].filter(r=>r.hex===record.hex);
+  const previous=same.length?same[same.length-1]:null;
+  if(previous&&TihuluRFCoverage.distanceKm(previous,record)<12&&
+     now-previous.capturedAtMs<10*60*1000)continue;
+  const key=record.hex+":"+Math.floor(now/1000);
+  rfHistory.set(key,record);changed=true;
+ }
+ // Fixed-site history is session-only, never persisted.
+ for(const [key,r] of rfHistory)if(now-r.capturedAtMs>2*3600*1000){
+  rfHistory.delete(key);changed=true;
  }
  while(rfHistory.size>64){
   rfHistory.delete(rfHistory.keys().next().value);changed=true;
