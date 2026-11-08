@@ -760,6 +760,7 @@ function showVerticalRate(a){
 // The assumption is valid only while the RF receiver stays physically fixed.
 const rfHistory=new Map();
 let rfHistoryRevision=0,coverageCacheRows=null,coverageCacheResult=null,coverageCacheRevision=-1;
+let rfLocatorActive=false,rfLocatorFocused=false;
 function rememberRfPlanes(){
  if(!$("rfRemember").checked)return;
  let changed=false,now=Date.now();
@@ -796,7 +797,7 @@ function renderCoverageStatus(){
  const result=coverageResult();
  const label=$("rfCoverageStatus");
  const info={
-  insufficient:result.count+" independently verified RF aircraft (live and allowed fixed-site history). Need at least 4 for coverage comparison.",
+  insufficient:result.count+" independently positioned antenna aircraft (live and allowed fixed-site history). Need at least 3 for a modeled possible area.",
   no_overlap:"Radio-horizon model has no common overlap. Check altitude/age/source validity.",
   unresolved:"Possible region too thin or fragmented for current grid. No coordinate fix.",
   region:"Possible modeled coverage · "+result.count+" independent RF aircraft · "+
@@ -804,7 +805,58 @@ function renderCoverageStatus(){
     Math.round(result.region.extentKm)+" km. More planes may narrow this area, NOT establish GPS accuracy."
  };
  label.textContent=info[result.status]||"Insufficient evidence";
+ const output=$("rfLocateStatus"),button=$("rfLocate");
+ button.textContent=rfLocatorActive?"Hide RF estimate":"RF locate · 3+ aircraft";
+ button.setAttribute("aria-pressed",String(rfLocatorActive));
+ if(!rfLocatorActive){
+  output.textContent="RF locating is off. Press RF locate to display a possible-area center, with or without rings, using local radio aircraft only.";
+ }else if(result.status==="region"){
+  const r=result.region;
+  output.textContent="MODELED POSSIBLE-AREA CENTER (NOT GPS): "+
+   r.lat.toFixed(2)+"°, "+r.lon.toFixed(2)+"° · Model extent up to ~"+
+   Math.round(r.extentKm)+" km from this center · "+
+   result.count+" independently positioned RF aircraft. This is not a measured "+
+   "receiver coordinate, probability radius, or accuracy claim. "+
+   "No manual latitude/longitude, GPS, or Internet data used.";
+ }else{
+  output.textContent=result.status==="insufficient"
+   ?"Waiting for 3+ fresh independently positioned antenna aircraft ("+
+     result.count+" eligible). Total decoded aircraft may include records without positions."
+   :result.status==="no_overlap"
+    ?"Conflicting RF horizon constraints: there is no shared feasible area. No coordinate is shown; clear stationary history if the antenna moved."
+    :"No stable possible-area centroid at this grid resolution; no receiver coordinate is shown.";
+ }
  return result;
+}
+$("rfLocate").onclick=()=>{
+ rfLocatorActive=!rfLocatorActive;
+ rfLocatorFocused=false;
+ paint();
+ if(rfLocatorActive)notice("RF possible-area model enabled: only local positioned ADS-B aircraft, no GPS or manual coordinates. The center is not an actual receiver position fix.");
+};
+function focusRfModelWhenReady(result){
+ if(!rfLocatorActive||rfLocatorFocused||result.status!=="region")return;
+ const r=result.region,km=r.extentKm;
+ state.lat=r.lat;state.lon=r.lon;
+ state.zoom=km>850?4:km>420?5:km>200?6:km>95?7:km>45?8:km>22?9:10;
+ state.moved=true;state.autoFocused=false;
+ state.centerLabel="RF possible-area model center · NOT measured GPS · approx. "+Math.round(km)+" km model extent";
+ rfLocatorFocused=true;
+}
+function paintRfLocator(result){
+ if(!rfLocatorActive||result.status!=="region")return;
+ const [x,y]=xy(result.region.lat,result.region.lon);
+ if(x<0||x>canvas.clientWidth||y<0||y>canvas.clientHeight)return;
+ ctx.save();
+ ctx.fillStyle="rgba(16,32,48,.9)";ctx.strokeStyle="#ffdea0";
+ ctx.lineWidth=2.5;ctx.setLineDash([]);
+ ctx.beginPath();ctx.arc(x,y,9,0,Math.PI*2);ctx.fill();ctx.stroke();
+ ctx.beginPath();ctx.moveTo(x-16,y);ctx.lineTo(x+16,y);
+ ctx.moveTo(x,y-16);ctx.lineTo(x,y+16);ctx.stroke();
+ ctx.font="bold 11px system-ui";ctx.fillStyle="#ffdea0";
+ ctx.shadowColor="#0a1a27";ctx.shadowBlur=5;
+ ctx.fillText("RF MODEL CENTER · NOT GPS",x+18,y-12);
+ ctx.restore();
 }
 function renderPopup(a){
  const popup=$("aircraftPopup");
@@ -1158,8 +1210,8 @@ function tiles(){
  }
 }
 function paintRfCoverage(){
- const result=TihuluRFCoverage.compute(state.data);
- if(result.circles.length<4)return;
+ const result=coverageResult();
+ if(result.circles.length<3)return;
  ctx.save();ctx.lineWidth=1.5;ctx.strokeStyle="rgba(250,199,91,.55)";
  ctx.setLineDash([7,5]);
  for(const ring of result.circles){
@@ -1188,6 +1240,8 @@ function paintRfCoverage(){
 function paint(){
  const w=canvas.clientWidth,h=canvas.clientHeight;
  if(!w||!h)return;
+ const model=coverageResult();
+ focusRfModelWhenReady(model);
  ctx.clearRect(0,0,w,h);ctx.fillStyle="#102231";ctx.fillRect(0,0,w,h);
  tiles();grid();
  if($("showRfCoverage").checked)paintRfCoverage();
@@ -1214,6 +1268,7 @@ function paint(){
   ctx.fillText((a.flight||a.hex||"Aircraft").trim(),x+19,y-10);
   ctx.shadowBlur=0;
  }
+ paintRfLocator(model); // independent of the optional ring display.
  if(!markers){
   ctx.fillStyle="rgba(13,23,33,.9)";ctx.fillRect(12,12,Math.min(420,w-24),38);
   ctx.fillStyle="#d6e7f7";ctx.font="13px system-ui";
