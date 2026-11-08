@@ -136,3 +136,17 @@ Cross-platform Actions test Linux, Debian, macOS Apple Silicon and Windows. For 
 - [Internet source limitations](docs/TAR1090_WEBUSB_AND_INTERNET_SOURCES.md)
 
 **Attribution:** The bundled original tar1090 frontend remains under its upstream GPL-2.0-or-later licensing and attribution; see `tihulu_flight_radar/web/tar1090/UPSTREAM-GPL-LICENSE.txt` in generated artifacts. The Satellite Center place dataset has separate [ODbL provenance](tihulu_flight_radar/web/CITY_DATA_LICENSE.md). This repository does not currently supply a blanket license for all original project code.
+
+### RF locate using three or more radio aircraft (offline)
+
+Click **RF locate · 3+ aircraft** in the built-in map. The program uses the
+position and altitude from **three or more independently positioned local
+antenna ADS-B aircraft** (live or optional verified stationary-site history).
+It computes the approximate **centroid of the modeled plausible receiver
+region** and displays its coordinates, an approximate modeled extent in
+kilometers, and a non-GPS crosshair. It needs **no receiver latitude/longitude,
+no browser GPS permission and no Internet**, and works with the optional
+**RF coverage rings** checkbox on or off. Three decoded planes **without
+position fixes** are not enough. The centroid is *not* a measured true
+receiver location, reverse MLAT, a GPS fix or a reliable accuracy estimate;
+additional aircraft constrain only the model-dependent possible region.

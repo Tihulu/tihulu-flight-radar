@@ -32,15 +32,21 @@ signal or guess the receiver's position.
 
 Only rows with `position_source="antenna"`, independently positioned
 `observations.antenna`, valid fresh age fields and plausible aircraft
-altitude enter the conservative radio-horizon model. It requires **four**
-distinct ICAO24 aircraft before displaying rings, never an arbitrary
-count of online planes. The rough maximum line-of-sight radius uses
+altitude enter the conservative radio-horizon model. It requires **three**
+distinct independently positioned ICAO24 aircraft before displaying
+model constraints, never an arbitrary count of online planes. The rough maximum line-of-sight radius uses
 4/3 effective Earth radius, a 30-m maximum ground receiver height and an
 extra 30-km allowance; this is a *demonstration bound*, not an RF
 range measurement. Its grid-cell intersection is merely a possible
 coverage area and may be very broad, disconnected, or wrong when the
-propagation model is inaccurate. The UI NEVER declares GPS coordinates or
-reports a false meter-level accuracy.
+propagation model is inaccurate. The explicit **RF locate · 3+ aircraft**
+control computes a centroid of those possible grid cells without taking
+a receiver latitude/longitude, GPS permission, or public aircraft data.
+The value shown is a **model-dependent plausible-area center**, not an
+inferred measured location or a GPS fix. The displayed extent in kilometers
+describes the area sampled by the model, **not statistical confidence** or
+a measured receiver error bound. This center is independently drawable even
+when the optional rings are hidden. No real receiver accuracy is claimed.
 
 ## What a true ToA / reverse-position estimator requires
 
@@ -64,8 +70,11 @@ aggregator `now`/age fields, browser `Date.now` or `performance.now`.
   expandable raw JSON view is preserved.
 - RF timing disclosure displays actual sample indices, decoder time and
   missing TX time separately.
-- Coverage checkbox and status never imply physical receiver coordinates.
-- Node regression tests cover four genuine RF observations, rejected
+- Coverage checkbox and RF locator are independent. Ring rendering and model
+  both use the same fixed-site history (up to 2 hours) when enabled.
+- The optional centroid marker and its displayed coordinates are labeled
+  model outputs, never actual measured receiver coordinates.
+- Node regression tests cover three genuine RF observations, rejected
   Internet/misprovenanced rows, timing placeholders, sample indices and UI.
 - **Hardware validation is pending** for physical Nooelec NESDR SMArt v5,
   Pop!_OS COSMIC Qt window, browser USB, timestamp continuity and RF
@@ -137,3 +146,29 @@ API call, artificial aircraft, remote time server or hidden service dependency.
 Physical SDR reception, driver stability, offline first-load setup and Qt
 download dialogs require testing on the target computer. CI simulation is not
 a substitute for hardware calibration.
+
+
+## Offline RF possible-area locator (3+ aircraft)
+
+When receiving local ADS-B frames, open Flight Radar and press
+**RF locate · 3+ aircraft**. No latitude/longitude input, GPS permission,
+browser geolocation API, external map tile, or remote aircraft provider is
+needed to compute the model. The receiver must remain stationary if its
+optional two-hour history is enabled. The GUI shows a crosshair at the
+*centroid of modeled feasible grid cells*, latitude/longitude of this
+*model centroid*, number of independently positioned antenna aircraft,
+and the maximum radial spread of sampled feasible cells, rounded up to
+10 km. Disable **RF coverage rings** to hide rings while retaining the
+crosshair, or enable it to inspect the same constraints. Clicking again
+hides the model marker.
+
+This is **not geolocation by ADS-B trilateration**. At most, upper-bound
+horizon intersections identify a model-dependent *possible region*.
+With three or hundreds of aircraft, one uncalibrated RTL-SDR still lacks
+the transmit-time and calibrated distance information to identify its
+own true position. A centroid is one descriptive point among many
+possible receiver positions, not a validated estimate or accuracy
+metric. If no common region exists or fewer than three independently
+positioned *local RF* aircraft are available, no point is shown.
+The map camera moves to this model centroid without changing the saved
+Internet search region or asserting that it is the physical receiver.

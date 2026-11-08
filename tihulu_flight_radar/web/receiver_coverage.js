@@ -1,5 +1,5 @@
 "use strict";
-// Radio-horizon coverage constraints, NOT trilateration or time-of-flight ranging.
+// Offline radio-horizon coverage constraints, NOT trilateration or time-of-flight ranging.
 // Only local, positioned ADS-B radio observations are eligible. Public feeds
 // (even "I/R" rows whose displayed coordinates came from the Internet) cannot
 // be used to infer any physical receiver position.
@@ -88,32 +88,56 @@ const TihuluRFCoverage = (() => {
    seen.add(old.hex);
   }
   records.sort((a,b)=>a.ageSeconds-b.ageSeconds);
-  if(records.length<4)return {status:"insufficient",count:records.length,circles:[],region:null};
+  if(records.length<3)return {status:"insufficient",count:records.length,circles:[],region:null};
   // Bound workload: choose newest independent RF aircraft, max 6 rings.
   // Apply more genuinely independent RF constraints as aircraft count grows;
   // only draw six circles to avoid visual clutter. This is not true accuracy.
   const constraints=records.slice(0,64);
   const circles=constraints.slice(0,6);
-  // Equirectangular bounds only choose a candidate search grid; actual cell
-  // acceptance always checks geodesic distances to every ring.
-  const minLat=Math.max(...constraints.map(c=>c.lat-c.radiusKm/110.5));
-  const maxLat=Math.min(...circles.map(c=>c.lat+c.radiusKm/110.5));
-  const minLon=Math.max(...circles.map(c=>c.lon-c.radiusKm/(111.2*Math.max(0.2,Math.cos(c.lat*RAD)))));
-  const maxLon=Math.min(...circles.map(c=>c.lon+c.radiusKm/(111.2*Math.max(0.2,Math.cos(c.lat*RAD)))));
-  if(minLat>=maxLat||minLon>=maxLon)return {status:"no_overlap",count:records.length,constraintsUsed:constraints.length,circles,region:null};
+  // No receiver latitude/longitude is an input. Unwrap longitude only to
+  // build the intersection grid (crossing the date line is supported).
+  // Actual acceptance remains a geodesic distance test for EVERY verified RF
+  // aircraft. Each circle is an upper-bound reception constraint, not a
+  // measured range. The resulting centroid is *not* a receiver location fix.
+  const longitudeNear=(lon,anchor)=>anchor+((lon-anchor+540)%360)-180;
+  const originLon=constraints[0].lon;
+  const bounds=constraints.map(c=>{
+   const spreadLat=c.radiusKm/110.5;
+   // Conservative longitude envelope uses the smallest cosine at the
+   // northern/southern edge, not only at the aircraft latitude.
+   const edge=Math.min(84.9,Math.abs(c.lat)+spreadLat);
+   const spreadLon=c.radiusKm/(111.2*Math.max(.05,Math.cos(edge*RAD)));
+   const lon=longitudeNear(c.lon,originLon);
+   return {south:Math.max(-85,c.lat-spreadLat),
+    north:Math.min(85,c.lat+spreadLat),
+    west:lon-spreadLon,east:lon+spreadLon};
+  });
+  const minLat=Math.max(...bounds.map(b=>b.south));
+  const maxLat=Math.min(...bounds.map(b=>b.north));
+  const minLon=Math.max(...bounds.map(b=>b.west));
+  const maxLon=Math.min(...bounds.map(b=>b.east));
+  if(minLat>=maxLat||minLon>=maxLon)return {
+   status:"no_overlap",count:records.length,constraintsUsed:constraints.length,circles,region:null};
   const points=[];
-  for(let i=0;i<=40;i++)for(let j=0;j<=40;j++){
-   const p={lat:minLat+(maxLat-minLat)*i/40,lon:minLon+(maxLon-minLon)*j/40};
+  const STEPS=48;
+  for(let i=0;i<=STEPS;i++)for(let j=0;j<=STEPS;j++){
+   const lat=minLat+(maxLat-minLat)*i/STEPS;
+   const unwrappedLon=minLon+(maxLon-minLon)*j/STEPS;
+   const p={lat,lon:((unwrappedLon+540)%360)-180};
    if(constraints.every(c=>distanceKm(p,c)<=c.radiusKm))points.push(p);
   }
-  if(!points.length)return {status:"unresolved",count:records.length,constraintsUsed:constraints.length,circles,region:null};
-  // Centre of *geometric possibility area*, not a receiver coordinate fix.
-  const center={lat:points.reduce((s,p)=>s+p.lat,0)/points.length,
-   lon:points.reduce((s,p)=>s+p.lon,0)/points.length};
+  // A vanishingly small sampled overlap is not a safe coordinate estimate.
+  if(points.length<3)return {status:"unresolved",count:records.length,
+   constraintsUsed:constraints.length,circles,region:null};
+  const centerLat=points.reduce((sum,p)=>sum+p.lat,0)/points.length;
+  const centerUnwrappedLon=points.reduce((sum,p)=>
+   sum+longitudeNear(p.lon,originLon),0)/points.length;
+  const center={lat:centerLat,lon:((centerUnwrappedLon+540)%360)-180};
   const extentKm=Math.max(...points.map(p=>distanceKm(center,p)));
   return {status:"region",count:records.length,constraintsUsed:constraints.length,circles,
-   region:{...center,extentKm:Math.ceil(extentKm/10)*10,
-    sampleCount:points.length,possibleSamples:points}};
+   region:{...center,extentKm:Math.max(10,Math.ceil(extentKm/10)*10),
+    sampleCount:points.length,possibleSamples:points,
+    kind:"possible-area-centroid",accuracyMeters:null,confidence:null}};
  }
  return {point,distanceKm,horizonKm,horizonPoints,eligible,recordedCircle,compute};
 })();
