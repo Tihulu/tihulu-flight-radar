@@ -91,7 +91,7 @@ const TihuluTimingLab=(()=>{
   function serialize(){
    return {format:FORMAT,provenance:"local unsynchronized WebUSB I/Q sample clock",
     exported_utc:new Date().toISOString(),sample_rate_hz:2000000,
-    mode:"recorded_live",summary:summary(),events:records.slice()};
+    mode:mode==="offline_replay"?"offline_replay":"recorded_live",summary:summary(),events:records.slice()};
   }
   function load(raw){
    if(!raw||raw.format!==FORMAT||raw.sample_rate_hz!==2000000||
