@@ -126,6 +126,9 @@ class NativeRadarWindow(QMainWindow):
         self._startup_timer.setInterval(250)
         self._startup_timer.timeout.connect(self._check_startup)
         menu = self.menuBar().addMenu("Receiver")
+        reconnect = QAction("Reconnect local bridge", self)
+        reconnect.triggered.connect(lambda: self._paired_on_loaded(True))
+        menu.addAction(reconnect)
         classic = QAction("Open full classic receiver dashboard", self)
         classic.triggered.connect(self.open_classic)
         menu.addAction(classic)
@@ -228,23 +231,45 @@ class NativeRadarWindow(QMainWindow):
             # systemd start and leave the USB device claimed after close.
             self.close()
 
-    def _paired_on_loaded(self, ok: bool):
+    def _paired_on_loaded(self, ok: bool, attempt: int = 0):
+        if self._exit_requested:
+            return
         if not ok:
             self.statusBar().showMessage("Local radar page failed to load; check Qt WebEngine.")
             return
-        # Called only for this on-loopback document. The secret remains
-        # ephemeral and is never copied into a browser URL or query string.
+        # Only inject the ephemeral token into this exact app-owned loopback
+        # page, never a URL, external page, persistent store or log.
         if not (self.web.url().scheme() == "http"
                 and self.web.url().host() == "127.0.0.1"
                 and self.web.url().port() == self.server.server_port):
             self.statusBar().showMessage("Untrusted web origin — auto-pairing refused.")
             return
-        code = (
-            "if (typeof window.tihuluNativeConnect === 'function') { "
+        script = (
+            "(function(){"
+            "document.documentElement.classList.add('native');"
+            "var label=document.getElementById('connectionLabel');"
+            "if(typeof window.tihuluNativeConnect!=='function'){"
+            "if(label)label.textContent='Connecting installed desktop receiver…';"
+            "return 'waiting';}"
             "window.tihuluNativeConnect(" + json.dumps(self.local_url) + ", "
-            + json.dumps(self.bridge.token) + "); }"
+            + json.dumps(self.bridge.token) + ");"
+            "return 'requested';"
+            "})()"
         )
-        self.web.page().runJavaScript(code)
+
+        def result(value):
+            if self._exit_requested:
+                return
+            if value == "requested":
+                return
+            if value == "waiting" and attempt < 16:
+                QTimer.singleShot(200, lambda: self._paired_on_loaded(True, attempt + 1))
+                return
+            self.statusBar().showMessage(
+                "Native pairing script unavailable. Use Receiver → Reconnect local bridge "
+                "or Reload radar view; Internet flights do not imply SDR control."
+            )
+        self.web.page().runJavaScript(script, result)
 
     def _save_web_download(self, request):
         """Confirm a local destination for a user-initiated browser download.
