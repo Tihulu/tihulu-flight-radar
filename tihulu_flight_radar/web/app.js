@@ -834,6 +834,7 @@ function clearRfBest(){
  rfLastRegion=null;rfLastProgressModel=null;
 }
 const rfSelectedPlanes=new Set();
+let rfAutoSelectNewPlanes=false; // user can always uncheck an individual plane
 let rfAircraftListSignature="";
 const RF_PLANE_COLORS=["#61c5e7","#8dafff","#b5a1f0","#6ddbbd","#f69bba","#eeaea0"];
 function rfPlaneColor(hex){
@@ -887,6 +888,7 @@ function coverageResult(){
 }
 function renderRfPlaneLayers(result){
  const layers=result.aircraftCircles||[];
+ if(rfAutoSelectNewPlanes)for(const item of layers)rfSelectedPlanes.add(item.hex);
  const signature=layers.map(item=>[
   item.hex,item.flight,item.samples,item.circle.lat.toFixed(3),
   item.circle.lon.toFixed(3),item.circle.radiusKm.toFixed(1)
@@ -903,6 +905,8 @@ function renderRfPlaneLayers(result){
   input.setAttribute("aria-label","Show RF horizon for "+item.hex);
   input.addEventListener("change",()=>{
    if(input.checked)rfSelectedPlanes.add(item.hex);else rfSelectedPlanes.delete(item.hex);
+   // An explicit per-plane choice overrides future auto-inclusion.
+   rfAutoSelectNewPlanes=false;
    paint();
   });
   const swatch=document.createElement("span");swatch.className="rf-aircraft-swatch";
@@ -914,17 +918,31 @@ function renderRfPlaneLayers(result){
  }
 }
 $("rfAllPlanes").onclick=()=>{
+ rfAutoSelectNewPlanes=true;
  for(const item of coverageResult().aircraftCircles||[])rfSelectedPlanes.add(item.hex);
  for(const cb of $("rfAircraftLayers").querySelectorAll('input[type="checkbox"]'))cb.checked=true;
  paint();
 };
 $("rfNoPlanes").onclick=()=>{
+ rfAutoSelectNewPlanes=false;
  rfSelectedPlanes.clear();
  for(const cb of $("rfAircraftLayers").querySelectorAll('input[type="checkbox"]'))cb.checked=false;
  paint();
 };
 for(const id of ["rfFill","rfHatch","rfModelCircle","rfModelPin","rfBestPin"])
  $(id).addEventListener("change",()=>paint());
+$("rfGaussianBand").onchange=()=>{
+ if($("rfGaussianBand").checked && !rfSelectedPlanes.size){
+  // Make the checkbox immediately useful, including when future local
+  // aircraft become eligible; users may uncheck any individual plane.
+  rfAutoSelectNewPlanes=true;
+  for(const item of coverageResult().aircraftCircles||[])
+   rfSelectedPlanes.add(item.hex);
+  rfAircraftListSignature=""; // refresh individual-plane checkboxes
+ }
+ paint();
+};
+$("rfSigmaKm").onchange=()=>paint();
 $("rfFollow").onchange=()=>{
  rfFollowCenter=$("rfFollow").checked;
  if(rfFollowCenter){rfLocatorActive=true;rfLocatorFocused=false;rfLastFollowModel=null;}
@@ -1559,6 +1577,44 @@ function rfDrawRing(ring,color,dash=[5,8],width=1.4){
  });
  ctx.stroke();ctx.restore();
 }
+function rfHexToRgba(hex,alpha){
+ const n=parseInt(hex.slice(1),16);
+ return "rgba("+((n>>16)&255)+","+((n>>8)&255)+","+(n&255)+","+alpha.toFixed(3)+")";
+}
+function rfDrawGaussianBand(ring,color,sigmaKm){
+ const band=TihuluRFCoverage.gaussianHorizonBand(ring.radiusKm,sigmaKm);
+ if(!band)return;
+ // Render an ANNULAR Gaussian-like PSF along the assumed radio-horizon edge.
+ // This is visualization only; never modify coverageResult(), RF evidence,
+ // model circle sizes, confidence, or source observations.
+ const slices=8;
+ for(let i=0;i<slices;i++){
+  const r1=band.innerKm+(band.outerKm-band.innerKm)*i/slices;
+  const r2=band.innerKm+(band.outerKm-band.innerKm)*(i+1)/slices;
+  const middle=(r1+r2)/2;
+  const weight=TihuluRFCoverage.gaussianHorizonPsf(ring.radiusKm,sigmaKm,middle);
+  if(weight===null)continue;
+  const outer=TihuluRFCoverage.horizonPoints({...ring,radiusKm:r2},80);
+  const inner=r1>0?TihuluRFCoverage.horizonPoints({...ring,radiusKm:r1},80):[];
+  ctx.save();ctx.beginPath();
+  outer.forEach((p,j)=>{
+   const [x,y]=rfMapXy(p);
+   if(j===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+  });
+  ctx.closePath();
+  if(inner.length){
+   inner.forEach((p,j)=>{
+    const [x,y]=rfMapXy(p);
+    if(j===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+   });
+   ctx.closePath();
+  }
+  ctx.fillStyle=rfHexToRgba(color,Math.min(.25,.17*weight));
+  ctx.fill("evenodd");ctx.restore();
+ }
+ rfDrawRing({...ring,radiusKm:band.innerKm},rfHexToRgba(color,.70),[3,5],1);
+ rfDrawRing({...ring,radiusKm:band.outerKm},rfHexToRgba(color,.70),[3,5],1);
+}
 function paintRfCoverage(result){
  ctx.save();
  if($("showRfCoverage").checked){
@@ -1570,7 +1626,13 @@ function paintRfCoverage(result){
  // even if there are fewer than four aircraft for a region model.
  for(const item of result.aircraftCircles||[]){
   if(!rfSelectedPlanes.has(item.hex))continue;
-  rfDrawRing(item.circle,rfPlaneColor(item.hex),[5,6],1.7);
+  const color=rfPlaneColor(item.hex);
+  if($("rfGaussianBand").checked){
+   const sigmaKm=Number($("rfSigmaKm").value);
+   // Even at high zoom draw only locally received radio-horizon rings.
+   rfDrawGaussianBand(item.circle,color,sigmaKm);
+  }
+  rfDrawRing(item.circle,color,[5,6],1.7);
  }
  if(result.status==="region"&&rfLocatorActive){
   const r=result.region;
