@@ -58,8 +58,9 @@ const TihuluRFCoverage = (() => {
   return {hex:a.hex.toLowerCase(),flight:String(a.flight||a.hex).trim(),
    lat:rf.lat,lon:rf.lon,radiusKm,altitudeFeet,
    // Supporting metadata of a verified RF fix, never a measured range.
-   speedKt:Number.isFinite(rf.gs)?rf.gs:Number.isFinite(a.gs)?a.gs:null,
-   headingDeg:Number.isFinite(rf.track)?rf.track:Number.isFinite(a.track)?a.track:null,
+   speedKt:Number.isFinite(rf.gs)?rf.gs:null,
+   headingDeg:Number.isFinite(rf.track)?rf.track:
+    Number.isFinite(rf.true_heading)?rf.true_heading:null,
    positionAgeSeconds:rf.seen_pos,
    recorded_rf:true,capturedAtMs};
  }
@@ -139,7 +140,15 @@ const TihuluRFCoverage = (() => {
   // Bound workload: use up to 64 recent *positions* from at least four
   // independent aircraft. Multiple positions from ONE plane do not satisfy
   // the minimum. Only three circles are drawn as optional outlines.
-  const constraints=records.slice(0,64);
+  // First preserve one latest real observation from every independent ICAO.
+  // Then add the remaining speed-spaced path samples. A busy aircraft
+  // must not crowd out other received airplanes from the 64-cell solver.
+  const heads=[],extras=[],usedHeads=new Set();
+  for(const record of records){
+   if(!usedHeads.has(record.hex)){heads.push(record);usedHeads.add(record.hex);}
+   else extras.push(record);
+  }
+  const constraints=heads.concat(extras).slice(0,64);
   const circles=constraints.slice(0,6); // for diagnostics; UI draws only 3 optional outlines
   // No receiver latitude/longitude is an input. Unwrap longitude only to
   // build the intersection grid (crossing the date line is supported).
