@@ -801,6 +801,9 @@ const rfHistory=new Map();
 let rfHistoryRevision=0,coverageCacheRows=null,coverageCacheResult=null,coverageCacheRevision=-1;
 let rfLocatorActive=true,rfLocatorFocused=true; // layer on; camera is not automatically stolen
 let rfFollowCenter=true,rfLastFollowModel=null,rfLastProgressModel=null;
+// Preserve user's manual +/- or wheel zoom during RF center following,
+// including the first model fix after zooming.
+let rfUserZoomed=false;
 let rfLastRegion=null,rfModelProgressText="Waiting for positioned RF aircraft.";
 const rfSelectedPlanes=new Set();
 let rfAircraftListSignature="";
@@ -1054,7 +1057,8 @@ function focusRfModelWhenReady(result){
  // Don't force zoom on every new RF observation: the center can move,
  // but manual zoom remains in the user's control while following.
  state.lat=r.lat;state.lon=r.lon;
- if(initialFocus)state.zoom=km>850?4:km>420?5:km>200?6:km>95?7:km>45?8:km>22?9:10;
+ if(initialFocus&&!rfUserZoomed)
+  state.zoom=km>850?4:km>420?5:km>200?6:km>95?7:km>45?8:km>22?9:10;
  state.moved=true;state.autoFocused=false;
  state.centerLabel="4+ AIRCRAFT RF MODEL CENTER · NOT GPS · sampled spread ~"+
   Math.round(km)+" km";
@@ -1630,8 +1634,19 @@ canvas.addEventListener("pointerup",e=>{
  }
  if(best)choose(best);else closePopup();
 });
+function adjustMapZoom(delta){
+ const next=Math.max(2,Math.min(12,state.zoom+delta));
+ if(next===state.zoom)return;
+ state.zoom=next;
+ state.moved=true;
+ rfUserZoomed=true;
+ // Zoom changes scale, not RF follow state or the camera center.
+ // The next real four-aircraft model update may pan at THIS zoom.
+ paint();
+}
 canvas.addEventListener("wheel",e=>{
- e.preventDefault();disableRfFollow();state.moved=true;state.zoom=Math.max(2,Math.min(12,state.zoom+(e.deltaY<0?1:-1)));paint();
+ e.preventDefault();
+ adjustMapZoom(e.deltaY<0?1:-1);
 },{passive:false});
 // Provider selection is explicit and never creates a hidden proxy/key.
 const preset=$("onlinePreset");
@@ -1962,8 +1977,8 @@ $("locate").onclick=()=>{
   if(state.connected)refresh();
  },e=>notice("Browser location unavailable: "+e.message),{timeout:7000});
 };
-$("zoomIn").onclick=()=>{disableRfFollow();state.zoom=Math.min(12,state.zoom+1);state.moved=true;paint()};
-$("zoomOut").onclick=()=>{disableRfFollow();state.zoom=Math.max(2,state.zoom-1);state.moved=true;paint()};
+$("zoomIn").onclick=()=>adjustMapZoom(1);
+$("zoomOut").onclick=()=>adjustMapZoom(-1);
 for(const id of selectors)$(id).onchange=()=>{
  if(id==="showTiles" && $("showTiles").checked)state.tileFailures=0;
  renderTable();paint();
