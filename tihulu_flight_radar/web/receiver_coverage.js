@@ -116,6 +116,10 @@ const TihuluRFCoverage = (() => {
    records.push({hex:a.hex.toLowerCase(),flight:String(a.flight||a.hex).trim(),
     lat:rf.lat,lon:rf.lon,radiusKm,altitudeFeet,
     ageSeconds:Math.max(a.seen_pos,rf.seen_pos),
+    positionAgeSeconds:rf.seen_pos,
+    speedKt:Number.isFinite(rf.gs)?rf.gs:null,
+    headingDeg:Number.isFinite(rf.track)?rf.track:
+     Number.isFinite(rf.true_heading)?rf.true_heading:null,
     observationTimeMs:now-rf.seen_pos*1000});
    seen.add(a.hex.toLowerCase());
   }
@@ -205,6 +209,10 @@ const TihuluRFCoverage = (() => {
    hex:c.hex,flight:c.flight,
    centerDistanceKm:Math.round(distanceKm(center,c)),
    horizonKm:Math.round(c.radiusKm),
+   approximatePositionAgeSeconds:c.ageSeconds,
+   approximatePositionEpochMs:c.observationTimeMs,
+   speedKt:c.speedKt??null,
+   headingDeg:c.headingDeg??null,
    sampleCount:aircraftCircles.find(item=>item.hex===c.hex)?.samples||1
   })).sort((a,b)=>a.hex.localeCompare(b.hex));
   // This is NOT a confidence level. Even four planes can yield a very
