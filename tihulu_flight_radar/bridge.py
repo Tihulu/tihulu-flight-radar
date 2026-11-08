@@ -329,7 +329,27 @@ class Bridge:
                                          "journalctl -u readsb -n 40 --no-pager")
                                         if count == 0 else None}
             except DataError as exc:
-                local_status = {"state": "unavailable", "error": str(exc)}
+                # Distinguish a genuinely stopped decoder from a running
+                # decoder that has not written its first aircraft.json yet.
+                # The latter can occur briefly during receiver startup.
+                with self.receiver_lock:
+                    active, detail = self.receiver.status()
+                if self.receiver.mode != "Remote JSON" and not active:
+                    local_status = {
+                        "state": "decoder_stopped",
+                        "error": detail + ". Start the local receiver in Flight Radar "
+                                 "or use systemctl start readsb.service.",
+                    }
+                elif str(exc) == "Receiver data file not found.":
+                    local_status = {
+                        "state": "decoder_waiting_for_json",
+                        "error": "Decoder is active, but aircraft.json has not been "
+                                 "created at the configured readsb path yet. "
+                                 "Check journalctl -u readsb.service and the readsb "
+                                 "JSON output directory.",
+                    }
+                else:
+                    local_status = {"state": "unavailable", "error": str(exc)}
         if mode == "auto" and not any(position_is_fresh(a) for a in local):
             want_online = True
         if want_online:
