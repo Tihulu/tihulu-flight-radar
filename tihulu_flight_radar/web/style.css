@@ -215,7 +215,7 @@ body.tar-open{overflow:hidden}
 .rf-coverage-panel{display:flex;flex-direction:column;gap:5px;margin-top:12px;padding:10px;
  border:1px solid #426076;border-radius:9px;background:#102234}
 .rf-coverage-panel strong{font-size:12px}
-.rf-coverage-panel span{font-size:12px;line-height:1.5;color:#e6d6af}
+.rf-coverage-panel span{font-size:12px;line-height:1.5;color:#c0e7ef}
 .rf-coverage-panel small{font-size:10px;color:var(--muted);line-height:1.5}
 .aircraft-popup-timing{margin-top:9px;padding:8px;border-top:1px solid #405267}
 .aircraft-popup-timing summary{cursor:pointer;font-size:11px;color:#afd4ee}
@@ -253,12 +253,12 @@ body.tar-open{overflow:hidden}
 
 /* RF feasible-area locator: independent from the optional horizon-ring overlay.
    Highlight the action but never style the model centroid as a GPS fix. */
-#rfLocate{border-color:#a58e56;background:#433922;color:#ffefcf;font-weight:650}
-#rfLocate[aria-pressed="true"]{background:#685124;border-color:#e3b865}
+#rfLocate{border-color:#2e9bb5;background:#103d54;color:#d5f8ff;font-weight:650}
+#rfLocate[aria-pressed="true"]{background:#175d70;border-color:#6ee2ed}
 .rf-locate-output{background:#0c1c2b;border:1px solid #486478;
- border-radius:8px;padding:10px;margin-top:5px;color:#e8e6d9;
+ border-radius:8px;padding:10px;margin-top:5px;color:#dbf4f7;
  font-size:11px;line-height:1.6;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
-.rf-locate-output strong{color:#ffdfab}
+.rf-locate-output strong{color:#7de1ed}
 
 
 /* Already-installed Qt desktop: never advertise another desktop install. */
