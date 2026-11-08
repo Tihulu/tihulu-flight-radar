@@ -167,3 +167,69 @@ test("Zoom set before first four-aircraft model remains selected on initial RF f
  assert.equal(r.lat,first.region.lat);
  assert.equal(r.lon,first.region.lon);
 });
+
+test("Gaussian horizon PSF is an assumed radial edge shape, not a calibrated distance",()=>{
+ const R=330,sigma=20;
+ const band=model.gaussianHorizonBand(R,sigma);
+ assert.equal(band.innerKm,310);
+ assert.equal(band.outerKm,350);
+ assert.equal(band.sigmaKm,20);
+ assert.equal(band.calibrated,false);
+ assert.equal(band.measuredRange,false);
+ assert.equal(band.credibleInterval,false);
+ assert.equal(model.gaussianHorizonPsf(R,sigma,R),1);
+ assert.ok(Math.abs(model.gaussianHorizonPsf(R,sigma,R+sigma)-Math.exp(-.5))<1e-12);
+ assert.ok(Math.abs(model.gaussianHorizonPsf(R,sigma,R-sigma)-Math.exp(-.5))<1e-12);
+ assert.equal(model.gaussianHorizonPsf(R,0,R),null);
+ assert.equal(model.gaussianHorizonBand(330,-1),null);
+ const normal=model.compute([plane("a00001",50.7,6.7),
+  plane("a00002",50.2,7.5),plane("a00003",51.1,6.2),plane("a00004",50.6,7.9)]);
+ assert.equal(normal.status,"region");
+ assert.equal(normal.region.accuracyMeters,null);
+ assert.equal(normal.region.confidence,null);
+ assert.ok(normal.region.rawExtentKm<=normal.region.extentKm);
+});
+test("Gaussian 1-sigma option uses individual radio-plane toggles; pointer jitter does not uncheck RF following",()=>{
+ const html=read("index.html"),js=read("app.js");
+ assert.match(html,/id="rfGaussianBand"/);
+ assert.match(html,/id="rfSigmaKm"/);
+ assert.match(html,/Assumed σ \(km\)/);
+ assert.match(html,/NOT a measured range error/);
+ assert.match(js,/function rfDrawGaussianBand\(ring,color,sigmaKm\)/);
+ assert.match(js,/gaussianHorizonPsf\(ring\.radiusKm,sigmaKm,middle\)/);
+ assert.match(js,/ctx\.fill\("evenodd"\)/);
+ assert.match(js,/if\(\$\("rfGaussianBand"\)\.checked\)/);
+ assert.match(js,/rfSelectedPlanes\.has\(item\.hex\)/);
+ assert.match(js,/rfAutoSelectNewPlanes=true/);
+ assert.match(js,/if\(!p\[4\]&&Math\.hypot\(e\.clientX-p\[0\],e\.clientY-p\[1\]\)<7\)return/);
+ const wheel=js.slice(js.indexOf('canvas.addEventListener("wheel"'),js.indexOf('// Provider selection',js.indexOf('canvas.addEventListener("wheel"')));
+ assert.doesNotMatch(wheel,/disableRfFollow/);
+});
+test("Best session RF model updates at the unrounded spread and is independent of zoom",()=>{
+ const js=read("app.js");
+ const source=js.match(/function updateRfBest\(result,nowMs=Date\.now\(\)\)\{[\s\S]*?\n\}/)?.[0];
+ assert.ok(source,"RF best update helper exists");
+ const run=vm.runInNewContext([
+  "let rfBest=null,rfBestComparedModel=null,rfBestImprovedThisUpdate=false;",
+  source,
+  'const first={status:"region",count:4,constraintsUsed:4,region:{lat:50.9,lon:7.1,rawExtentKm:110.8,extentKm:120}};',
+  'const tighter={status:"region",count:5,constraintsUsed:6,region:{lat:50.91,lon:7.13,rawExtentKm:109.7,extentKm:110}};',
+  'const worse={status:"region",count:6,constraintsUsed:8,region:{lat:50.92,lon:7.2,rawExtentKm:130.2,extentKm:140}};',
+  'const one=updateRfBest(first,10000);',
+  'const repeated=updateRfBest(first,11000);',
+  'const two=updateRfBest(tighter,12000);',
+  'const three=updateRfBest(worse,13000);',
+  '({one,repeated,two,three,best:rfBest})'
+ ].join("\n"));
+ assert.equal(run.one,true);
+ assert.equal(run.repeated,false);
+ assert.equal(run.two,true);
+ assert.equal(run.three,false);
+ assert.equal(run.best.rawExtentKm,109.7);
+ assert.equal(run.best.aircraftCount,5);
+ assert.equal(run.best.updatedAtMs,12000);
+ assert.match(js,/rfBestPin/);
+ assert.match(js,/CURRENT MODEL spread/);
+ assert.match(js,/BEST SESSION spread/);
+ assert.match(js,/rfUserZoomed=true/);
+});
