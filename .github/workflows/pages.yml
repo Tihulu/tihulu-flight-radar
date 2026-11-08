@@ -60,6 +60,7 @@ jobs:
           node --check tihulu_flight_radar/web/flight_location_ui.mjs
           node --check tihulu_flight_radar/web/location_search.mjs
           node --check tihulu_flight_radar/web/app.js
+          node --check tihulu_flight_radar/web/receiver_coverage.js
           node --check tihulu_flight_radar/web/sw.js
           node --check tihulu_flight_radar/web/browser_usb.mjs
           node --check tihulu_flight_radar/web/adsb_worker.mjs
@@ -79,12 +80,13 @@ jobs:
           PY
           bash -n scripts/rtl-sdr-usb-interface.sh
           node --check deploy/cloudflare-worker.mjs
-          node --test tests/web_bridge.test.cjs tests/pages_tar.test.cjs tests/browser_adsb.test.cjs tests/browser_source.test.cjs tests/aircraft_visuals.test.cjs tests/webusb_sampleblock.test.cjs tests/internet_sources.test.cjs tests/multi_sources.test.cjs tests/tar_layers_regression.test.cjs tests/location_selector.test.cjs tests/release_main.test.cjs tests/tar_full_browser.test.cjs
+          node --test tests/web_bridge.test.cjs tests/pages_tar.test.cjs tests/browser_adsb.test.cjs tests/browser_source.test.cjs tests/aircraft_visuals.test.cjs tests/webusb_sampleblock.test.cjs tests/internet_sources.test.cjs tests/multi_sources.test.cjs tests/tar_layers_regression.test.cjs tests/location_selector.test.cjs tests/release_main.test.cjs tests/tar_full_browser.test.cjs tests/aircraft_popup_rf_coverage.test.cjs
           python3 -m json.tool tihulu_flight_radar/web/manifest.webmanifest >/dev/null
           test -s tihulu_flight_radar/web/icon.svg
           test -s tihulu_flight_radar/web/sw.js
           test -s tihulu_flight_radar/web/browser_usb.mjs
           test -s tihulu_flight_radar/web/multi_sources.js
+          test -s tihulu_flight_radar/web/receiver_coverage.js
           test -s tihulu_flight_radar/web/flight_location_ui.mjs
           test -s tihulu_flight_radar/web/location_search.mjs
           test -s tihulu_flight_radar/web/cities-de-tr.json
