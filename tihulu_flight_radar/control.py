@@ -232,12 +232,13 @@ class ReceiverController:
         return read_local(Path(self._directory.name) / "aircraft.json")
 
     def close(self, release_local_service: bool = False):
-        """Release a direct child and, if requested, local readsb on exit.
+        """Release direct app-owned child and optionally shared Linux services.
 
-        Background systemd services are shared. The desktop "Release SDR on
-        exit" policy is explicitly ON by default, but remote JSON mode never
-        manages services on another device. Service permissions remain narrow;
-        a failed stop must be reported to the caller, not hidden.
+        Systemd readsb/tar1090 can outlive the desktop when the user unchecks
+        "Release local SDR on exit". Merely having been started by this app
+        must never override that explicit preference. Direct readsb uses an
+        app-owned temporary directory and must always stop on exit.
+        Remote JSON is never controlled by the local app.
         """
         error = None
         if self.process is not None:
@@ -250,8 +251,8 @@ class ReceiverController:
             finally:
                 self.mode = mode
         if (platform.system() == "Linux"
-                and ((self.mode == "Linux services" and release_local_service)
-                     or self._service_started_by_app)
+                and self.mode == "Linux services"
+                and release_local_service
                 and _unit_active("readsb.service")[0]):
             try:
                 service_action("stop")
