@@ -259,3 +259,12 @@ body.tar-open{overflow:hidden}
  border-radius:8px;padding:10px;margin-top:5px;color:#e8e6d9;
  font-size:11px;line-height:1.6;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
 .rf-locate-output strong{color:#ffdfab}
+
+
+/* Already-installed Qt desktop: never advertise another desktop install. */
+html.native .install-link{display:none!important}
+html.native .desktop-installed-label{display:inline-flex;align-items:center;
+ border:1px solid #357b70;background:#14352f;color:#b8f4e4;border-radius:8px;
+ padding:7px 10px;font-size:12px;white-space:nowrap}
+html.native #connectionLabel{max-width:340px;overflow-wrap:anywhere}
+html.native #receiverStatus[data-pair-state="failed"]{color:#ffbc99}
