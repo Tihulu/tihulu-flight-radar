@@ -175,6 +175,14 @@ trilateration; there is no exact transmission epoch in ordinary 1090ES.
 If insufficient distinct local aircraft or incompatible constraints are
 present, no receiver location is asserted.
 
+When a valid modeled region exists, a selected genuinely RF-positioned
+aircraft can display a **conditional approximate distance interval**. It is
+the minimum/maximum distance from the aircraft's genuine received coordinates
+to sampled cells of the receiver's modeled feasible region, rounded outwards
+to tens of kilometers. This is not a measured slant range, radio propagation
+time, RF RSSI distance, GPS position or statistical confidence bound; it is
+not shown for Internet-only aircraft or insufficient RF model inputs.
+
 The normal aircraft map now opt-out animates *display-only* short-horizon
 motion using actual received position, speed and heading. A dashed halo
 distinguishes the projected icon, which is never used for RF coverage,
