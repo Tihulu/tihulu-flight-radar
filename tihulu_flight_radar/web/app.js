@@ -613,8 +613,16 @@ function showVerticalRate(a){
  return raw===null?"—":new Intl.NumberFormat("en",{maximumFractionDigits:0})
   .format(state.units==="metric"?raw*0.3048:raw)+(state.units==="metric"?" m/min":" ft/min");
 }
+let coverageCacheRows=null,coverageCacheResult=null;
+function coverageResult(){
+ if(state.data!==coverageCacheRows){
+  coverageCacheRows=state.data;
+  coverageCacheResult=TihuluRFCoverage.compute(state.data);
+ }
+ return coverageCacheResult;
+}
 function renderCoverageStatus(){
- const result=TihuluRFCoverage.compute(state.data);
+ const result=coverageResult();
  const label=$("rfCoverageStatus");
  const info={
   insufficient:result.count+" independent fresh RF-positioned aircraft. Need at least 4 for coverage comparison.",
@@ -989,15 +997,18 @@ function paintRfCoverage(){
  }
  ctx.setLineDash([]);
  if(result.region){
-  // Possible receiver *area*, not a receiver marker or an inferred GPS fix.
-  const r=result.region;
-  const points=TihuluRFCoverage.horizonPoints({...r,radiusKm:r.extentKm},96);
-  ctx.fillStyle="rgba(255,214,109,.12)";ctx.strokeStyle="rgba(255,214,109,.8)";
-  ctx.beginPath();
-  points.forEach((p,i)=>{const [x,y]=xy(p.lat,p.lon);if(i)ctx.lineTo(x,y);else ctx.moveTo(x,y)});
-  ctx.closePath();ctx.fill();ctx.stroke();
-  const [x,y]=xy(r.lat,r.lon);ctx.font="bold 11px system-ui";
-  ctx.fillStyle="#ffe3a8";ctx.fillText("POSSIBLE AREA · NOT A GPS FIX",x+10,y);
+  // Show actual feasible grid cells, not a fictitious receiver point.
+  ctx.fillStyle="rgba(255,214,109,.23)";
+  const candidates=result.region.possibleSamples||[];
+  for(let i=0;i<candidates.length;i++){
+   const [x,y]=xy(candidates[i].lat,candidates[i].lon);
+   if(x>=0&&x<=canvas.clientWidth&&y>=0&&y<=canvas.clientHeight)
+    ctx.fillRect(x-3,y-3,6,6);
+  }
+  const r=result.region,[x,y]=xy(r.lat,r.lon);
+  ctx.font="bold 11px system-ui";ctx.fillStyle="#ffe3a8";
+  if(x>=0&&x<canvas.clientWidth&&y>=0&&y<canvas.clientHeight)
+   ctx.fillText("MODEL FEASIBLE AREA · NOT GPS",x+10,y);
  }
  ctx.restore();
 }
