@@ -613,8 +613,12 @@ window.tihuluUsbStopped=()=>{
 // Called only by our packaged Qt WebEngine wrapper after the trusted local
 // page is loaded. The token is never placed in a URL, cookies or storage.
 window.tihuluNativeConnect=async function(base, token){
+ // Qt desktop is already installed; keep the native UI identity regardless
+ // of whether optional online aircraft data loads.
+ window.tihuluNativeDesktop=true;
  document.documentElement.classList.add("native");
- document.querySelector(".bridge-advanced").open=true;
+ const pairingPanel=document.querySelector(".bridge-advanced");
+ if(pairingPanel)pairingPanel.open=true;
  // Desktop explicitly opts into both observed RF and public online layers.
  $("mode").value="hybrid";
  $("bridgeUrl").value=base;
@@ -663,9 +667,16 @@ async function connect(){
    state.timer=setInterval(()=>{if(!document.hidden)refresh()},15000);
    return;
   }
-  state.onlineFeed=configuredOnlineFeed();
-   state.internetBackoffUntil=0;state.airlabsLastFetch=0;
   const token=$("token").value.trim();
+  // A bad optional Internet provider is NOT an unsuccessful native pairing.
+  let networkError=null;
+  try{state.onlineFeed=configuredOnlineFeed();}
+  catch(error){
+   if(!token)throw error;
+   state.onlineFeed="";
+   networkError=String(error?.message||error);
+  }
+  state.internetBackoffUntil=0;state.airlabsLastFetch=0;
   if(token){
    state.base=getBase($("bridgeUrl").value.trim());
    state.token=token;state.connectionKind="bridge";
@@ -678,10 +689,21 @@ async function connect(){
    throw Error("For antenna data enter a local pairing token; for Internet only enter an HTTPS Internet feed URL.");
   }
   state.connected=true;
-  await refresh(true);
-  connection(true,state.connectionKind==="bridge"?"Paired with local bridge":"Internet source configured · check individual provider statuses");
+  // Authenticated /api/status has already completed in checkReceiver().
+  // Aircraft.json / external Internet feed refresh may fail independently.
+  // Previously this failure reset connectionKind and disabled Start/Stop,
+  // while still displaying old Internet aircraft and "controls enabled".
+  connection(true,state.connectionKind==="bridge"
+    ?"Desktop paired · local SDR control available"
+    :"Internet source configured · check individual provider statuses");
   $("token").value="";
   state.timer=setInterval(()=>{if(!document.hidden)refresh()},15000);
+  try{await refresh(true);}
+  catch(error){
+   notice("Receiver pairing retained; aircraft refresh failed: "+
+     String(error?.message||error)+". Check readsb, USB ownership and Internet provider.");
+  }
+  if(networkError)notice("Desktop receiver paired; optional Internet feed unavailable: "+networkError);
   if(state.connectionKind==="bridge"){
    // Native Qt changes its loopback port each time. Synchronize only the
    // explicitly selected place, never a receiver/GPS site coordinate.
@@ -704,6 +726,12 @@ async function connect(){
    state.connected=true;displayUsbSnapshot();
    if(!state.timer)state.timer=setInterval(()=>{if(!document.hidden)refresh()},15000);
    notice("Optional Internet feed failed; direct WebUSB remains connected: "+e.message);
+  }else if(state.connectionKind==="bridge" && state.token){
+   // Preserve independently verified native bridge after an optional error.
+   state.connected=true;
+   connection(true,"Desktop receiver paired · no current aircraft data");
+   if(!state.timer)state.timer=setInterval(()=>{if(!document.hidden)refresh()},15000);
+   notice("Receiver bridge paired; initial data unavailable: "+e.message);
   }else if(state.connectionKind==="internet" && state.onlineFeed){
    // A public CORS relay outage should not permanently end the browser's
    // Internet-only session. Retry while visible without touching RF devices.
