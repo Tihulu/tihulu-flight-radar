@@ -1607,12 +1607,17 @@ function paint(){
  renderCoverageStatus();
 }
 canvas.addEventListener("pointerdown",e=>{
- state.pointer=[e.clientX,e.clientY,state.lon,state.lat];
+ state.pointer=[e.clientX,e.clientY,state.lon,state.lat,false];
  canvas.setPointerCapture(e.pointerId);
 });
 canvas.addEventListener("pointermove",e=>{
  if(!state.pointer)return;
- const p=state.pointer,state_zoom=2**state.zoom*256;
+ const p=state.pointer;
+ // Pointer jitter is not a pan. Do not switch OFF RF following while
+ // clicking the map or using +/- zoom controls.
+ if(!p[4]&&Math.hypot(e.clientX-p[0],e.clientY-p[1])<7)return;
+ p[4]=true;
+ const state_zoom=2**state.zoom*256;
  disableRfFollow();state.moved=true;state.lon=p[2]-(e.clientX-p[0])/state_zoom*360;
  const target=mercY(p[3])*state_zoom-(e.clientY-p[1]);
  state.lat=Math.max(-85,Math.min(85,Math.atan(Math.sinh(Math.PI*(1-2*target/state_zoom)))*180/Math.PI));
@@ -1621,7 +1626,7 @@ canvas.addEventListener("pointermove",e=>{
 canvas.addEventListener("pointerup",e=>{
  if(!state.pointer)return;
  const p=state.pointer;state.pointer=null;
- if(Math.hypot(e.clientX-p[0],e.clientY-p[1])>8)return;
+ if(p[4]||Math.hypot(e.clientX-p[0],e.clientY-p[1])>8)return;
  let best=null,bestD=18;
  for(const a of state.data){
   if(!visible(a)||!isPositioned(a))continue;
@@ -1640,8 +1645,8 @@ function adjustMapZoom(delta){
  state.zoom=next;
  state.moved=true;
  rfUserZoomed=true;
- // Zoom changes scale, not RF follow state or the camera center.
- // The next real four-aircraft model update may pan at THIS zoom.
+ // A zoom is explicitly NOT a pan: keep RF model following enabled.
+ // Subsequent model revisions move the center without resetting this zoom.
  paint();
 }
 canvas.addEventListener("wheel",e=>{
