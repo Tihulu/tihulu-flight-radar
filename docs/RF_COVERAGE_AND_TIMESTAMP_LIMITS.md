@@ -293,3 +293,52 @@ the multi-aircraft center against input ordering and the old one-plane
 auto-focus behavior. This was checked by automated CI with synthetic
 fixtures; a real multi-aircraft local SDR capture is still needed to
 validate actual feasibility and effective receiver position uncertainty.
+
+
+## 8 November 2026 — zoom-follow fix, best-model history, hypothetical Gaussian PSF
+
+A `+`/`−` click or wheel zoom **must never** turn off `Follow 4+ RF model
+center`. The user's chosen zoom remains the active zoom through later live
+RF model revisions. Only a real map drag, explicit aircraft focus, or a
+different manually selected map region may switch the follow checkbox off.
+Pointer movement under seven pixels from the initial press is considered
+click jitter, not a deliberate pan; it will not cancel following. Camera
+following pans to new RF model center coordinates but does not refit each
+time. This is separate from the display-only aircraft motion interpolation.
+
+The *current* feasible model center, current sampled model spread, and
+*best session* (smallest raw sampled model spread) are tracked separately.
+The best-center pin is violet and can be turned off independently of the
+cyan current-model center pin. Comparisons use the unrounded sampled
+spread in km, while the large dashed map circle remains rounded upwards.
+A model can be re-estimated when a new actual antenna aircraft appears
+or real trajectory constraint is recorded. Even the smallest spread in
+the session is **not** a GPS fix, measured receiver error, calibrated RF
+accuracy or a statistical confidence region. It is only the best model
+geometry produced from the session's available radio-horizon constraints.
+
+**Optional Gaussian/PSF 1σ ring edge**: the `Gaussian PSF · ±1σ`
+checkbox and an *assumed sigma* selector (5–150 km, default 20 km)
+draw a soft annulus around each individually selected RF aircraft's
+radio-horizon circle. For radius `R` and manually chosen sigma `σ`,
+the illustrative edge profile is
+
+`w(d) = exp[-0.5 ((d-R)/σ)^2]`.
+
+The highlighted one-sigma interval is `[max(0,R-σ),R+σ]`;
+the profile reaches `exp(-0.5)` of its peak at either boundary.
+This is **not** a valid probabilistic RF range likelihood: the original
+circle is a broad *maximum line-of-sight horizon*, not a range
+measurement. We have no empirical standard deviation or independently
+calibrated propagation model. In particular **68.3% statistical coverage**
+of the receiver position is **NOT** implied. The Gaussian visualization
+is never fed into RF model intersection/centroid calculations, receiver
+distance estimates or raw observations. Users can tick each plane's
+separate checkbox or choose Show all. If PSF is first enabled when no
+aircraft outline is selected, the current and newly appearing genuine
+RF aircraft are automatically selected until overridden by a manual
+per-plane choice or Hide all.
+
+CI regression tests cover zoom before and after valid 4+ aircraft model
+updates, camera jitter, best unrounded spread selection, the per-plane
+Gaussian function at ±1σ, and the no-GPS/no-calibrated-range assertions.
