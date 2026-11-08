@@ -21,6 +21,7 @@ on:
       - "tests/webusb_sampleblock.test.cjs"
       - "tests/tar_full_browser.test.cjs"
       - "tests/map_motion.test.cjs"
+      - "tests/rf_trajectory_layers.test.cjs"
       - "scripts/install-linux.sh"
   pull_request:
     branches: [main]
@@ -83,7 +84,7 @@ jobs:
           PY
           bash -n scripts/rtl-sdr-usb-interface.sh
           node --check deploy/cloudflare-worker.mjs
-          node --test tests/web_bridge.test.cjs tests/pages_tar.test.cjs tests/browser_adsb.test.cjs tests/browser_source.test.cjs tests/aircraft_visuals.test.cjs tests/webusb_sampleblock.test.cjs tests/internet_sources.test.cjs tests/multi_sources.test.cjs tests/tar_layers_regression.test.cjs tests/location_selector.test.cjs tests/release_main.test.cjs tests/tar_full_browser.test.cjs tests/aircraft_popup_rf_coverage.test.cjs tests/rf_timing_lab.test.cjs tests/map_motion.test.cjs
+          node --test tests/web_bridge.test.cjs tests/pages_tar.test.cjs tests/browser_adsb.test.cjs tests/browser_source.test.cjs tests/aircraft_visuals.test.cjs tests/webusb_sampleblock.test.cjs tests/internet_sources.test.cjs tests/multi_sources.test.cjs tests/tar_layers_regression.test.cjs tests/location_selector.test.cjs tests/release_main.test.cjs tests/tar_full_browser.test.cjs tests/aircraft_popup_rf_coverage.test.cjs tests/rf_timing_lab.test.cjs tests/map_motion.test.cjs tests/rf_trajectory_layers.test.cjs
           python3 -m json.tool tihulu_flight_radar/web/manifest.webmanifest >/dev/null
           test -s tihulu_flight_radar/web/icon.svg
           test -s tihulu_flight_radar/web/sw.js
