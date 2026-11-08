@@ -805,6 +805,34 @@ let rfFollowCenter=true,rfLastFollowModel=null,rfLastProgressModel=null;
 // including the first model fix after zooming.
 let rfUserZoomed=false;
 let rfLastRegion=null,rfModelProgressText="Waiting for positioned RF aircraft.";
+let rfBest=null,rfBestComparedModel=null,rfBestImprovedThisUpdate=false;
+function updateRfBest(result,nowMs=Date.now()){
+ // Only evaluate new RF solution snapshots, not display animation frames.
+ if(result===rfBestComparedModel)return false;
+ rfBestComparedModel=result;
+ rfBestImprovedThisUpdate=false;
+ if(result?.status!=="region"||result.count<4)return false;
+ const area=result.region;
+ const spread=Number.isFinite(area.rawExtentKm)?area.rawExtentKm:area.extentKm;
+ if(!Number.isFinite(spread)||spread<=0)return false;
+ // Raw (unrounded) spread can improve even while the 10 km visual circle
+ // looks unchanged. Not GPS location accuracy or statistical uncertainty.
+ const tighter=!rfBest||spread<rfBest.rawExtentKm-0.05;
+ const stronger=rfBest&&Math.abs(spread-rfBest.rawExtentKm)<=0.05&&
+  result.count>rfBest.aircraftCount;
+ if(tighter||stronger){
+  rfBest={lat:area.lat,lon:area.lon,rawExtentKm:spread,
+   displayedExtentKm:area.extentKm,aircraftCount:result.count,
+   constraintsUsed:result.constraintsUsed,updatedAtMs:nowMs};
+  rfBestImprovedThisUpdate=true;
+  return true;
+ }
+ return false;
+}
+function clearRfBest(){
+ rfBest=null;rfBestComparedModel=null;rfBestImprovedThisUpdate=false;
+ rfLastRegion=null;rfLastProgressModel=null;
+}
 const rfSelectedPlanes=new Set();
 let rfAircraftListSignature="";
 const RF_PLANE_COLORS=["#61c5e7","#8dafff","#b5a1f0","#6ddbbd","#f69bba","#eeaea0"];
@@ -895,7 +923,7 @@ $("rfNoPlanes").onclick=()=>{
  for(const cb of $("rfAircraftLayers").querySelectorAll('input[type="checkbox"]'))cb.checked=false;
  paint();
 };
-for(const id of ["rfFill","rfHatch","rfModelCircle","rfModelPin"])
+for(const id of ["rfFill","rfHatch","rfModelCircle","rfModelPin","rfBestPin"])
  $(id).addEventListener("change",()=>paint());
 $("rfFollow").onchange=()=>{
  rfFollowCenter=$("rfFollow").checked;
@@ -907,13 +935,13 @@ function disableRfFollow(){
  rfFollowCenter=false;$("rfFollow").checked=false;
 }
 $("rfRemember").onchange=()=>{
- if(!$("rfRemember").checked){rfHistory.clear();rfHistoryRevision++;}
+ if(!$("rfRemember").checked){rfHistory.clear();rfHistoryRevision++;clearRfBest();}
  else rememberRfPlanes();
  paint();
 };
 $("rfClearHistory").onclick=()=>{
- rfHistory.clear();rfHistoryRevision++;paint();
- notice("Only historic RF constraints cleared; live radio reception is unchanged.");
+ rfHistory.clear();rfHistoryRevision++;clearRfBest();paint();
+ notice("Historic RF constraints and session-best model cleared; live radio reception is unchanged.");
 };
 $("rfExportEvidence").onclick=()=>{
  // No token, Internet aircraft, GPS or user-defined receiver coordinates.
@@ -1003,6 +1031,20 @@ function renderCoverageStatus(){
   }
  }
  $("rfProgress").textContent=rfModelProgressText;
+ const bestText=$("rfBestStatus");
+ if(rfBest){
+  const current=result.status==="region"?
+   (Number.isFinite(result.region.rawExtentKm)?
+    result.region.rawExtentKm:result.region.extentKm):null;
+  const currentLabel=current===null?"unavailable":current.toFixed(1)+" km";
+  bestText.textContent="CURRENT MODEL spread "+currentLabel+
+   " · BEST SESSION spread "+rfBest.rawExtentKm.toFixed(1)+" km"+
+   " ("+rfBest.aircraftCount+" aircraft, "+rfBest.constraintsUsed+
+   " genuine fixes at "+new Date(rfBest.updatedAtMs).toLocaleTimeString()+") · "+
+   rfBest.lat.toFixed(4)+"°, "+rfBest.lon.toFixed(4)+"°"+
+   (rfBestImprovedThisUpdate?" · new tighter model":"")+
+   ". These are modeled possible-area spreads, NOT GPS accuracy.";
+ }else bestText.textContent="Best model spread: waiting for 4+ independently positioned RF aircraft.";
  const label=$("rfCoverageStatus");
  const info={
   insufficient:result.count+"/4 independently positioned local RF aircraft ("+(result.liveCount||0)+" live, "+(result.historyCount||0)+" stationary-history). Internet-only aircraft, missing radio positions and Mode S without coordinates cannot qualify.",
@@ -1561,6 +1603,7 @@ function paint(){
  const w=canvas.clientWidth,h=canvas.clientHeight;
  if(!w||!h)return;
  const model=coverageResult();
+ updateRfBest(model);
  focusRfModelWhenReady(model);
  ctx.clearRect(0,0,w,h);ctx.fillStyle="#102231";ctx.fillRect(0,0,w,h);
  tiles();grid();
