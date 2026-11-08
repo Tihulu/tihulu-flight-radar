@@ -168,7 +168,7 @@
       <select id="rfSigmaKm" aria-label="Assumed Gaussian horizon edge standard deviation in km"><option value="5">5</option><option value="10">10</option><option value="20" selected>20</option><option value="40">40</option><option value="80">80</option><option value="150">150</option></select>
      </label>
     </div>
-    <div id="rfCoordinateReadout" class="rf-coordinate-readout" aria-live="polite"><span>Current RF model center: waiting for 4+ genuine RF aircraft</span><span>Best session center: not yet available</span></div>
+    <div id="rfCoordinateReadout" class="rf-coordinate-readout" aria-live="polite"><span id="rfCurrentCoordinates">Current RF model center: waiting for 4+ genuine RF aircraft</span><span id="rfBestCoordinates">Best session center: not yet available</span></div>
      <span id="rfCoverageStatus" aria-live="polite">Four or more independently positioned local RF aircraft required. A single SDR cannot give a measured location fix.</span>
     <span id="rfProgress" class="rf-progress" aria-live="polite">Model spread and center changes appear here as real RF observations accumulate.</span>
     <span id="rfBestStatus" class="rf-best-status" aria-live="polite">Best model spread: waiting for 4 independently positioned RF aircraft.</span>
