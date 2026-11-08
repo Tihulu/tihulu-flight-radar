@@ -71,7 +71,7 @@ test("Native loopback serves, package distributes, PWA caches all offline select
  assert.match(pkg,/web\/\*\.md/);
  for(const asset of ["flight_location_ui.mjs","location_search.mjs","cities-de-tr.json"])
   assert.ok(sw.includes('"./'+asset+'"'));
- assert.match(sw,/shell-v21/);
+ assert.match(sw,/shell-v22/);
  assert.doesNotMatch(src,/fetch\(["']https?:\/\/.*cities-de-tr/);
 });
 test("No auto GPS permission prompt and worldwide lookup is explicitly user-initiated",async()=>{
