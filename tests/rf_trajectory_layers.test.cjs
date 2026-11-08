@@ -2,6 +2,7 @@
 const test=require("node:test");
 const assert=require("node:assert/strict");
 const fs=require("node:fs");
+const vm=require("node:vm");
 const path=require("node:path");
 const root=path.join(__dirname,"../tihulu_flight_radar/web");
 const model=require(path.join(root,"receiver_coverage.js"));
@@ -63,4 +64,25 @@ test("RF model visuals expose independent live-follow and per-aircraft toggles",
  assert.match(css,/\.rf-aircraft-layer/);
  assert.match(html,/NOT a statistical accuracy\/error circle/);
  assert.doesNotMatch(read("receiver_coverage.js"),/navigator\.geolocation|\bfetch\s*\(/);
+});
+
+test("RF camera follows new model revisions and keeps zoom after first focus",()=>{
+ const js=read("app.js");
+ const source=js.match(/function focusRfModelWhenReady\(result\)\{[\s\S]*?\n\}/)?.[0];
+ assert.ok(source,"RF focus function exists");
+ const state={lat:50,lon:7,zoom:9,moved:false,autoFocused:false,centerLabel:""};
+ const first={status:"region",region:{lat:50.9,lon:7.2,extentKm:120}};
+ const second={status:"region",region:{lat:51.1,lon:7.8,extentKm:70}};
+ const ctx={state,first,second,Math};
+ vm.runInNewContext([
+  "let rfLocatorActive=true,rfLocatorFocused=false,rfFollowCenter=true,rfLastFollowModel=null;",
+  source,
+  "focusRfModelWhenReady(first);",
+  "const oldZoom=state.zoom;",
+  "focusRfModelWhenReady(second);",
+  "if(state.zoom!==oldZoom)throw Error('follow unexpectedly changed zoom');"
+ ].join("\n"),ctx);
+ assert.equal(state.lat,second.region.lat);
+ assert.equal(state.lon,second.region.lon);
+ assert.match(state.centerLabel,/NOT GPS/);
 });
