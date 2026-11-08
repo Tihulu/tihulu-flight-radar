@@ -669,6 +669,7 @@ async function checkReceiver(){
 }
 async function connect(){
  if(state.timer){clearInterval(state.timer);state.timer=null;}
+ let verifiedBridge=false; // only authenticated /api/status counts as paired
  try{
   if(state.connectionKind==="usb"){
    // The Connect button is for optional Internet feed configuration when the
@@ -695,6 +696,7 @@ async function connect(){
    state.base=getBase($("bridgeUrl").value.trim());
    state.token=token;state.connectionKind="bridge";
    await checkReceiver();
+   verifiedBridge=true;
   }else if(state.onlineFeed){
    state.base="";state.token="";state.connectionKind="internet";
    $("receiverStatus").textContent="Internet-only: no local hardware connected. Pair a bridge for antenna data.";
@@ -740,7 +742,7 @@ async function connect(){
    state.connected=true;displayUsbSnapshot();
    if(!state.timer)state.timer=setInterval(()=>{if(!document.hidden)refresh()},15000);
    notice("Optional Internet feed failed; direct WebUSB remains connected: "+e.message);
-  }else if(state.connectionKind==="bridge" && state.token){
+  }else if(state.connectionKind==="bridge" && state.token && verifiedBridge){
    // Preserve independently verified native bridge after an optional error.
    state.connected=true;
    connection(true,"Desktop receiver paired · no current aircraft data");
