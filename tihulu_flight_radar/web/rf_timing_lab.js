@@ -30,9 +30,11 @@ const TihuluTimingLab=(()=>{
   const maximum=Math.max(32,Math.min(MAX_EVENTS,Math.floor(limit)||MAX_EVENTS));
   let records=[],received=0,evicted=0,rejected=0,mode="live";
   let telemetry=null,sessionStartedMs=null,lastSample=-1;
+  let uniqueSession=new Set(),uniqueCapped=false;
   function reset(){
    records=[];received=0;evicted=0;rejected=0;telemetry=null;
    sessionStartedMs=null;lastSample=-1;mode="live";
+   uniqueSession=new Set();uniqueCapped=false;
   }
   function addBatch(events,stats){
    if(mode!=="live")return 0;
@@ -55,6 +57,8 @@ const TihuluTimingLab=(()=>{
     lastSample=e.sample_index;
     if(sessionStartedMs===null)sessionStartedMs=e.decoder_utc_ms;
     records.push(e);received++;added++;
+    if(uniqueSession.size<8192)uniqueSession.add(e.icao24);
+    else if(!uniqueSession.has(e.icao24))uniqueCapped=true;
    }
    if(records.length>maximum){
     const n=records.length-maximum;records.splice(0,n);evicted+=n;
@@ -77,7 +81,8 @@ const TihuluTimingLab=(()=>{
    const middle=median(intervals);
    const mad=middle===null?null:median(intervals.map(x=>Math.abs(x-middle)));
    return {format:FORMAT,mode,valid_frames:received,retained:records.length,
-    unique_aircraft:byId.size,evicted,rejected,
+    unique_aircraft:uniqueSession.size,unique_retained:byId.size,
+    unique_aircraft_capped:uniqueCapped,evicted,rejected,
     sampled_intervals:intervals.length,
     median_same_aircraft_interval_ms:middle,
     median_absolute_deviation_ms:mad,
@@ -107,6 +112,7 @@ const TihuluTimingLab=(()=>{
    }
    // Import never creates live RF observations, a GPS position, or a feed.
    reset();mode="offline_replay";records=clean;received=clean.length;
+   uniqueSession=new Set(clean.map(e=>e.icao24));
    lastSample=previous;telemetry=null;
    return summary();
   }
