@@ -150,7 +150,12 @@
    </div>
    <div class="tablewrap"><table><thead><tr><th>Flight / ICAO</th><th id="altitudeColumn">Altitude (ft)</th><th id="speedColumn">Speed (kt)</th><th>Source</th></tr></thead><tbody id="aircraftRows"></tbody></table></div>
    <section class="rf-coverage-panel" aria-label="Experimental RF coverage constraints">
-    <strong>Receiver coverage estimate</strong><span id="rfCoverageStatus" aria-live="polite">RF position data required. One SDR alone cannot determine a receiver's coordinates.</span>
+    <strong>Receiver coverage estimate</strong>
+    <div class="rf-history-controls">
+     <label title="Accumulate only locally verified RF positions while this receiver stays physically fixed"><input id="rfRemember" type="checkbox" checked> Assume stationary receiver · accumulate 2 h of RF observations</label>
+     <button id="rfClearHistory" type="button">Clear RF history</button>
+    </div>
+    <span id="rfCoverageStatus" aria-live="polite">RF position data required. One SDR alone cannot determine a receiver's coordinates.</span>
     <small>Only fresh antenna-positioned aircraft count. Rings show approximate radio-horizon limits, not measured ranges. Reverse MLAT requires synchronized external reference receivers.</small>
    </section>
    <section class="rf-lab-panel" aria-label="Offline RF Timing Laboratory">
