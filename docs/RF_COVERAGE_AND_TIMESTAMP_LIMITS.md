@@ -247,3 +247,49 @@ fed into the actual receiver location, map search region, aircraft records
 or exports. Validation tests are in `tests/rf_trajectory_layers.test.cjs`,
 `tests/aircraft_popup_rf_coverage.test.cjs`, and the cross-platform CI
 workflows. Actual SDR/Pop!_OS receiver tests remain required before merging.
+
+
+## 8 November 2026 — single-aircraft focus regression and time alignment correction
+
+**Verified root cause:** the radar's startup `chooseStartupTarget()`
+previously centered the map on the nearest **single** genuinely radio-received
+aircraft before a four-aircraft RF model existed. Clicking an aircraft row
+also recentered the map even while `Follow RF center` was active. These two
+camera paths were separate from the RF model and made a plane's last position
+appear to be the inferred receiver location.
+
+The startup map now stays at the ordinary fallback or explicitly permitted
+device location until **four distinct RF-positioned airplanes** yield a
+compatible RF-feasible region. Four-aircraft RF follow is default ON, fits
+the initial model spread once, and updates center without resetting zoom.
+While following the model, clicking an aircraft in the table selects it
+without changing the map center. An explicit `Center aircraft` action
+disables RF follow and moves to that aircraft. Any lost/invalid model is
+marked as unresolved rather than labeling a retained camera position as
+a current estimated receiver site.
+
+**Geometry and timing:** the grid longitude reference is the circular mean
+of the independently received RF aircraft, not the first/newest airplane.
+The feasible-cell centroid is area weighted, and every accepted local radio
+position constraint is tested geodesically. The evidence panel lists the
+independent ICAO aircraft, their contributions, backend-reported positional
+age, native RF speed when present, and model-derived center-to-plane versus
+radio-horizon distances. These are not measured ranges or GPS accuracy.
+Permutation tests verify that changing which airplane is last does not
+change the model center, including with Internet-only aircraft in the feed.
+
+For a real native readsb snapshot, the provisional observation epoch used
+to time-order recorded fixes is `snapshot_capture_ms - seen_pos * 1000`.
+The original radio aircraft lat/lon is stored at that approximate epoch.
+Reported RF speed and heading validate plausible movement between *real*
+position fixes and control sampling density. We must **not** turn elapsed
+JavaScript polling delay, JSON age, ADS-B decoding latency or receiver USB
+buffering into a propagation time or geometric range: no calibrated
+transmission-time epoch is present. Nor do we fabricate additional RF
+aircraft coordinates by projecting positions forward.
+
+The dedicated `tests/rf_multiaircraft_center_regression.test.cjs` protects
+the multi-aircraft center against input ordering and the old one-plane
+auto-focus behavior. This was checked by automated CI with synthetic
+fixtures; a real multi-aircraft local SDR capture is still needed to
+validate actual feasibility and effective receiver position uncertainty.
