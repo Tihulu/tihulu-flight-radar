@@ -412,6 +412,18 @@ function browserSourceResult(mode=String($("mode").value),internetError=null){
   }
  };
 }
+function displayUsbSnapshot(){
+ if(state.connectionKind!=="usb")return;
+ const result=browserSourceResult();
+ state.data=result.aircraft;
+ updateCounters(result.counts);feedSummary(result.sources);recordTracks();rememberRfPlanes();
+ applyStartupPriority();
+ renderTable();paint();
+ $("receiverStatus").textContent="Direct WebUSB 1090 MHz receiver · "+
+   state.usbMessageCount+" CRC-verified Mode S messages. RF access is held only by this browser tab.";
+ $("lastUpdate").textContent=formatTime(result.generated_at);
+ $("sourceCredits").textContent=result.sources.internet.attribution;
+}
 // The RF timing lab runs fully locally: no API calls, no simulated packets,
 // no automatic storage or upload. Imported session files never reach the map.
 const timingLab=TihuluTimingLab.createSession();
@@ -547,18 +559,7 @@ $("timingImport").onchange=async()=>{
 };
 renderTimingLab();
 
-function displayUsbSnapshot(){
- if(state.connectionKind!=="usb")return;
- const result=browserSourceResult();
- state.data=result.aircraft;
- updateCounters(result.counts);feedSummary(result.sources);recordTracks();rememberRfPlanes();
- applyStartupPriority();
- renderTable();paint();
- $("receiverStatus").textContent="Direct WebUSB 1090 MHz receiver · "+
-   state.usbMessageCount+" CRC-verified Mode S messages. RF access is held only by this browser tab.";
- $("lastUpdate").textContent=formatTime(result.generated_at);
- $("sourceCredits").textContent=result.sources.internet.attribution;
-}
+
 window.tihuluUsbCanStart=()=>state.connectionKind!=="bridge";
 window.tihuluUsbStarted=()=>{
  state.usbSnapshot={aircraft:[],messages:0,updatedAt:Date.now()};
