@@ -1128,6 +1128,7 @@ $("popupClose").onclick=closePopup;
 $("popupCenter").onclick=()=>{
  const found=state.data.find(a=>a.hex===state.selected);
  if(found&&isPositioned(found)){
+  disableRfFollow(); // Explicit user choice, never an RF model estimate.
   state.lat=found.lat;state.lon=found.lon;state.moved=true;
   state.centerLabel="Focused on selected "+(found.flight||found.hex);
   paint();positionPopup(found);
@@ -1167,7 +1168,9 @@ function renderTable(){
    if(index===1)td.style.color=altitudeColor(a);
    tr.append(td);
   }
-  tr.onclick=()=>choose(a,{center:true});
+  // Keep RF model centering when Follow RF center is selected.
+  // The dedicated Center aircraft button remains an explicit opt-out.
+  tr.onclick=()=>choose(a,{center:!rfFollowCenter});
   rows.append(tr);
  }
  if(state.selected){
@@ -1184,6 +1187,7 @@ function choose(a,{center=false}={}){
   displayed_position_source:a.position_source,observations:a.observations
  },null,2);
  if(center&&isPositioned(a)){
+  disableRfFollow(); // No hidden competition with the RF model camera.
   state.lat=a.lat;state.lon=a.lon;state.zoom=Math.max(state.zoom,9);
   state.moved=true;state.centerLabel="Selected "+(a.flight||a.hex||"aircraft");
  }
