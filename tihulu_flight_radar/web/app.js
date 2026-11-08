@@ -654,11 +654,18 @@ function connection(active,text){
 }
 async function checkReceiver(){
  const r=await api("/api/status");
- $("receiverStatus").textContent=(r.active?"Decoder active — ":"Decoder inactive — ")+r.detail+
-   (r.control_enabled?" · controls enabled":" · controls read-only")+
-   (r.startup_error ? " · START FAILED: "+r.startup_error : "")+
-   ". An active decoder does not prove RF reception.";
- for(const id of ["start","stop","restart"])$(id).disabled=!r.control_enabled;
+ const canControl=Boolean(r.control_enabled)&&r.mode!=="Remote JSON";
+ $("receiverStatus").textContent=(r.active?"Decoder running — ":"Decoder stopped — ")+r.detail+
+   (canControl?" · local controls available":" · receiver controls read-only")+
+   (r.startup_error?" · START FAILED: "+r.startup_error:"")+
+   (!r.active&&canControl
+     ?" · Press Start for real local 1090 MHz ADS-B. Release this SDR from SatDump/Satellite Center first."
+     :"")+
+   " Internet aircraft are independent; decoder activity alone does not prove RF reception.";
+ $("receiverStatus").dataset.pairState="paired";
+ $("start").disabled=!canControl||Boolean(r.active);
+ $("stop").disabled=!canControl||!r.active;
+ $("restart").disabled=!canControl||!r.active;
 }
 async function connect(){
  if(state.timer){clearInterval(state.timer);state.timer=null;}
