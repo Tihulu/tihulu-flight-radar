@@ -30,29 +30,44 @@ test("Four real positioned RF aircraft produce possible horizon area, not a GPS 
  assert.ok(result.region.possibleSamples.length>1);
  assert.equal(Object.hasOwn(result,"receiverGPS"),false);
 });
-test("Three valid RF aircraft produce modeled area but never a measured receiver fix",()=>{
+test("Four local positioned RF aircraft yield possible area; three are explicitly insufficient",()=>{
  const radios=[
   sample("a00001",50.7,6.7),sample("a00002",50.2,7.5),
-  sample("a00003",51.1,6.2)
+  sample("a00003",51.1,6.2),sample("a00004",50.6,7.9)
  ];
+ assert.equal(coverage.MIN_INDEPENDENT,4);
+ assert.equal(coverage.compute(radios.slice(0,3)).status,"insufficient");
  const r=coverage.compute(radios);
  assert.equal(r.status,"region");
- assert.equal(r.count,3);
- assert.ok(Number.isFinite(r.region.lat) && Number.isFinite(r.region.lon));
+ assert.equal(r.count,4);
+ assert.equal(r.liveCount,4);
+ assert.equal(r.historyCount,0);
+ assert.ok(Number.isFinite(r.region.lat)&&Number.isFinite(r.region.lon));
  assert.equal(r.region.kind,"possible-area-centroid");
  assert.equal(r.region.accuracyMeters,null);
  assert.equal(r.region.confidence,null);
  assert.equal(Object.hasOwn(r,"receiverGPS"),false);
- const internet=sample("a00004",50.6,7.9,"internet");
- assert.equal(coverage.compute([...radios,internet]).count,3);
- const mixed=sample("a00005",50.4,7.7);
+ const internet=sample("a00005",50.6,7.9,"internet");
+ assert.equal(coverage.compute([...radios,internet]).count,4);
+ const mixed=sample("a00006",50.4,7.7);
  mixed.sources.push("internet");
  mixed.position_source="internet";
- assert.equal(coverage.compute([...radios,mixed]).count,3);
- const stale=sample("a00006",50.4,7.7);
+ assert.equal(coverage.compute([...radios,mixed]).count,4);
+ const stale=sample("a00007",50.4,7.7);
  stale.observations.antenna.seen_pos=90;
- assert.equal(coverage.compute([...radios,stale]).count,3);
- assert.equal(coverage.compute([radios[0],radios[1]]).status,"insufficient");
+ assert.equal(coverage.compute([...radios,stale]).count,4);
+});
+test("Session RF history contributes independent old aircraft only at a fixed receiver",()=>{
+ const current=[sample("a00001",50.7,6.7),sample("a00002",50.2,7.5)];
+ const old=sample("a00003",51.1,6.2),old2=sample("a00004",50.6,7.9);
+ const record1=coverage.recordedCircle(old),record2=coverage.recordedCircle(old2);
+ const eligible=coverage.compute(current,[record1,record2]);
+ assert.equal(eligible.count,4);
+ assert.equal(eligible.liveCount,2);
+ assert.equal(eligible.historyCount,2);
+ assert.equal(eligible.status,"region");
+ assert.equal(coverage.compute(current,[record1,{...record2,capturedAtMs:Date.now()-3*3600000}]).status,"insufficient");
+ assert.equal(coverage.compute(current,[record1,record1]).status,"insufficient");
 });
 test("Unit selectors, close-on-outside click, raw JSON and timing claims in common web/Qt UI",()=>{
  const html=read("index.html"),js=read("app.js"),css=read("style.css");
@@ -111,7 +126,9 @@ test("RF model is offline and the toggle doesn't depend on GPS or ring checkbox"
  assert.match(js,/function paintRfLocator\(result\)/);
  assert.match(js,/paintRfLocator\(model\); \/\/ independent of the optional ring display/);
  assert.match(js,/function focusRfModelWhenReady\(result\)/);
- assert.match(js,/const result=coverageResult\(\);\s*if\(result\.circles\.length<3\)return;/);
+ assert.match(js,/function paintRfCoverage\(result\)/);
+ assert.match(js,/rfConvexHull\(samples\)/);
+ assert.match(html,/smoothMotion/);
  assert.doesNotMatch(model,/\bfetch\s*\(|navigator\.geolocation|\bXMLHttpRequest\b|WebSocket/);
  assert.match(html,/not your measured position or GPS accuracy/);
 });
