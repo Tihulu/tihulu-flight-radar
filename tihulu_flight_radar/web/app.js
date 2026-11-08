@@ -808,7 +808,16 @@ function showVerticalRate(a){
 // The assumption is valid only while the RF receiver stays physically fixed.
 const rfHistory=new Map();
 let rfHistoryRevision=0,coverageCacheRows=null,coverageCacheResult=null,coverageCacheRevision=-1;
-let rfLocatorActive=true,rfLocatorFocused=true; // automatic visual area; never steal map focus
+let rfLocatorActive=true,rfLocatorFocused=true; // layer on; camera is not automatically stolen
+let rfFollowCenter=false,rfLastFollowModel=null,rfLastProgressModel=null;
+let rfLastRegion=null,rfModelProgressText="Waiting for positioned RF aircraft.";
+const rfSelectedPlanes=new Set();
+let rfAircraftListSignature="";
+const RF_PLANE_COLORS=["#61c5e7","#8dafff","#b5a1f0","#6ddbbd","#f69bba","#eeaea0"];
+function rfPlaneColor(hex){
+ let hash=0;for(const c of hex)hash=(hash*31+c.charCodeAt(0))>>>0;
+ return RF_PLANE_COLORS[hash%RF_PLANE_COLORS.length];
+}
 function rememberRfPlanes(){
  if(!$("rfRemember").checked)return;
  let changed=false,now=Date.now();
@@ -844,6 +853,55 @@ function coverageResult(){
  }
  return coverageCacheResult;
 }
+function renderRfPlaneLayers(result){
+ const layers=result.aircraftCircles||[];
+ const signature=layers.map(item=>[
+  item.hex,item.flight,item.samples,item.circle.lat.toFixed(3),
+  item.circle.lon.toFixed(3),item.circle.radiusKm.toFixed(1)
+ ].join(":")).join("|");
+ if(signature===rfAircraftListSignature)return;
+ rfAircraftListSignature=signature;
+ const node=$("rfAircraftLayers");node.replaceChildren();
+ if(!layers.length){node.textContent="No genuinely radio-positioned aircraft yet.";return;}
+ for(const item of layers){
+  const label=document.createElement("label");
+  label.className="rf-aircraft-layer";
+  const input=document.createElement("input");input.type="checkbox";
+  input.value=item.hex;input.checked=rfSelectedPlanes.has(item.hex);
+  input.setAttribute("aria-label","Show RF horizon for "+item.hex);
+  input.addEventListener("change",()=>{
+   if(input.checked)rfSelectedPlanes.add(item.hex);else rfSelectedPlanes.delete(item.hex);
+   paint();
+  });
+  const swatch=document.createElement("span");swatch.className="rf-aircraft-swatch";
+  swatch.style.background=rfPlaneColor(item.hex);
+  const title=document.createElement("span");
+  title.textContent=(item.flight||item.hex).trim()+" · "+item.hex.toUpperCase()+
+   " · "+item.samples+" real RF fix"+(item.samples===1?"":"es");
+  label.append(input,swatch,title);node.append(label);
+ }
+}
+$("rfAllPlanes").onclick=()=>{
+ for(const item of coverageResult().aircraftCircles||[])rfSelectedPlanes.add(item.hex);
+ for(const cb of $("rfAircraftLayers").querySelectorAll('input[type="checkbox"]'))cb.checked=true;
+ paint();
+};
+$("rfNoPlanes").onclick=()=>{
+ rfSelectedPlanes.clear();
+ for(const cb of $("rfAircraftLayers").querySelectorAll('input[type="checkbox"]'))cb.checked=false;
+ paint();
+};
+for(const id of ["rfFill","rfHatch","rfModelCircle","rfModelPin"])
+ $(id).addEventListener("change",()=>paint());
+$("rfFollow").onchange=()=>{
+ rfFollowCenter=$("rfFollow").checked;
+ if(rfFollowCenter){rfLocatorActive=true;rfLocatorFocused=false;rfLastFollowModel=null;}
+ paint();
+};
+function disableRfFollow(){
+ if(!rfFollowCenter)return;
+ rfFollowCenter=false;$("rfFollow").checked=false;
+}
 $("rfRemember").onchange=()=>{
  if(!$("rfRemember").checked){rfHistory.clear();rfHistoryRevision++;}
  else rememberRfPlanes();
@@ -855,6 +913,25 @@ $("rfClearHistory").onclick=()=>{
 };
 function renderCoverageStatus(){
  const result=coverageResult();
+ renderRfPlaneLayers(result);
+ if(result!==rfLastProgressModel){
+  rfLastProgressModel=result;
+  if(result.status==="region"){
+   const r=result.region;
+   if(rfLastRegion){
+    const shiftKm=TihuluRFCoverage.distanceKm(rfLastRegion,r);
+    const changed=r.extentKm-rfLastRegion.extentKm;
+    rfModelProgressText="Sampled model spread "+
+     (changed<0?"narrowed":changed>0?"widened":"unchanged")+
+     " by "+Math.abs(Math.round(changed))+" km · center shifted "+
+     shiftKm.toFixed(1)+" km on latest RF update. "+
+     "This is NOT measured accuracy or a statistical error radius.";
+   }else rfModelProgressText="RF feasible region initialized; center and sampled spread update as genuine fixes arrive.";
+   rfLastRegion={lat:r.lat,lon:r.lon,extentKm:r.extentKm};
+  }else rfModelProgressText="RF area unavailable ("+result.status+
+    "). No center or error estimate is inferred.";
+ }
+ $("rfProgress").textContent=rfModelProgressText;
  const label=$("rfCoverageStatus");
  const info={
   insufficient:result.count+"/4 independently positioned local RF aircraft ("+(result.liveCount||0)+" live, "+(result.historyCount||0)+" stationary-history). Internet-only aircraft, missing radio positions and Mode S without coordinates cannot qualify.",
@@ -873,11 +950,12 @@ function renderCoverageStatus(){
   output.textContent="RF area overlay is off. Enable RF area to see the modeled region without drawing giant horizon rings.";
  }else if(result.status==="region"){
   const r=result.region;
-  output.textContent="MODELED POSSIBLE-AREA CENTER (NOT GPS): "+
-   r.lat.toFixed(2)+"°, "+r.lon.toFixed(2)+"° · Model extent up to ~"+
+  output.textContent="LIVE MODEL CENTER (NOT GPS): "+
+   r.lat.toFixed(4)+"°, "+r.lon.toFixed(4)+"° · Sampled spread-circle radius ~"+
    Math.round(r.extentKm)+" km from this center · "+
-   result.count+" independently positioned RF aircraft. This is not a measured "+
-   "receiver coordinate, probability radius, or accuracy claim. "+
+   result.count+" independent RF aircraft and "+result.constraintsUsed+
+   " real position constraints. Circle radius is a map-model bound, not "+
+   "measured error, statistical confidence or GPS accuracy. "+
    "No manual latitude/longitude, GPS, or Internet data used.";
  }else{
   output.textContent=result.status==="insufficient"
