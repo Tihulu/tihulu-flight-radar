@@ -57,7 +57,47 @@ const TihuluRFCoverage = (() => {
   if(radiusKm===null)return null;
   return {hex:a.hex.toLowerCase(),flight:String(a.flight||a.hex).trim(),
    lat:rf.lat,lon:rf.lon,radiusKm,altitudeFeet,
+   // Supporting metadata of a verified RF fix, never a measured range.
+   speedKt:Number.isFinite(rf.gs)?rf.gs:Number.isFinite(a.gs)?a.gs:null,
+   headingDeg:Number.isFinite(rf.track)?rf.track:Number.isFinite(a.track)?a.track:null,
+   positionAgeSeconds:rf.seen_pos,
    recorded_rf:true,capturedAtMs};
+ }
+ // Keep measured radio positions only. Speed and direction control adaptive
+ // sampling and detect implausible jumps, NOT fake extrapolated RF fixes.
+ function trackSampleDecision(previous,next){
+  if(!previous)return {keep:true,reason:"first-received"};
+  if(previous.hex!==next.hex||!point(previous)||!point(next)||
+     !Number.isFinite(previous.capturedAtMs)||!Number.isFinite(next.capturedAtMs))
+   return {keep:false,reason:"invalid-track"};
+  const previousT=previous.capturedAtMs-(previous.positionAgeSeconds||0)*1000;
+  const nextT=next.capturedAtMs-(next.positionAgeSeconds||0)*1000;
+  const dt=(nextT-previousT)/1000;
+  if(!Number.isFinite(dt)||dt<=0)return {keep:false,reason:"non-monotonic"};
+  const traveledKm=distanceKm(previous,next);
+  const speeds=[previous.speedKt,next.speedKt].filter(x=>Number.isFinite(x)&&x>=0&&x<=1300);
+  const fastestKmH=speeds.length?Math.max(...speeds)*1.852:1300;
+  // Slack permits ordinary reporting jitter, changing headings and lost messages.
+  if(traveledKm>Math.max(1300,fastestKmH*1.8)*dt/3600+5)
+   return {keep:false,reason:"implausible-rf-jump"};
+  const turning=Number.isFinite(previous.headingDeg)&&Number.isFinite(next.headingDeg)
+   ?Math.abs(((next.headingDeg-previous.headingDeg+540)%360)-180)>=25:false;
+  // Approx. 40 seconds' motion, bounded 5–20 km. More turns improve
+  // geometric variety, so sample those at the 5 km threshold.
+  const spacingKm=turning?5:Math.max(5,Math.min(20,fastestKmH*40/3600));
+  return {keep:traveledKm>=spacingKm,
+   reason:traveledKm>=spacingKm?"new-path-constraint":"redundant-rf-position",
+   traveledKm,elapsedSeconds:dt,spacingKm};
+ }
+ function groupAircraftCircles(records){
+  const groups=new Map();
+  for(const record of records){
+   let group=groups.get(record.hex);
+   if(!group){group={hex:record.hex,flight:record.flight,
+    samples:0,circle:record};groups.set(record.hex,group);}
+   group.samples++;
+  }
+  return [...groups.values()].map(g=>({...g,latestAgeSeconds:g.circle.ageSeconds}));
  }
  function compute(aircraft,history=[]){
   const records=[],seen=new Set();
@@ -93,8 +133,9 @@ const TihuluRFCoverage = (() => {
    seen.add(hex);
   }
   records.sort((a,b)=>a.ageSeconds-b.ageSeconds);
+  const aircraftCircles=groupAircraftCircles(records);
   if(seen.size<MIN_INDEPENDENT)return {status:"insufficient",count:seen.size,
-   liveCount,historyCount:seen.size-liveCount,required:MIN_INDEPENDENT,circles:[],region:null};
+   liveCount,historyCount:seen.size-liveCount,required:MIN_INDEPENDENT,circles:[],aircraftCircles,region:null};
   // Bound workload: use up to 64 recent *positions* from at least four
   // independent aircraft. Multiple positions from ONE plane do not satisfy
   // the minimum. Only three circles are drawn as optional outlines.
@@ -124,9 +165,9 @@ const TihuluRFCoverage = (() => {
   const maxLon=Math.min(...bounds.map(b=>b.east));
   if(minLat>=maxLat||minLon>=maxLon)return {
    status:"no_overlap",count:seen.size,liveCount,historyCount:seen.size-liveCount,
-   required:MIN_INDEPENDENT,constraintsUsed:constraints.length,circles,region:null};
+   required:MIN_INDEPENDENT,constraintsUsed:constraints.length,circles,aircraftCircles,region:null};
   const points=[];
-  const STEPS=48;
+  const STEPS=80; // finer grid reduces model-centroid quantization jitter
   for(let i=0;i<=STEPS;i++)for(let j=0;j<=STEPS;j++){
    const lat=minLat+(maxLat-minLat)*i/STEPS;
    const unwrappedLon=minLon+(maxLon-minLon)*j/STEPS;
@@ -135,14 +176,14 @@ const TihuluRFCoverage = (() => {
   }
   // A vanishingly small sampled overlap is not a safe coordinate estimate.
   if(points.length<3)return {status:"unresolved",count:seen.size,liveCount,historyCount:seen.size-liveCount,
-   required:MIN_INDEPENDENT,constraintsUsed:constraints.length,circles,region:null};
+   required:MIN_INDEPENDENT,constraintsUsed:constraints.length,circles,aircraftCircles,region:null};
   const centerLat=points.reduce((sum,p)=>sum+p.lat,0)/points.length;
   const centerUnwrappedLon=points.reduce((sum,p)=>
    sum+longitudeNear(p.lon,originLon),0)/points.length;
   const center={lat:centerLat,lon:((centerUnwrappedLon+540)%360)-180};
   const extentKm=Math.max(...points.map(p=>distanceKm(center,p)));
   return {status:"region",count:seen.size,liveCount,historyCount:seen.size-liveCount,
-   required:MIN_INDEPENDENT,constraintsUsed:constraints.length,circles,
+   required:MIN_INDEPENDENT,constraintsUsed:constraints.length,circles,aircraftCircles,
    region:{...center,extentKm:Math.max(10,Math.ceil(extentKm/10)*10),
     sampleCount:points.length,possibleSamples:points,
     kind:"possible-area-centroid",accuracyMeters:null,confidence:null}};
@@ -165,7 +206,8 @@ const TihuluRFCoverage = (() => {
    maxKm:Math.ceil(maxKm/10)*10,
    kind:"model-grid-distance-interval",measured:false};
  }
- return {point,distanceKm,horizonKm,horizonPoints,eligible,recordedCircle,compute,modelDistanceInterval,MIN_INDEPENDENT};
+ return {point,distanceKm,horizonKm,horizonPoints,eligible,recordedCircle,
+  trackSampleDecision,groupAircraftCircles,compute,modelDistanceInterval,MIN_INDEPENDENT};
 })();
 if(typeof module!=="undefined"&&module.exports)module.exports=TihuluRFCoverage;
 if(typeof window!=="undefined")window.TihuluRFCoverage=TihuluRFCoverage;
