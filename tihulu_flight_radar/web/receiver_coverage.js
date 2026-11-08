@@ -61,7 +61,7 @@ const TihuluRFCoverage = (() => {
    seen.add(a.hex.toLowerCase());
   }
   records.sort((a,b)=>a.ageSeconds-b.ageSeconds);
-  if(records.length<3)return {status:"insufficient",count:records.length,circles:[],region:null};
+  if(records.length<4)return {status:"insufficient",count:records.length,circles:[],region:null};
   // Bound workload: choose newest independent RF aircraft, max 6 rings.
   const circles=records.slice(0,6);
   // Equirectangular bounds only choose a candidate search grid; actual cell
@@ -83,7 +83,7 @@ const TihuluRFCoverage = (() => {
   const extentKm=Math.max(...points.map(p=>distanceKm(center,p)));
   return {status:"region",count:records.length,circles,
    region:{...center,extentKm:Math.ceil(extentKm/10)*10,
-    sampleCount:points.length}};
+    sampleCount:points.length,possibleSamples:points}};
  }
  return {point,distanceKm,horizonKm,horizonPoints,eligible,compute};
 })();
