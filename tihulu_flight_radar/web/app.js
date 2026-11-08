@@ -808,7 +808,7 @@ function showVerticalRate(a){
 // The assumption is valid only while the RF receiver stays physically fixed.
 const rfHistory=new Map();
 let rfHistoryRevision=0,coverageCacheRows=null,coverageCacheResult=null,coverageCacheRevision=-1;
-let rfLocatorActive=false,rfLocatorFocused=false;
+let rfLocatorActive=true,rfLocatorFocused=true; // automatic visual area; never steal map focus
 function rememberRfPlanes(){
  if(!$("rfRemember").checked)return;
  let changed=false,now=Date.now();
@@ -854,10 +854,11 @@ function renderCoverageStatus(){
  };
  label.textContent=info[result.status]||"Insufficient evidence";
  const output=$("rfLocateStatus"),button=$("rfLocate");
- button.textContent=rfLocatorActive?"Hide RF estimate":"RF locate · 4+ aircraft";
+ button.textContent=rfLocatorActive?"RF area · ON":"RF area · OFF";
+ $("rfFocus").disabled=result.status!=="region";
  button.setAttribute("aria-pressed",String(rfLocatorActive));
  if(!rfLocatorActive){
-  output.textContent="RF locating is off. Press RF locate to display a possible-area center, with or without rings, using local radio aircraft only.";
+  output.textContent="RF area overlay is off. Enable RF area to see the modeled region without drawing giant horizon rings.";
  }else if(result.status==="region"){
   const r=result.region;
   output.textContent="MODELED POSSIBLE-AREA CENTER (NOT GPS): "+
@@ -878,9 +879,13 @@ function renderCoverageStatus(){
 }
 $("rfLocate").onclick=()=>{
  rfLocatorActive=!rfLocatorActive;
- rfLocatorFocused=false;
+ rfLocatorFocused=true;
  paint();
- if(rfLocatorActive)notice("RF possible-area model enabled: only local positioned ADS-B aircraft, no GPS or manual coordinates. The center is not an actual receiver position fix.");
+ if(rfLocatorActive)notice("RF possible-area overlay enabled: positioned antenna aircraft only. Use Focus RF area to center the map; not GPS.");
+};
+$("rfFocus").onclick=()=>{
+ rfLocatorActive=true;rfLocatorFocused=false;paint();
+ notice("Map centered on a modeled RF feasible area, NOT your measured position.");
 };
 function focusRfModelWhenReady(result){
  if(!rfLocatorActive||rfLocatorFocused||result.status!=="region")return;
