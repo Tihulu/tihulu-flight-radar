@@ -310,3 +310,13 @@ html.native #receiverStatus[data-pair-state="failed"]{color:#ffbc99}
 .rf-evidence-line>span:first-child{color:#e3f3f7;font-weight:600}
 .rf-evidence-line>span:last-child{color:#9fcedc}
 .rf-evidence>small{display:block;margin-top:7px;color:#b2cbd5;line-height:1.5}
+
+/* RF model history and optional uncalibrated Gaussian-horizon visualization */
+.rf-best-status{display:block;margin-top:6px;padding:8px 10px;
+ border:1px solid #806b9c;border-left:3px solid #cfb7f3;border-radius:6px;
+ background:#201a32;color:#dfcfff;font-size:11px;line-height:1.5;
+ font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.rf-view-controls select{background:#102e42;color:#e8f3f9;border:1px solid #47738b;
+ border-radius:5px;padding:4px 6px;max-width:100%;font-size:11px}
+.rf-psf-note{display:block;margin:8px 2px 3px;color:#c6d7eb;
+ font-size:10px;line-height:1.55;overflow-wrap:anywhere}
