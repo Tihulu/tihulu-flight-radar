@@ -4,7 +4,7 @@
 // (even "I/R" rows whose displayed coordinates came from the Internet) cannot
 // be used to infer any physical receiver position.
 const TihuluRFCoverage = (() => {
- const RAD=Math.PI/180, EARTH_KM=6371.0088;
+ const RAD=Math.PI/180, EARTH_KM=6371.0088, MIN_INDEPENDENT=4;
  function point(p){
   return p && Number.isFinite(p.lat) && Number.isFinite(p.lon) &&
    Math.abs(p.lat)<=85 && Math.abs(p.lon)<=180;
@@ -72,6 +72,7 @@ const TihuluRFCoverage = (() => {
     ageSeconds:Math.max(a.seen_pos,rf.seen_pos)});
    seen.add(a.hex.toLowerCase());
   }
+  const liveCount=records.length;
   // Optional fixed-receiver session history, gathered only after eligible().
   // Drop observations older than two hours, cap model inputs and keep their
   // historical status separate from the current aircraft map.
@@ -88,12 +89,13 @@ const TihuluRFCoverage = (() => {
    seen.add(old.hex);
   }
   records.sort((a,b)=>a.ageSeconds-b.ageSeconds);
-  if(records.length<3)return {status:"insufficient",count:records.length,circles:[],region:null};
+  if(records.length<MIN_INDEPENDENT)return {status:"insufficient",count:records.length,
+   liveCount,historyCount:records.length-liveCount,required:MIN_INDEPENDENT,circles:[],region:null};
   // Bound workload: choose newest independent RF aircraft, max 6 rings.
   // Apply more genuinely independent RF constraints as aircraft count grows;
   // only draw six circles to avoid visual clutter. This is not true accuracy.
   const constraints=records.slice(0,64);
-  const circles=constraints.slice(0,6);
+  const circles=constraints.slice(0,6); // for diagnostics; UI draws only 3 optional outlines
   // No receiver latitude/longitude is an input. Unwrap longitude only to
   // build the intersection grid (crossing the date line is supported).
   // Actual acceptance remains a geodesic distance test for EVERY verified RF
@@ -117,7 +119,8 @@ const TihuluRFCoverage = (() => {
   const minLon=Math.max(...bounds.map(b=>b.west));
   const maxLon=Math.min(...bounds.map(b=>b.east));
   if(minLat>=maxLat||minLon>=maxLon)return {
-   status:"no_overlap",count:records.length,constraintsUsed:constraints.length,circles,region:null};
+   status:"no_overlap",count:records.length,liveCount,historyCount:records.length-liveCount,
+   required:MIN_INDEPENDENT,constraintsUsed:constraints.length,circles,region:null};
   const points=[];
   const STEPS=48;
   for(let i=0;i<=STEPS;i++)for(let j=0;j<=STEPS;j++){
@@ -127,19 +130,20 @@ const TihuluRFCoverage = (() => {
    if(constraints.every(c=>distanceKm(p,c)<=c.radiusKm))points.push(p);
   }
   // A vanishingly small sampled overlap is not a safe coordinate estimate.
-  if(points.length<3)return {status:"unresolved",count:records.length,
-   constraintsUsed:constraints.length,circles,region:null};
+  if(points.length<3)return {status:"unresolved",count:records.length,liveCount,historyCount:records.length-liveCount,
+   required:MIN_INDEPENDENT,constraintsUsed:constraints.length,circles,region:null};
   const centerLat=points.reduce((sum,p)=>sum+p.lat,0)/points.length;
   const centerUnwrappedLon=points.reduce((sum,p)=>
    sum+longitudeNear(p.lon,originLon),0)/points.length;
   const center={lat:centerLat,lon:((centerUnwrappedLon+540)%360)-180};
   const extentKm=Math.max(...points.map(p=>distanceKm(center,p)));
-  return {status:"region",count:records.length,constraintsUsed:constraints.length,circles,
+  return {status:"region",count:records.length,liveCount,historyCount:records.length-liveCount,
+   required:MIN_INDEPENDENT,constraintsUsed:constraints.length,circles,
    region:{...center,extentKm:Math.max(10,Math.ceil(extentKm/10)*10),
     sampleCount:points.length,possibleSamples:points,
     kind:"possible-area-centroid",accuracyMeters:null,confidence:null}};
  }
- return {point,distanceKm,horizonKm,horizonPoints,eligible,recordedCircle,compute};
+ return {point,distanceKm,horizonKm,horizonPoints,eligible,recordedCircle,compute,MIN_INDEPENDENT};
 })();
 if(typeof module!=="undefined"&&module.exports)module.exports=TihuluRFCoverage;
 if(typeof window!=="undefined")window.TihuluRFCoverage=TihuluRFCoverage;
