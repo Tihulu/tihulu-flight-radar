@@ -195,3 +195,55 @@ contains genuine positioned RF aircraft.
 Independent tests enforce these rules in `tests/aircraft_popup_rf_coverage.test.cjs`
 and `tests/map_motion.test.cjs`. Hardware validation with the user's SDR is
 still pending; GitHub Actions do not confirm real RF reception.
+
+
+## 8 November 2026 — cumulative RF flight paths and live map layers
+
+The session-only stationary receiver model now uses actual received trajectories.
+`recordedCircle()` records true RF-sourced aircraft positions plus reported
+ground speed and direction (when available). `trackSampleDecision()` compares
+the elapsed time, measured movement and plausible speed envelope, rejecting
+duplicate geographic fixes and implausible jumps. Heading changes allow
+denser sampling at turns. No synthetic or interpolated aircraft position can
+be fed to the RF model. The separate smooth radar animation still remains
+*display only*. A two-hour, 64-observation cap applies; when trimming, retain
+independently identified aircraft before old redundant observations from one
+aircraft. Multiple observations from the same ICAO add constraints, but
+never count as multiple independent aircraft.
+
+RF possible-area cells are sampled on a finer 80×80 grid when four or more
+independent positioned RF aircraft are present. A *model center* is the
+centroid of compatible sampled cells, with an approximate *model spread
+circle* extending to the furthest sampled feasible cell (rounded outward).
+This is **NOT** a statistical confidence circle, known GPS error margin,
+measured antenna position or actual measured signal range. The model may
+remain broad, move or become invalid as verified constraints arrive.
+The on-screen narrowing/widening and center-shift readouts describe **model
+changes**, not improving physical geolocation accuracy.
+
+Map controls:
+- **Focus RF area**: one-shot recenter to the currently modeled region.
+- **Follow RF center**: opt-in continuous camera follow on each changed RF
+  model result. Manual map drag, zoom, search region or aircraft focus
+  cancels follow. Existing zoom is maintained during subsequent updates.
+- **Feasible area**: transparent cyan model polygon (default ON).
+- **Hatched area**: clipped diagonal texture within that polygon (optional).
+- **Model spread circle**: explicit optional white dashed modeled upper
+  spread from the model centroid (default ON); **Center pin** is independent
+  and may be hidden (default ON).
+- **Individual aircraft horizon circles**: generated from each independent
+  aircraft's most recent genuinely received radio position, available as
+  separate color-coded checkboxes with Show all / Hide all. They are only
+  propagation upper-bound outlines; they are **not** measurements of the
+  receiver-to-plane distance. They can be displayed even before enough
+  independent aircraft are available to derive a feasible model area.
+- Optional legacy **RF horizon outlines** retain three faint diagnostic rings
+  as a convenience control. All overlay colors are distinct from the live
+  altitude color scheme.
+
+These controls do not require Internet or device geolocation. All RF
+observations remain source-verified; the displayed model is never silently
+fed into the actual receiver location, map search region, aircraft records
+or exports. Validation tests are in `tests/rf_trajectory_layers.test.cjs`,
+`tests/aircraft_popup_rf_coverage.test.cjs`, and the cross-platform CI
+workflows. Actual SDR/Pop!_OS receiver tests remain required before merging.
