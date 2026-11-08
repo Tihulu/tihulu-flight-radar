@@ -320,3 +320,13 @@ html.native #receiverStatus[data-pair-state="failed"]{color:#ffbc99}
  border-radius:5px;padding:4px 6px;max-width:100%;font-size:11px}
 .rf-psf-note{display:block;margin:8px 2px 3px;color:#c6d7eb;
  font-size:10px;line-height:1.55;overflow-wrap:anywhere}
+
+/* Explicit model coordinates are distinct from observed receiver GPS. */
+.rf-coordinate-readout{display:flex;flex-wrap:wrap;gap:7px;margin:8px 0}
+.rf-coordinate-readout span{flex:1 1 200px;min-width:0;padding:8px 9px;
+ border:1px solid #35758b;border-radius:7px;background:#102e3c;
+ color:#9de8f5;font:600 11px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;
+ font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+#rfBestCoordinates{border-color:#786699;background:#211e32;color:#e2ccff}
+.rf-map-coordinates{color:#b5f1f3;font:600 11px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;
+ font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
