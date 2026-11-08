@@ -944,11 +944,16 @@ function renderPopup(a){
  $("popupSeen").textContent=Number.isFinite(a.seen)
   ?"Last received "+a.seen.toFixed(1)+" s ago":"No observation age";
  const rf=a.observations?.antenna;
+ const rfRssi=Number.isFinite(rf?.rssi)?rf.rssi:null;
  const timing=rf?.rf_timing;
  const lines=[
   "Aircraft transmit UTC: unavailable — ordinary ADS-B contains no precise departure timestamp.",
   "Receiver arrival UTC: not calibrated; USB buffering and transfer latency unknown."
  ];
+ if(rfRssi!==null)lines.push("Local RF signal strength indicator: "+
+  rfRssi.toFixed(1)+" dBFS (readsb relative reading, NOT distance). "+
+  "Aircraft transmit power, antenna direction, buildings, gain and fading prevent reliable single-reading ranging.");
+ else lines.push("RF RSSI: unavailable on this aircraft/backend; range cannot be measured.");
  if(timing && Number.isSafeInteger(timing.arrival_sample_index)){
   lines.push("RF preamble sample index: "+timing.arrival_sample_index.toLocaleString("en")+
     " · nominal sample interval "+timing.sample_period_us+" µs.");
