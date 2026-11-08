@@ -551,7 +551,7 @@ function displayUsbSnapshot(){
  if(state.connectionKind!=="usb")return;
  const result=browserSourceResult();
  state.data=result.aircraft;
- updateCounters(result.counts);feedSummary(result.sources);recordTracks();
+ updateCounters(result.counts);feedSummary(result.sources);recordTracks();rememberRfPlanes();
  applyStartupPriority();
  renderTable();paint();
  $("receiverStatus").textContent="Direct WebUSB 1090 MHz receiver · "+
@@ -563,9 +563,14 @@ window.tihuluUsbCanStart=()=>state.connectionKind!=="bridge";
 window.tihuluUsbStarted=()=>{
  state.usbSnapshot={aircraft:[],messages:0,updatedAt:Date.now()};
  state.usbMessageCount=0;state.connectionKind="usb";state.connected=true;
+ rfHistory.clear();rfHistoryRevision++;
  timingLab.reset();timingPaused=false;renderTimingLab();
  let networkSetupError=null;
- try{state.onlineFeed=configuredOnlineFeed();}
+ try{
+  if(navigator.onLine===false){
+   state.onlineFeed="";state.onlineProvider="off";
+  }else state.onlineFeed=configuredOnlineFeed();
+ }
  catch(error){
   networkSetupError=String(error.message||error);
   state.onlineFeed="";state.onlineProvider="off";
@@ -750,23 +755,52 @@ function showVerticalRate(a){
  return raw===null?"—":new Intl.NumberFormat("en",{maximumFractionDigits:0})
   .format(state.units==="metric"?raw*0.3048:raw)+(state.units==="metric"?" m/min":" ft/min");
 }
-let coverageCacheRows=null,coverageCacheResult=null;
+// Historical constraints remain distinct from live aircraft observations.
+// The assumption is valid only while the RF receiver stays physically fixed.
+const rfHistory=new Map();
+let rfHistoryRevision=0,coverageCacheRows=null,coverageCacheResult=null,coverageCacheRevision=-1;
+function rememberRfPlanes(){
+ if(!$("rfRemember").checked)return;
+ let changed=false,now=Date.now();
+ for(const a of state.data){
+  if(!Number.isFinite(a.seen)||!Number.isFinite(a.seen_pos)||
+     a.seen>10||a.seen_pos>5)continue;
+  const record=TihuluRFCoverage.recordedCircle(a,now);
+  if(!record)continue;
+  rfHistory.delete(record.hex);rfHistory.set(record.hex,record);changed=true;
+ }
+ while(rfHistory.size>64){
+  rfHistory.delete(rfHistory.keys().next().value);changed=true;
+ }
+ if(changed)rfHistoryRevision++;
+}
 function coverageResult(){
- if(state.data!==coverageCacheRows){
-  coverageCacheRows=state.data;
-  coverageCacheResult=TihuluRFCoverage.compute(state.data);
+ if(state.data!==coverageCacheRows||coverageCacheRevision!==rfHistoryRevision){
+  coverageCacheRows=state.data;coverageCacheRevision=rfHistoryRevision;
+  coverageCacheResult=TihuluRFCoverage.compute(state.data,
+   $("rfRemember").checked?[...rfHistory.values()]:[]);
  }
  return coverageCacheResult;
 }
+$("rfRemember").onchange=()=>{
+ if(!$("rfRemember").checked){rfHistory.clear();rfHistoryRevision++;}
+ else rememberRfPlanes();
+ paint();
+};
+$("rfClearHistory").onclick=()=>{
+ rfHistory.clear();rfHistoryRevision++;paint();
+ notice("Only historic RF constraints cleared; live radio reception is unchanged.");
+};
 function renderCoverageStatus(){
  const result=coverageResult();
  const label=$("rfCoverageStatus");
  const info={
-  insufficient:result.count+" independent fresh RF-positioned aircraft. Need at least 4 for coverage comparison.",
+  insufficient:result.count+" independently verified RF aircraft (live and allowed fixed-site history). Need at least 4 for coverage comparison.",
   no_overlap:"Radio-horizon model has no common overlap. Check altitude/age/source validity.",
   unresolved:"Possible region too thin or fragmented for current grid. No coordinate fix.",
-  region:"Potential coverage area only · "+result.count+" eligible RF aircraft · coarse extent ~"+
-    Math.round(result.region.extentKm)+" km. Not a calculated receiver position."
+  region:"Possible modeled coverage · "+result.count+" independent RF aircraft · "+
+   (result.constraintsUsed||result.count)+" constraints applied · coarse extent ~"+
+    Math.round(result.region.extentKm)+" km. More planes may narrow this area, NOT establish GPS accuracy."
  };
  label.textContent=info[result.status]||"Insufficient evidence";
  return result;
@@ -987,7 +1021,7 @@ async function refresh(raise=false){
   state.data=Array.isArray(result.aircraft)?result.aircraft:[];
   state.lastData=state.data.map(a=>({...a}));
   state.lastFreshAt=Date.now();
-  updateCounters(result.counts);feedSummary(result.sources);recordTracks();
+  updateCounters(result.counts);feedSummary(result.sources);recordTracks();rememberRfPlanes();
   applyStartupPriority();
   const providerTime=result.sources?.internet?.updated_at;
   $("lastUpdate").textContent=formatTime(providerTime ?? result.generated_at);
@@ -1569,6 +1603,10 @@ if(location.hostname==="tihulu.github.io"){
  $("mode").value="internet";
  notice("Loading real adsb.lol Internet aircraft near the selected map region. Antenna remains optional.");
  const startPagesInternet=()=>{
+  if(navigator.onLine===false){
+   notice("Offline mode: radio/SDR and RF Timing Laboratory work without any Internet provider.");
+   return;
+  }
   if(state.connectionKind!=="none" || $("onlinePreset").value==="off")return;
   void connect();
  };
