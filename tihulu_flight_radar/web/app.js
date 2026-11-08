@@ -912,6 +912,32 @@ $("rfClearHistory").onclick=()=>{
  rfHistory.clear();rfHistoryRevision++;paint();
  notice("Only historic RF constraints cleared; live radio reception is unchanged.");
 };
+$("rfExportEvidence").onclick=()=>{
+ // No token, Internet aircraft, GPS or user-defined receiver coordinates.
+ // This is an explicit local download; never a hidden network submission.
+ const now=Date.now(),model=coverageResult();
+ const live=state.data.map(a=>TihuluRFCoverage.recordedCircle(a,now))
+  .filter(Boolean);
+ const details={
+  schema:"tihulu-rf-constraints-v1",
+  generatedAt:new Date(now).toISOString(),
+  scientificNote:"Approximate aircraft observation epochs are not TX timestamps or measured propagation delays. Feasible area centroid is NOT a receiver GPS fix.",
+  stationaryHistoryEnabled:$("rfRemember").checked,
+  model:{
+   status:model.status,independentAircraft:model.count,liveAircraft:model.liveCount,
+   historyAircraft:model.historyCount,constraintsUsed:model.constraintsUsed??0,
+   geometryStatus:model.geometryStatus??null,
+   center:model.region?{lat:model.region.lat,lon:model.region.lon,
+    sampledSpreadKm:model.region.extentKm,confidence:null,accuracyMeters:null}:null,
+   contributors:model.aircraftDistances||[]
+  },
+  currentlyVerifiedLocalRf:live,
+  sessionRfHistory:$("rfRemember").checked?[...rfHistory.values()]:[]
+ };
+ const file="tihulu-rf-model-"+new Date(now).toISOString().replace(/[:.]/g,"-")+".json";
+ saveTimingText(file,JSON.stringify(details,null,2),"application/json");
+ notice("Downloaded local-only RF model diagnostics: no pairing token or Internet aircraft. Sharing may reveal your listening area.");
+};
 function renderCoverageStatus(){
  const result=coverageResult();
  renderRfPlaneLayers(result);
