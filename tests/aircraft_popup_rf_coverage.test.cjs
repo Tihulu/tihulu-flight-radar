@@ -28,6 +28,12 @@ test("Four real positioned RF aircraft produce possible horizon area, not a GPS 
  assert.equal(result.circles.length,4);
  assert.ok(result.region.extentKm>0);
  assert.ok(result.region.possibleSamples.length>1);
+ const interval=coverage.modelDistanceInterval(result,rows[0]);
+ assert.equal(interval.kind,"model-grid-distance-interval");
+ assert.equal(interval.measured,false);
+ assert.ok(interval.minKm>=0&&interval.maxKm>=interval.minKm);
+ assert.equal(coverage.modelDistanceInterval(result,sample("a00005",50,7,"internet")),null);
+ assert.equal(coverage.modelDistanceInterval(coverage.compute(rows.slice(0,3)),rows[0]),null);
  assert.equal(Object.hasOwn(result,"receiverGPS"),false);
 });
 test("Four local positioned RF aircraft yield possible area; three are explicitly insufficient",()=>{
