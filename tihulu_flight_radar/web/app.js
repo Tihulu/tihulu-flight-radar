@@ -412,6 +412,141 @@ function browserSourceResult(mode=String($("mode").value),internetError=null){
   }
  };
 }
+// The RF timing lab runs fully locally: no API calls, no simulated packets,
+// no automatic storage or upload. Imported session files never reach the map.
+const timingLab=TihuluTimingLab.createSession();
+let timingPaused=false;
+function formatInterval(ms){
+ return Number.isFinite(ms)?(ms>=1000?(ms/1000).toFixed(2)+" s":ms.toFixed(2)+" ms"):"—";
+}
+function paintTimingPlot(){
+ const canvas=$("timingPlot"),context=canvas?.getContext("2d");
+ if(!context)return;
+ const w=canvas.width,h=canvas.height;
+ context.clearRect(0,0,w,h);context.fillStyle="#0b1928";context.fillRect(0,0,w,h);
+ const samples=timingLab.recent(120).reverse(),last=new Map(),intervals=[];
+ for(const e of samples){
+  const p=last.get(e.icao24);
+  if(p&&p.segment===e.segment&&e.sample_index>p.sample_index)
+   intervals.push((e.sample_index-p.sample_index)/2000000*1000);
+  last.set(e.icao24,e);
+ }
+ context.font="10px system-ui";context.fillStyle="#acc7db";
+ if(!intervals.length){
+  context.fillText("Waiting for repeated CRC-valid frames from one aircraft",9,47);
+  return;
+ }
+ // Relative local intervals only, never aircraft-to-antenna propagation.
+ const values=intervals.slice(-48),peak=Math.max(1,...values);
+ const bar=(w-14)/values.length;
+ values.forEach((v,i)=>{
+  const height=Math.max(1,Math.min(h-27,(v/peak)*(h-29)));
+  context.fillStyle="#5ed7af";context.fillRect(7+i*bar,h-16-height,Math.max(1,bar-2),height);
+ });
+ context.fillStyle="#b7cbdf";context.fillText("Same-aircraft message intervals (local sample clock)",7,11);
+ context.fillText("max "+formatInterval(peak),7,h-3);
+}
+function renderTimingLab(){
+ const info=timingLab.summary(),t=info.telemetry;
+ $("timingFrames").textContent=info.valid_frames.toLocaleString("en");
+ $("timingUnique").textContent=String(info.unique_aircraft);
+ $("timingInterval").textContent=formatInterval(info.median_same_aircraft_interval_ms);
+ $("timingMad").textContent=formatInterval(info.median_absolute_deviation_ms);
+ $("timingHostRead").textContent=t&&Number.isFinite(t.host_read_last_ms)?
+  t.host_read_last_ms.toFixed(2)+" ms":"—";
+ $("timingRetained").textContent=info.retained.toLocaleString("en")+
+  (info.evicted?" · "+info.evicted+" older removed":"");
+ const replay=info.mode==="offline_replay";
+ let modeText=replay?"Offline replay · imported, untrusted local file (not live RF)":
+   state.connectionKind==="usb"?(timingPaused?"WebUSB active · recording paused":"WebUSB 1090 MHz · recording CRC-verified frames locally"):
+   info.retained?"Receiver stopped · last WebUSB timing session remains available for export":
+   state.connectionKind==="bridge"?
+    "Native readsb provides aircraft.json ages only; per-message ADC timing is not available from this backend.":
+    "No local RF timing stream · start WebUSB in supported Chromium, or open a saved offline recording.";
+ $("timingMode").textContent=modeText;
+ $("timingPause").textContent=replay?"Start new live session":timingPaused?"Resume record":"Pause record";
+ $("timingPause").setAttribute("aria-pressed",String(timingPaused));
+ $("timingQuality").textContent="Sample resolution: 0.5 µs nominal (2 Msps), not calibrated UTC. "+
+  "Aircraft transmission epoch: unavailable. Receiver distance: unavailable. "+
+  (t?"Host read avg/max: "+Number(t.host_read_mean_ms).toFixed(2)+"/"+
+   Number(t.host_read_max_ms).toFixed(2)+" ms; possible scheduling delays: "+
+   t.estimated_usb_gap_count+"; records not forwarded: "+t.frames_not_forwarded+
+   ". Neither counter proves RF sample loss. ":"")+
+  "Unique-aircraft count is not a positioning accuracy score.";
+ const body=$("timingEvents");body.replaceChildren();
+ const items=timingLab.recent(12);
+ if(!items.length){
+  const tr=document.createElement("tr"),td=document.createElement("td");
+  td.colSpan=4;td.textContent="No recorded CRC-valid radio frames";
+  tr.append(td);body.append(tr);
+ }
+ for(const e of items){
+  const tr=document.createElement("tr");
+  const vals=[e.icao24.toUpperCase(),e.sample_index.toLocaleString("en"),
+    "DF"+e.df+"/TC"+e.type_code,
+    new Date(e.decoder_utc_ms).toISOString().slice(11,23)+"Z"];
+  for(const val of vals){
+   const td=document.createElement("td");td.textContent=val;tr.append(td);
+  }
+  body.append(tr);
+ }
+ paintTimingPlot();
+}
+window.tihuluTimingBatch=(events,telemetry)=>{
+ if(state.connectionKind!=="usb"||timingPaused)return;
+ timingLab.addBatch(events,telemetry);
+ renderTimingLab();
+};
+$("timingPause").onclick=()=>{
+ if(timingLab.summary().mode==="offline_replay"){
+  timingLab.reset();timingPaused=false;
+  window.tihuluTimingClear?.();window.tihuluTimingRecord?.(true);
+ }else{
+  timingPaused=!timingPaused;
+  window.tihuluTimingRecord?.(!timingPaused);
+ }
+ renderTimingLab();
+};
+$("timingReset").onclick=()=>{
+ timingLab.reset();timingPaused=false;
+ window.tihuluTimingClear?.();window.tihuluTimingRecord?.(true);
+ renderTimingLab();
+};
+function saveTimingText(name,body,mime){
+ const blob=new Blob([body],{type:mime}),url=URL.createObjectURL(blob);
+ const a=document.createElement("a");a.href=url;a.download=name;
+ document.body.append(a);a.click();a.remove();
+ // Defer revocation to allow Qt WebEngine and desktop download handlers to see it.
+ setTimeout(()=>URL.revokeObjectURL(url),30000);
+}
+function exportName(extension){
+ return "tihulu-rf-timing-"+new Date().toISOString().replace(/[:.]/g,"-")+"."+extension;
+}
+$("timingSaveJson").onclick=()=>{
+ saveTimingText(exportName("json"),JSON.stringify(timingLab.serialize(),null,2),"application/json");
+};
+$("timingSaveCsv").onclick=()=>{
+ const head=["icao24","sample_index","segment","df","type_code","decoder_utc_ms",
+   "sample_rate_hz","frame_hex","receipt_source"];
+ const csv=[head.join(",")].concat(timingLab.serialize().events.map(e=>
+   head.map(key=>String(e[key])).join(","))).join("\r\n")+"\r\n";
+ saveTimingText(exportName("csv"),csv,"text/csv;charset=utf-8");
+};
+$("timingImport").onchange=async()=>{
+ const input=$("timingImport"),file=input.files?.[0];
+ if(!file)return;
+ try{
+  if(file.size>4*1024*1024)throw Error("File exceeds the 4 MiB offline import limit");
+  const raw=JSON.parse(await file.text());
+  timingLab.load(raw);timingPaused=true;
+  window.tihuluTimingRecord?.(false);
+  renderTimingLab();
+  notice("Offline timing recording opened locally; live aircraft map remains unchanged.");
+ }catch(error){notice("Offline session rejected: "+String(error.message||error))}
+ finally{input.value="";}
+};
+renderTimingLab();
+
 function displayUsbSnapshot(){
  if(state.connectionKind!=="usb")return;
  const result=browserSourceResult();
@@ -428,6 +563,7 @@ window.tihuluUsbCanStart=()=>state.connectionKind!=="bridge";
 window.tihuluUsbStarted=()=>{
  state.usbSnapshot={aircraft:[],messages:0,updatedAt:Date.now()};
  state.usbMessageCount=0;state.connectionKind="usb";state.connected=true;
+ timingLab.reset();timingPaused=false;renderTimingLab();
  let networkSetupError=null;
  try{state.onlineFeed=configuredOnlineFeed();}
  catch(error){
@@ -456,6 +592,7 @@ window.tihuluUsbStopped=()=>{
  if(state.connectionKind!=="usb")return;
  state.usbSnapshot={aircraft:[],messages:0,updatedAt:0};
  state.usbMessageCount=0;state.data=[];state.lastData=[];
+ renderTimingLab();
  if(state.onlineFeed){
   state.connectionKind="internet";state.connected=true;$("mode").value="internet";
   connection(true,"Internet feed only · USB released");
@@ -857,6 +994,7 @@ async function refresh(raise=false){
   $("sourceCredits").textContent=result.sources?.internet?.attribution ||
      "Antenna only (no Internet source)";
   renderTable();paint();
+  renderTimingLab();
   sourceLayerStatus(result);
   const internetError=result.sources?.internet?.error;
   notice((internetError
