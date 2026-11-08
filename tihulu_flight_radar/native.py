@@ -202,11 +202,23 @@ class NativeRadarWindow(QMainWindow):
         self._startup_timer.start()
 
     def _ensure_receiver_active(self):
+        # Runs on a worker, not the Qt event thread. A successful start()
+        # request alone is NOT evidence the readsb process stayed alive.
         with self.bridge.receiver_lock:
             active, message = self.bridge.receiver.status()
             if active:
                 return "Local decoder already running: " + message
-            return self.bridge.receiver.start()
+            started = self.bridge.receiver.start()
+            if self.bridge.receiver.mode == "Direct readsb":
+                # USB / permissions failures may make readsb exit immediately.
+                threading.Event().wait(0.7)
+            active, detail = self.bridge.receiver.status()
+            if not active:
+                raise RuntimeError(
+                    "Receiver did not stay running after start: " + detail +
+                    ". Check readsb logs, device availability, and other SDR apps."
+                )
+            return started + " Verified active decoder; ADS-B reception still unverified."
 
     def _check_startup(self):
         f = self._startup_future
