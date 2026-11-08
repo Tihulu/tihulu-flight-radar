@@ -53,3 +53,43 @@ def test_direct_readsb_does_not_compete_with_systemd(monkeypatch):
     receiver.configure("Direct readsb")
     with pytest.raises(DataError, match="already owns the SDR"):
         receiver.start()
+
+
+def test_shared_service_stays_running_when_exit_release_disabled(monkeypatch):
+    import tihulu_flight_radar.control as control
+
+    monkeypatch.setattr(control.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(control, "_unit_active", lambda _: (True, "active"))
+    operations = []
+    monkeypatch.setattr(control, "service_action", lambda action: operations.append(action))
+    receiver = ReceiverController()
+    receiver.configure("Linux services")
+    receiver._service_started_by_app = True
+    receiver.close(release_local_service=False)
+    assert operations == [], "User disabled service release; app ownership must not override it"
+
+
+def test_shared_service_stops_when_exit_release_enabled(monkeypatch):
+    import tihulu_flight_radar.control as control
+
+    monkeypatch.setattr(control.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(control, "_unit_active", lambda _: (True, "active"))
+    operations = []
+    monkeypatch.setattr(control, "service_action", lambda action: operations.append(action))
+    receiver = ReceiverController()
+    receiver.configure("Linux services")
+    receiver.close(release_local_service=True)
+    assert operations == ["stop"]
+
+
+def test_exit_never_stops_external_remote_json_services(monkeypatch):
+    import tihulu_flight_radar.control as control
+
+    monkeypatch.setattr(control.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(control, "_unit_active", lambda _: (True, "active"))
+    operations = []
+    monkeypatch.setattr(control, "service_action", lambda action: operations.append(action))
+    receiver = ReceiverController()
+    receiver.configure("Remote JSON", "http://127.0.0.1:8080/data/aircraft.json")
+    receiver.close(release_local_service=True)
+    assert operations == []
