@@ -233,3 +233,43 @@ test("Best session RF model updates at the unrounded spread and is independent o
  assert.match(js,/BEST SESSION spread/);
  assert.match(js,/rfUserZoomed=true/);
 });
+
+test("Live and best RF model centers display geographic coordinates and update on new RF revisions",()=>{
+ const js=read("app.js"),html=read("index.html"),css=read("style.css");
+ for(const id of ["rfMapCoordinates","rfCoordinateReadout","rfCurrentCoordinates","rfBestCoordinates"])
+  assert.match(html,new RegExp('id="'+id+'"'));
+ const format=js.match(/function rfCoordinateText\(point\)\{[\s\S]*?\n\}/)?.[0];
+ const render=js.match(/function renderRfCoordinateReadouts\(result\)\{[\s\S]*?\n\}/)?.[0];
+ assert.ok(format&&render);
+ const values=vm.runInNewContext([
+  "const els={rfCurrentCoordinates:{textContent:''},rfBestCoordinates:{textContent:''},rfMapCoordinates:{textContent:''}};",
+  "const $=id=>els[id];",
+  "let rfBest=null;",
+  format,render,
+  "const before=rfCoordinateText({lat:-4.5,lon:-74.2});",
+  "renderRfCoordinateReadouts({status:'insufficient',count:2});",
+  "const empty=els.rfMapCoordinates.textContent;",
+  "const first={status:'region',count:4,region:{lat:50.938,lon:6.9601}};",
+  "renderRfCoordinateReadouts(first);",
+  "const initial=els.rfCurrentCoordinates.textContent;",
+  "rfBest={lat:50.9421,lon:6.97201};",
+  "renderRfCoordinateReadouts({status:'region',count:5,region:{lat:50.94322,lon:6.98111}});",
+  "const live=els.rfCurrentCoordinates.textContent;",
+  "const best=els.rfBestCoordinates.textContent;",
+  "const footer=els.rfMapCoordinates.textContent;",
+  "renderRfCoordinateReadouts({status:'insufficient',count:1});",
+  "({before,empty,initial,live,best,footer,unavailable:els.rfCurrentCoordinates.textContent,retained:els.rfBestCoordinates.textContent})"
+ ].join("\n"));
+ assert.equal(values.before,"4.50000° S, 74.20000° W");
+ assert.match(values.empty,/unavailable/);
+ assert.match(values.initial,/50\.93800° N, 6\.96010° E/);
+ assert.match(values.live,/50\.94322° N, 6\.98111° E/);
+ assert.match(values.best,/50\.94210° N, 6\.97201° E/);
+ assert.match(values.footer,/RF LIVE .* BEST .*NOT GPS/);
+ assert.match(values.unavailable,/unavailable/);
+ assert.match(values.retained,/50\.94210° N, 6\.97201° E/);
+ assert.match(js,/ctx\.fillText\(rfCoordinateText\(result\.region\)/);
+ assert.match(js,/ctx\.fillText\(rfCoordinateText\(rfBest\)/);
+ assert.match(css,/\.rf-coordinate-readout/);
+ assert.match(css,/\.rf-map-coordinates/);
+});
