@@ -2,6 +2,7 @@
 const test=require("node:test");
 const assert=require("node:assert/strict");
 const fs=require("node:fs");
+const vm=require("node:vm");
 const path=require("node:path");
 const {pathToFileURL}=require("node:url");
 const root=path.join(__dirname,"../tihulu_flight_radar/web");
@@ -145,4 +146,51 @@ test("RF model is offline and the toggle doesn't depend on GPS or ring checkbox"
  assert.match(html,/smoothMotion/);
  assert.doesNotMatch(model,/\bfetch\s*\(|navigator\.geolocation|\bXMLHttpRequest\b|WebSocket/);
  assert.match(html,/not your measured position or GPS accuracy/);
+});
+
+test("Aircraft markers, callsign text and source badges have forgiving live hit targets",()=>{
+ const js=read("app.js");
+ const picker=js.match(/function pickPaintedAircraft\(hits,x,y,touchSlack=0\)\{[\s\S]*?\n\}/)?.[0];
+ assert.ok(picker,"click target picker must exist");
+ const pick=vm.runInNewContext(picker+"\npickPaintedAircraft",{Math});
+ const planes=[
+  {hex:"a00001",x:100,y:100,badgeRight:29,labelWidth:65},
+  {hex:"a00002",x:300,y:150,badgeRight:42,labelWidth:60}
+ ];
+ assert.equal(pick(planes,100,100)?.hex,"a00001");
+ assert.equal(pick(planes,121,117)?.hex,"a00001"); // source R badge
+ assert.equal(pick(planes,145,88)?.hex,"a00001"); // callsign text
+ assert.equal(pick(planes,334,170)?.hex,"a00002"); // I/R badge
+ assert.equal(pick(planes,20,20),null);
+ assert.equal(pick(planes,126,100,6)?.hex,"a00001"); // touch tolerance
+});
+test("Clicking a moving aircraft still opens its details without ending RF follow",()=>{
+ const js=read("app.js");
+ const down=js.match(/canvas\.addEventListener\("pointerdown",e=>\{[\s\S]*?\n\}\);/)?.[0];
+ const up=js.match(/canvas\.addEventListener\("pointerup",e=>\{[\s\S]*?\n\}\);/)?.[0];
+ const pick=js.match(/function pickPaintedAircraft\(hits,x,y,touchSlack=0\)\{[\s\S]*?\n\}/)?.[0];
+ assert.ok(down&&up&&pick);
+ const handlers={},opened=[],state={pointer:null,data:[{hex:"a00001",lat:50,lon:7,seen_pos:1}]};
+ const canvas={
+  addEventListener:(event,fn)=>{handlers[event]=fn;},
+  getBoundingClientRect:()=>({left:10,top:20}),
+  setPointerCapture:()=>{}
+ };
+ const ctx={canvas,state,paintedAircraftHits:[
+  {hex:"a00001",x:100,y:100,badgeRight:29,labelWidth:60}
+ ],Math,
+ visible:()=>true,isPositioned:()=>true,
+ choose:a=>opened.push(a.hex),closePopup:()=>opened.push("closed")};
+ vm.runInNewContext([pick,down,up].join("\n"),ctx);
+ handlers.pointerdown({pointerType:"mouse",button:0,clientX:110,clientY:120,pointerId:1});
+ assert.equal(state.pointer[5],"a00001");
+ // A position update arrives before button release: keep the pressed ICAO.
+ ctx.paintedAircraftHits[0].x=170;ctx.paintedAircraftHits[0].y=170;
+ handlers.pointerup({pointerType:"mouse",clientX:111,clientY:121});
+ assert.deepEqual(opened,["a00001"]);
+ assert.equal(state.pointer,null);
+ assert.match(js,/if\(state\.selected&&!\$\("aircraftPopup"\)\.hidden\)/);
+ assert.match(js,/const pos=displayedAircraftPoint\(a\)/);
+ assert.match(js,/canvas\.style\.cursor=hit\?"pointer":"grab"/);
+ assert.match(js,/No live planes here · RF model may use past observations/);
 });
