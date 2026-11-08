@@ -250,3 +250,22 @@ body.tar-open{overflow:hidden}
 .rf-lab-tablewrap th,.rf-lab-tablewrap td{padding:6px 5px;text-align:left;border-bottom:1px solid #27445b}
 .rf-lab-tablewrap th{position:sticky;top:0;background:#14293c;color:var(--muted)}
 .rf-lab-panel>small{display:block;color:#aec3d4;line-height:1.5;font-size:10px;margin-top:9px}
+
+
+/* RF-only model-centre preview; independent from optional ring overlay. */
+.rf-locate-button{background:#735b2c;border-color:#b79250;color:#fff1d4;
+ font-weight:700;white-space:normal}
+.rf-locate-button:hover,.rf-locate-button:focus-visible{background:#8c7139}
+.rf-locate-result{padding:9px;border:1px solid #725e39;border-radius:8px;
+ background:#211f1a;min-width:0}
+.rf-locate-result>strong{font-size:12px;color:#f5d994}
+.rf-locate-result p{font-size:11px;color:#eadbb6;margin:6px 0;line-height:1.5}
+#rfLocationDetails[hidden]{display:none!important}
+#rfLocationDetails{display:grid;grid-template-columns:1fr;gap:6px}
+#rfLocationDetails>div{border-top:1px solid #544e3a;padding:5px 0;min-width:0}
+#rfLocationDetails span{display:block;font-size:10px;color:#bcb8aa}
+#rfLocationDetails code,#rfLocationDetails strong{display:block;overflow-wrap:anywhere;
+ margin-top:4px;color:#ffdf96;font-size:12px;font-family:ui-monospace,Consolas,monospace}
+.rf-history-controls{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.rf-history-controls label{font-size:11px;color:#cfdeec;line-height:1.45}
+.rf-history-controls button{font-size:11px;padding:6px;white-space:normal}
