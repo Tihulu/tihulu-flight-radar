@@ -30,21 +30,29 @@ test("Four real positioned RF aircraft produce possible horizon area, not a GPS 
  assert.ok(result.region.possibleSamples.length>1);
  assert.equal(Object.hasOwn(result,"receiverGPS"),false);
 });
-test("Three radios, remote Internet and wrong provenance never imply a fix",()=>{
+test("Three valid RF aircraft produce modeled area but never a measured receiver fix",()=>{
  const radios=[
   sample("a00001",50.7,6.7),sample("a00002",50.2,7.5),
   sample("a00003",51.1,6.2)
  ];
- assert.equal(coverage.compute(radios).status,"insufficient");
+ const r=coverage.compute(radios);
+ assert.equal(r.status,"region");
+ assert.equal(r.count,3);
+ assert.ok(Number.isFinite(r.region.lat) && Number.isFinite(r.region.lon));
+ assert.equal(r.region.kind,"possible-area-centroid");
+ assert.equal(r.region.accuracyMeters,null);
+ assert.equal(r.region.confidence,null);
+ assert.equal(Object.hasOwn(r,"receiverGPS"),false);
  const internet=sample("a00004",50.6,7.9,"internet");
  assert.equal(coverage.compute([...radios,internet]).count,3);
  const mixed=sample("a00005",50.4,7.7);
  mixed.sources.push("internet");
  mixed.position_source="internet";
- assert.equal(coverage.compute([...radios,mixed]).status,"insufficient");
+ assert.equal(coverage.compute([...radios,mixed]).count,3);
  const stale=sample("a00006",50.4,7.7);
  stale.observations.antenna.seen_pos=90;
- assert.equal(coverage.compute([...radios,stale]).status,"insufficient");
+ assert.equal(coverage.compute([...radios,stale]).count,3);
+ assert.equal(coverage.compute([radios[0],radios[1]]).status,"insufficient");
 });
 test("Unit selectors, close-on-outside click, raw JSON and timing claims in common web/Qt UI",()=>{
  const html=read("index.html"),js=read("app.js"),css=read("style.css");
@@ -82,4 +90,28 @@ test("Decoder retains ADC sample index but cannot invent aircraft TX timestamp",
  assert.deepEqual(row.rf_timing,sampleTime);
  assert.equal(row.rf_timing.transmit_timestamp_utc,null);
  assert.equal(row.rf_timing.receiver_hardware_utc,null);
+});
+
+
+test("Three antenna airplanes exclude Internet planes, copied coordinates and missing position",()=>{
+ const good=[sample("e10001",50.7,6.7),sample("e10002",50.2,7.5),
+  sample("e10003",51.1,6.2)];
+ const spoof=sample("e10004",51.2,6.6);
+ spoof.observations.antenna.lat=52.2;
+ const missing=sample("e10005",50.4,7.7);
+ delete missing.observations.antenna.lat;
+ const mixed=sample("e10006",50.4,7.7,"internet");
+ assert.equal(coverage.compute([...good,spoof,missing,mixed]).count,3);
+ assert.equal(coverage.compute([good[0],good[1],spoof,missing,mixed]).status,"insufficient");
+});
+test("RF model is offline and the toggle doesn't depend on GPS or ring checkbox",()=>{
+ const html=read("index.html"),js=read("app.js"),model=read("receiver_coverage.js");
+ assert.match(html,/id="rfLocate"/);
+ assert.match(html,/id="rfLocateStatus"/);
+ assert.match(js,/function paintRfLocator\(result\)/);
+ assert.match(js,/paintRfLocator\(model\); \/\/ independent of the optional ring display/);
+ assert.match(js,/function focusRfModelWhenReady\(result\)/);
+ assert.match(js,/const result=coverageResult\(\);\s*if\(result\.circles\.length<3\)return;/);
+ assert.doesNotMatch(model,/\bfetch\s*\(|navigator\.geolocation|\bXMLHttpRequest\b|WebSocket/);
+ assert.match(html,/not your measured position or GPS accuracy/);
 });
