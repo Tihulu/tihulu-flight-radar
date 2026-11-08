@@ -598,7 +598,6 @@ window.tihuluUsbStopped=()=>{
  if(state.connectionKind!=="usb")return;
  state.usbSnapshot={aircraft:[],messages:0,updatedAt:0};
  state.usbMessageCount=0;state.data=[];state.lastData=[];
- renderTimingLab();
  if(state.onlineFeed){
   state.connectionKind="internet";state.connected=true;$("mode").value="internet";
   connection(true,"Internet feed only · USB released");
@@ -609,6 +608,7 @@ window.tihuluUsbStopped=()=>{
   updateCounters();renderTable();paint();connection(false,"USB released");
   $("receiverStatus").textContent="Direct WebUSB stopped; this tab released its SDR.";
  }
+ renderTimingLab();
 };
 // Called only by our packaged Qt WebEngine wrapper after the trusted local
 // page is loaded. The token is never placed in a URL, cookies or storage.
