@@ -63,3 +63,12 @@ test("Startup, airplane selection and receiver-model follow are distinct",()=>{
  assert.match(js,/MULTI-AIRCRAFT RF MODEL/);
  assert.match(js,/independent aircraft \/ /);
 });
+test("Evidence export is an explicit offline-only download of verified RF constraints",()=>{
+ const html=fs.readFileSync(path.join(root,"index.html"),"utf8");
+ assert.match(html,/id="rfExportEvidence"/);
+ assert.match(js,/\$\("rfExportEvidence"\)\.onclick=/);
+ assert.match(js,/currentlyVerifiedLocalRf:live/);
+ assert.match(js,/sessionRfHistory:/);
+ assert.match(js,/schema:"tihulu-rf-constraints-v1"/);
+ assert.match(js,/No token, Internet aircraft, GPS or user-defined receiver coordinates/);
+});
