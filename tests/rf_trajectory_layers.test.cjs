@@ -86,3 +86,28 @@ test("RF camera follows new model revisions and keeps zoom after first focus",()
  assert.equal(state.lon,second.region.lon);
  assert.match(state.centerLabel,/NOT GPS/);
 });
+
+test("Mixed Internet metadata never supplies a missing local RF speed",()=>{
+ const a=plane("a00011",50,7);
+ delete a.observations.antenna.gs;
+ delete a.observations.antenna.track;
+ a.sources.push("internet");
+ a.gs=999;a.track=180;
+ const item=model.recordedCircle(a);
+ assert.equal(item.speedKt,null);
+ assert.equal(item.headingDeg,null);
+});
+test("Solver still uses distinct aircraft after high-density one-aircraft track history",()=>{
+ const rows=[plane("a00001",50.7,6.7),plane("a00002",50.2,7.5),
+  plane("a00003",51.1,6.2),plane("a00004",50.6,7.9)];
+ const base=model.recordedCircle(rows[0]);
+ const history=Array.from({length:60},(_,i)=>({
+  ...base,lat:base.lat+.001*i,lon:base.lon+.26+.02*i,
+  capturedAtMs:Date.now()-(i+1)*25000
+ }));
+ const out=model.compute(rows,history);
+ assert.equal(out.status,"region");
+ assert.equal(out.count,4);
+ assert.equal(out.constraintsUsed<=64,true);
+ assert.equal(out.aircraftCircles.length,4);
+});
