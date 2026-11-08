@@ -841,7 +841,17 @@ function rememberRfPlanes(){
   rfHistory.delete(key);changed=true;
  }
  while(rfHistory.size>64){
-  rfHistory.delete(rfHistory.keys().next().value);changed=true;
+  // Preserve a recent constraint for each independent aircraft before
+  // trimming duplicate path samples from a busy aircraft.
+  const remainingByIcao=new Map();
+  for(const row of rfHistory.values())
+   remainingByIcao.set(row.hex,(remainingByIcao.get(row.hex)||0)+1);
+  let keyToDrop=null;
+  for(const [key,row] of rfHistory){
+   if(remainingByIcao.get(row.hex)>1){keyToDrop=key;break;}
+  }
+  if(keyToDrop===null)keyToDrop=rfHistory.keys().next().value;
+  rfHistory.delete(keyToDrop);changed=true;
  }
  if(changed)rfHistoryRevision++;
 }
