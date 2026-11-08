@@ -79,21 +79,25 @@ const TihuluRFCoverage = (() => {
   const now=Date.now();
   for(const old of Array.isArray(history)?history.slice(-64):[]){
    if(!old||old.recorded_rf!==true||
-      !/^[a-f0-9]{6}$/i.test(String(old.hex||""))||seen.has(old.hex)||
+      !/^[a-f0-9]{6}$/i.test(String(old.hex||""))||
       !point(old)||!Number.isFinite(old.radiusKm)||
       old.radiusKm<10||old.radiusKm>1600||
       !Number.isFinite(old.capturedAtMs)||
       old.capturedAtMs>now+5000||now-old.capturedAtMs>2*3600*1000)continue;
-   records.push({...old,ageSeconds:(now-old.capturedAtMs)/1000,
+   // A single aircraft may yield several genuine geographic constraints
+   // along its flight path; it still counts as only ONE independent aircraft.
+   const hex=old.hex.toLowerCase();
+   if(records.some(r=>r.hex===hex&&distanceKm(r,old)<8))continue;
+   records.push({...old,hex,ageSeconds:(now-old.capturedAtMs)/1000,
     historic:true});
-   seen.add(old.hex);
+   seen.add(hex);
   }
   records.sort((a,b)=>a.ageSeconds-b.ageSeconds);
-  if(records.length<MIN_INDEPENDENT)return {status:"insufficient",count:records.length,
-   liveCount,historyCount:records.length-liveCount,required:MIN_INDEPENDENT,circles:[],region:null};
-  // Bound workload: choose newest independent RF aircraft, max 6 rings.
-  // Apply more genuinely independent RF constraints as aircraft count grows;
-  // only draw six circles to avoid visual clutter. This is not true accuracy.
+  if(seen.size<MIN_INDEPENDENT)return {status:"insufficient",count:seen.size,
+   liveCount,historyCount:seen.size-liveCount,required:MIN_INDEPENDENT,circles:[],region:null};
+  // Bound workload: use up to 64 recent *positions* from at least four
+  // independent aircraft. Multiple positions from ONE plane do not satisfy
+  // the minimum. Only three circles are drawn as optional outlines.
   const constraints=records.slice(0,64);
   const circles=constraints.slice(0,6); // for diagnostics; UI draws only 3 optional outlines
   // No receiver latitude/longitude is an input. Unwrap longitude only to
@@ -119,7 +123,7 @@ const TihuluRFCoverage = (() => {
   const minLon=Math.max(...bounds.map(b=>b.west));
   const maxLon=Math.min(...bounds.map(b=>b.east));
   if(minLat>=maxLat||minLon>=maxLon)return {
-   status:"no_overlap",count:records.length,liveCount,historyCount:records.length-liveCount,
+   status:"no_overlap",count:seen.size,liveCount,historyCount:seen.size-liveCount,
    required:MIN_INDEPENDENT,constraintsUsed:constraints.length,circles,region:null};
   const points=[];
   const STEPS=48;
@@ -130,14 +134,14 @@ const TihuluRFCoverage = (() => {
    if(constraints.every(c=>distanceKm(p,c)<=c.radiusKm))points.push(p);
   }
   // A vanishingly small sampled overlap is not a safe coordinate estimate.
-  if(points.length<3)return {status:"unresolved",count:records.length,liveCount,historyCount:records.length-liveCount,
+  if(points.length<3)return {status:"unresolved",count:seen.size,liveCount,historyCount:seen.size-liveCount,
    required:MIN_INDEPENDENT,constraintsUsed:constraints.length,circles,region:null};
   const centerLat=points.reduce((sum,p)=>sum+p.lat,0)/points.length;
   const centerUnwrappedLon=points.reduce((sum,p)=>
    sum+longitudeNear(p.lon,originLon),0)/points.length;
   const center={lat:centerLat,lon:((centerUnwrappedLon+540)%360)-180};
   const extentKm=Math.max(...points.map(p=>distanceKm(center,p)));
-  return {status:"region",count:records.length,liveCount,historyCount:records.length-liveCount,
+  return {status:"region",count:seen.size,liveCount,historyCount:seen.size-liveCount,
    required:MIN_INDEPENDENT,constraintsUsed:constraints.length,circles,
    region:{...center,extentKm:Math.max(10,Math.ceil(extentKm/10)*10),
     sampleCount:points.length,possibleSamples:points,
