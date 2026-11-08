@@ -139,7 +139,7 @@ test("Shared offline UI, native bridge and service-worker expose laboratory with
    "timingSaveCsv","timingImport","timingQuality"])
   assert.match(html,new RegExp('id="'+id+'"'));
  assert.match(html,/rf_timing_lab\.js/);
- assert.match(sw,/shell-v21/);
+ assert.match(sw,/shell-v22/);
  assert.match(sw,/rf_timing_lab\.js/);
  assert.match(bridge,/rf_timing_lab\.js/);
  assert.match(app,/window\.tihuluTimingBatch/);
