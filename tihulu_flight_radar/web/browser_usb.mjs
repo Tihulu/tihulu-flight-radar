@@ -93,6 +93,7 @@ function processMessage(msg){
  }
  if(msg.type==="snapshot"){
   window.tihuluUsbSnapshot?.(msg);
+  window.tihuluTimingBatch?.(msg.timing_events||[],msg.timing_stats||null);
   const count=Number(msg.messages)||0;
   tell("WebUSB 1090 MHz · "+count+" CRC-verified Mode S frames · "+
     (Number(msg.receivedBytes)/1048576).toFixed(1)+" MiB of real I/Q read. "+
@@ -121,7 +122,9 @@ async function read(){
    // @jtarrio/webrtlsdr 3.0.7 returns SampleBlock {frequency,
    // directSampling, data:ArrayBuffer}, NOT a bare ArrayBuffer.
    // The previous reader rejected every successful sample transfer!
+   const hostStart=performance.now();
    const sampleBlock=await device.readSamples(65536);
+   const hostReadMs=Math.max(0,performance.now()-hostStart);
    if(stopRequested)break;
    const view=normalizeIqSampleBlock(sampleBlock);
    if(view.byteLength>2*1024*1024)throw Error("WebUSB block exceeded safe 2 MiB bound.");
@@ -129,7 +132,7 @@ async function read(){
    bytes+=own.byteLength;
    // Worker signals ACK for backpressure; never queue unbounded IQ buffers.
    const accepted=new Promise(resolve=>ackResolve=resolve);
-   worker.postMessage({type:"iq",buffer:own.buffer},[own.buffer]);
+   worker.postMessage({type:"iq",buffer:own.buffer,host_read_ms:hostReadMs},[own.buffer]);
    await accepted;
   }
  }catch(error){
@@ -206,6 +209,8 @@ $("usbStop").disabled=true;
 $("usbStart").addEventListener("click",()=>{void start()});
 $("usbStop").addEventListener("click",()=>{void stop()});
 window.tihuluStopUsb=stop;
+window.tihuluTimingRecord=enabled=>worker?.postMessage({type:"timing_record",enabled:enabled===true});
+window.tihuluTimingClear=()=>worker?.postMessage({type:"timing_clear"});
 navigator.usb?.addEventListener("disconnect",()=>{
  if(device||chosenDevice)void stop();
 });

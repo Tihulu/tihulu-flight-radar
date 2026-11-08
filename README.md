@@ -59,6 +59,39 @@ The website and desktop keep genuine source provenance: **I** = Internet only, *
 
 When cross-platform CI passes, portable bundles appear under [**Cross-platform CI and preview builds**](https://github.com/Tihulu/tihulu-flight-radar/actions/workflows/build.yml). Download artifacts from the relevant successful workflow run. Debian x64 preview packages are named `tihulu-flight-radar_0.3.2.dev4_amd64.deb`. These are **unsigned previews**; native USB drivers/decoder are not bundled.
 
+## Offline single-SDR RF Timing Laboratory
+
+The **RF Timing Laboratory** is built into the same browser and Qt desktop
+radar interface. It does **not** need an external aircraft API, an account,
+GPS, or cloud processing.
+
+- **WebUSB radio (Brave / Chrome / Edge):** with a single RTL-SDR already
+  receiving real 1090 MHz I/Q, capture CRC-verified ADS-B frame sample
+  indices at a nominal 2 Msps rate. The local dashboard shows per-aircraft
+  interarrival median/MAD, USB host-read delays, packet counts and bounded
+  recording buffers. Start, pause, clear, export JSON/CSV, and import a
+  previously saved session entirely offline. Open the site online **once**
+  to cache its WebUSB driver and other PWA assets before going offline.
+- **Qt desktop (Pop!_OS / Linux):** use the same laboratory and a native
+  JSON/CSV save dialog. Standard `readsb aircraft.json` supplies real
+  receiver observations and relative age, **not raw packet ADC timestamps**.
+  Fine sample-index timing requires a raw I/Q or separately verified
+  timestamp-capable receiver source. Offline imported recordings can still
+  be inspected.
+- **RF coverage:** enable **Assume stationary receiver** to retain up to
+  64 verified RF-positioned aircraft (at most two hours) and intersect
+  their conservative radio-horizon constraints. Six rings are displayed
+  to limit clutter. The possible region may narrow as new aircraft arrive,
+  but that does **not** establish a precise receiver position or guarantee
+  increasing accuracy. Clear the history if you move the antenna.
+
+**Scientific limitation:** the nominal 0.5 µs ADC sample spacing is **not**
+0.5 µs UTC arrival-time accuracy. Standard ADS-B packets do not contain
+a trustworthy exact transmission epoch, and USB/OS processing latency is
+not propagation time. The single-SDR lab therefore does **not** compute
+a fake time-of-flight distance, GPS fix or accuracy score. See
+[RF Timing Laboratory and coverage limitations](docs/RF_COVERAGE_AND_TIMESTAMP_LIMITS.md).
+
 ## Receiver safety and data integrity
 
 - A **physical SDR is never required** to view Internet aircraft or open the map.

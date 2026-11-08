@@ -47,7 +47,19 @@ const TihuluRFCoverage = (() => {
   }
   return samples;
  }
- function compute(aircraft){
+ // Store only an already verified direct-antenna position constraint.
+ // A historical observation is *not* a fresh plane or a measured range.
+ function recordedCircle(a,capturedAtMs=Date.now()){
+  if(!eligible(a)||!Number.isFinite(capturedAtMs))return null;
+  const rf=a.observations.antenna;
+  const altitudeFeet=rf.alt_geom??rf.alt_baro??a.alt_geom??a.alt_baro;
+  const radiusKm=horizonKm(altitudeFeet==="ground"?0:altitudeFeet);
+  if(radiusKm===null)return null;
+  return {hex:a.hex.toLowerCase(),flight:String(a.flight||a.hex).trim(),
+   lat:rf.lat,lon:rf.lon,radiusKm,altitudeFeet,
+   recorded_rf:true,capturedAtMs};
+ }
+ function compute(aircraft,history=[]){
   const records=[],seen=new Set();
   for(const a of Array.isArray(aircraft)?aircraft:[]){
    if(!eligible(a) || seen.has(a.hex.toLowerCase()))continue;
@@ -60,32 +72,50 @@ const TihuluRFCoverage = (() => {
     ageSeconds:Math.max(a.seen_pos,rf.seen_pos)});
    seen.add(a.hex.toLowerCase());
   }
+  // Optional fixed-receiver session history, gathered only after eligible().
+  // Drop observations older than two hours, cap model inputs and keep their
+  // historical status separate from the current aircraft map.
+  const now=Date.now();
+  for(const old of Array.isArray(history)?history.slice(-64):[]){
+   if(!old||old.recorded_rf!==true||
+      !/^[a-f0-9]{6}$/i.test(String(old.hex||""))||seen.has(old.hex)||
+      !point(old)||!Number.isFinite(old.radiusKm)||
+      old.radiusKm<10||old.radiusKm>1600||
+      !Number.isFinite(old.capturedAtMs)||
+      old.capturedAtMs>now+5000||now-old.capturedAtMs>2*3600*1000)continue;
+   records.push({...old,ageSeconds:(now-old.capturedAtMs)/1000,
+    historic:true});
+   seen.add(old.hex);
+  }
   records.sort((a,b)=>a.ageSeconds-b.ageSeconds);
   if(records.length<4)return {status:"insufficient",count:records.length,circles:[],region:null};
   // Bound workload: choose newest independent RF aircraft, max 6 rings.
-  const circles=records.slice(0,6);
+  // Apply more genuinely independent RF constraints as aircraft count grows;
+  // only draw six circles to avoid visual clutter. This is not true accuracy.
+  const constraints=records.slice(0,64);
+  const circles=constraints.slice(0,6);
   // Equirectangular bounds only choose a candidate search grid; actual cell
   // acceptance always checks geodesic distances to every ring.
-  const minLat=Math.max(...circles.map(c=>c.lat-c.radiusKm/110.5));
+  const minLat=Math.max(...constraints.map(c=>c.lat-c.radiusKm/110.5));
   const maxLat=Math.min(...circles.map(c=>c.lat+c.radiusKm/110.5));
   const minLon=Math.max(...circles.map(c=>c.lon-c.radiusKm/(111.2*Math.max(0.2,Math.cos(c.lat*RAD)))));
   const maxLon=Math.min(...circles.map(c=>c.lon+c.radiusKm/(111.2*Math.max(0.2,Math.cos(c.lat*RAD)))));
-  if(minLat>=maxLat||minLon>=maxLon)return {status:"no_overlap",count:records.length,circles,region:null};
+  if(minLat>=maxLat||minLon>=maxLon)return {status:"no_overlap",count:records.length,constraintsUsed:constraints.length,circles,region:null};
   const points=[];
   for(let i=0;i<=40;i++)for(let j=0;j<=40;j++){
    const p={lat:minLat+(maxLat-minLat)*i/40,lon:minLon+(maxLon-minLon)*j/40};
-   if(circles.every(c=>distanceKm(p,c)<=c.radiusKm))points.push(p);
+   if(constraints.every(c=>distanceKm(p,c)<=c.radiusKm))points.push(p);
   }
-  if(!points.length)return {status:"unresolved",count:records.length,circles,region:null};
+  if(!points.length)return {status:"unresolved",count:records.length,constraintsUsed:constraints.length,circles,region:null};
   // Centre of *geometric possibility area*, not a receiver coordinate fix.
   const center={lat:points.reduce((s,p)=>s+p.lat,0)/points.length,
    lon:points.reduce((s,p)=>s+p.lon,0)/points.length};
   const extentKm=Math.max(...points.map(p=>distanceKm(center,p)));
-  return {status:"region",count:records.length,circles,
+  return {status:"region",count:records.length,constraintsUsed:constraints.length,circles,
    region:{...center,extentKm:Math.ceil(extentKm/10)*10,
     sampleCount:points.length,possibleSamples:points}};
  }
- return {point,distanceKm,horizonKm,horizonPoints,eligible,compute};
+ return {point,distanceKm,horizonKm,horizonPoints,eligible,recordedCircle,compute};
 })();
 if(typeof module!=="undefined"&&module.exports)module.exports=TihuluRFCoverage;
 if(typeof window!=="undefined")window.TihuluRFCoverage=TihuluRFCoverage;

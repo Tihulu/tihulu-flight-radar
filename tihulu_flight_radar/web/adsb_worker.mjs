@@ -170,11 +170,22 @@ export class BrowserAircraftStore {
   });
  }
 }
+// UI export is bounded independently from the aircraft TTL store.
 let store,tail=new Uint8Array(0),bytes=0,lastPublish=0,totalSamples=0,lastFrameSample=-1;
-function onIQ(buffer){
+let timingRecord=true,timingSegment=0,timingPending=[],timingNotForwarded=0;
+let usbBlocks=0,usbReadSum=0,usbReadMax=0,usbReadLast=0,estimatedUsbGapCount=0;
+function onIQ(buffer,hostReadMs=null){
  if(!store)store=new BrowserAircraftStore();
  const incoming=new Uint8Array(buffer);
  if(incoming.byteLength<2 || incoming.byteLength>2*1024*1024)return;
+ // Host read duration includes USB scheduling/buffering and is not a range.
+ usbBlocks++;
+ if(Number.isFinite(hostReadMs)&&hostReadMs>=0&&hostReadMs<=60000){
+  usbReadLast=hostReadMs;usbReadSum+=hostReadMs;
+  usbReadMax=Math.max(usbReadMax,hostReadMs);
+  const nominalMs=incoming.byteLength/2/SAMPLE_RATE*1000;
+  if(usbBlocks>1&&hostReadMs>nominalMs*3+10)estimatedUsbGapCount++;
+ }
  const joined=new Uint8Array(tail.byteLength+incoming.byteLength);
  joined.set(tail,0);joined.set(incoming,tail.byteLength);
  const messages=extractFrameCandidates(joined);
@@ -187,6 +198,16 @@ function onIQ(buffer){
   const absoluteIndex=firstSample+m.sampleOffset;
   if(absoluteIndex<0 || absoluteIndex<=lastFrameSample)continue;
   lastFrameSample=absoluteIndex; // prevent double-counting a frame also present in the overlap tail
+  if(timingRecord){
+   if(timingPending.length<512){
+    timingPending.push({receipt_source:"webusb_iq",
+     icao24:Array.from(m.frame.subarray(1,4),b=>b.toString(16).padStart(2,"0")).join(""),
+     sample_index:absoluteIndex,segment:timingSegment,
+     sample_rate_hz:SAMPLE_RATE,df:m.frame[0]>>3,type_code:m.frame[4]>>3,
+     frame_hex:Array.from(m.frame,b=>b.toString(16).padStart(2,"0")).join(""),
+     decoder_utc_ms:now});
+   }else timingNotForwarded++; // UI buffer limit, NOT radio packet loss
+  }
   store.ingest(m.frame,now,{
    arrival_sample_index:absoluteIndex,
    sample_period_us:1e6/SAMPLE_RATE,
@@ -204,7 +225,13 @@ function onIQ(buffer){
  if(now-lastPublish>=1000){
   lastPublish=now;
   self.postMessage({type:"snapshot",aircraft:store.snapshot(now),
-    messages:store.messages,receivedBytes:bytes,updatedAt:now});
+    messages:store.messages,receivedBytes:bytes,updatedAt:now,
+    timing_events:timingPending.splice(0),
+    timing_stats:{iq_sample_count:totalSamples,usb_blocks:usbBlocks,
+      host_read_last_ms:usbReadLast,host_read_max_ms:usbReadMax,
+      host_read_mean_ms:usbBlocks?usbReadSum/usbBlocks:0,
+      frames_not_forwarded:timingNotForwarded,
+      estimated_usb_gap_count:estimatedUsbGapCount}});
  }
  self.postMessage({type:"ack"});
 }
@@ -212,13 +239,28 @@ if(typeof self!=="undefined" && typeof self.addEventListener==="function"){
  self.addEventListener("message",event=>{
   const msg=event.data||{};
   if(msg.type==="iq" && msg.buffer instanceof ArrayBuffer){
-   try{onIQ(msg.buffer);}
+   try{onIQ(msg.buffer,msg.host_read_ms);}
    catch(error){
     // Never strand the USB reader waiting for an ACK if one IQ block fails.
     self.postMessage({type:"error",message:String(error?.message||error).slice(0,160)});
     self.postMessage({type:"ack"});
    }
   }
-  if(msg.type==="reset"){store=new BrowserAircraftStore();tail=new Uint8Array(0);bytes=0;lastPublish=0;totalSamples=0;lastFrameSample=-1;}
+  if(msg.type==="timing_record"){
+   const next=msg.enabled===true;
+   if(next&&!timingRecord)timingSegment++;
+   timingRecord=next;
+   if(!next)timingPending=[];
+  }
+  if(msg.type==="timing_clear"){
+   timingPending=[];timingNotForwarded=0;timingSegment++;
+   usbBlocks=0;usbReadSum=0;usbReadMax=0;usbReadLast=0;estimatedUsbGapCount=0;
+  }
+  if(msg.type==="reset"){
+   store=new BrowserAircraftStore();tail=new Uint8Array(0);bytes=0;
+   lastPublish=0;totalSamples=0;lastFrameSample=-1;
+   timingRecord=true;timingSegment=0;timingPending=[];timingNotForwarded=0;
+   usbBlocks=0;usbReadSum=0;usbReadMax=0;usbReadLast=0;estimatedUsbGapCount=0;
+  }
  });
 }
