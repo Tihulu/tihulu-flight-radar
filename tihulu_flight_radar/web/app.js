@@ -760,6 +760,7 @@ function showVerticalRate(a){
 // The assumption is valid only while the RF receiver stays physically fixed.
 const rfHistory=new Map();
 let rfHistoryRevision=0,coverageCacheRows=null,coverageCacheResult=null,coverageCacheRevision=-1;
+let rfLocateRequested=false; // Explicit map estimate, NOT device geolocation or calibrated ranging.
 function rememberRfPlanes(){
  if(!$("rfRemember").checked)return;
  let changed=false,now=Date.now();
@@ -792,11 +793,39 @@ $("rfClearHistory").onclick=()=>{
  rfHistory.clear();rfHistoryRevision++;paint();
  notice("Only historic RF constraints cleared; live radio reception is unchanged.");
 };
+$("rfLocate").onclick=()=>{
+ // Independent of "showRfCoverage": the checkbox only controls ring drawing.
+ // Never use public feed aircraft, user GPS or Internet search coordinates.
+ const result=coverageResult();
+ if(result.status!=="region"||!result.region){
+  rfLocateRequested=false;paint();
+  const reason=result.status==="insufficient"?
+   "Need 3 different local RF aircraft with fresh, valid ADS-B positions (currently "+
+    result.count+").":
+   "The received RF observations did not yield a valid model overlap ("+
+    result.status+"). Cannot show a reliable receiver point.";
+  notice("Locate by RF: "+reason);
+  return;
+ }
+ rfLocateRequested=true;
+ const region=result.region;
+ state.lat=region.lat;state.lon=region.lon;state.moved=true;
+ state.autoFocused=false;state.startupRank=3;
+ const extent=region.extentKm;
+ state.zoom=extent>350?5:extent>180?6:extent>85?7:extent>35?8:extent>12?9:10;
+ state.centerLabel="RF model feasible area · "+result.count+
+  " genuine antenna aircraft · representative centre, NOT receiver GPS";
+ paint();
+ notice("RF feasibility computed locally from "+result.constraintsUsed+
+  " real aircraft. Marker is only a representative point in a modelled "+
+  "possible receiver area (~"+Math.round(extent)+
+  " km sampled extent), not a measured location or accuracy.");
+};
 function renderCoverageStatus(){
  const result=coverageResult();
  const label=$("rfCoverageStatus");
  const info={
-  insufficient:result.count+" independently verified RF aircraft (live and allowed fixed-site history). Need at least 4 for coverage comparison.",
+  insufficient:result.count+" independently verified RF-positioned aircraft. Need at least 3; receiver must remain stationary for history to apply.",
   no_overlap:"Radio-horizon model has no common overlap. Check altitude/age/source validity.",
   unresolved:"Possible region too thin or fragmented for current grid. No coordinate fix.",
   region:"Possible modeled coverage · "+result.count+" independent RF aircraft · "+
@@ -804,6 +833,26 @@ function renderCoverageStatus(){
     Math.round(result.region.extentKm)+" km. More planes may narrow this area, NOT establish GPS accuracy."
  };
  label.textContent=info[result.status]||"Insufficient evidence";
+ const loc=$("rfLocationStatus"),details=$("rfLocationDetails");
+ const available=result.status==="region"&&!!result.region;
+ details.hidden=!rfLocateRequested||!available;
+ if(!rfLocateRequested){
+  loc.textContent=available
+   ?"Ready: "+result.count+" real RF aircraft · press Locate by RF. Rings can stay hidden."
+   :"Not ready: "+result.count+"/3 eligible real RF aircraft, or no valid model overlap.";
+ }else if(!available){
+  loc.textContent="No valid current RF model area ("+result.status+
+   "). Model marker hidden until enough valid observations return.";
+ }else{
+  const r=result.region;
+  loc.textContent="Model-based, NOT an actual receiver fix. "+
+   result.count+" eligible RF aircraft, "+result.constraintsUsed+
+   " constraints. More planes do not guarantee position accuracy.";
+  $("rfModelCoordinates").textContent=r.lat.toFixed(3)+"°, "+r.lon.toFixed(3)+"°";
+  $("rfModelExtent").textContent="~"+Math.round(r.extentKm)+
+   " km · geometric envelope only";
+  $("rfModelAircraft").textContent=String(result.count);
+ }
  return result;
 }
 function renderPopup(a){
@@ -1158,8 +1207,8 @@ function tiles(){
  }
 }
 function paintRfCoverage(){
- const result=TihuluRFCoverage.compute(state.data);
- if(result.circles.length<4)return;
+ const result=coverageResult();
+ if(result.circles.length<3)return;
  ctx.save();ctx.lineWidth=1.5;ctx.strokeStyle="rgba(250,199,91,.55)";
  ctx.setLineDash([7,5]);
  for(const ring of result.circles){
@@ -1185,12 +1234,39 @@ function paintRfCoverage(){
  }
  ctx.restore();
 }
+function paintRfModelCentre(){
+ if(!rfLocateRequested)return;
+ const result=coverageResult();
+ if(result.status!=="region"||!result.region)return;
+ const point=result.region,[x,y]=xy(point.lat,point.lon);
+ if(x<0||x>canvas.clientWidth||y<0||y>canvas.clientHeight)return;
+ // This is an explicitly labelled geometric representative, not a GPS pin.
+ // Independent of the optional RF coverage ring layer.
+ ctx.save();
+ ctx.strokeStyle="#ffcf70";ctx.fillStyle="#ffcf70";ctx.lineWidth=2.4;
+ ctx.beginPath();ctx.moveTo(x,y-11);ctx.lineTo(x+11,y);
+ ctx.lineTo(x,y+11);ctx.lineTo(x-11,y);ctx.closePath();
+ ctx.fill();ctx.stroke();
+ ctx.strokeStyle="#172535";ctx.lineWidth=1.5;
+ ctx.beginPath();ctx.moveTo(x-5,y);ctx.lineTo(x+5,y);
+ ctx.moveTo(x,y-5);ctx.lineTo(x,y+5);ctx.stroke();
+ const label="RF MODEL CENTRE · NOT GPS";
+ ctx.font="bold 11px system-ui";
+ const width=ctx.measureText(label).width+14;
+ const px=Math.max(5,Math.min(canvas.clientWidth-width-5,x+16));
+ const py=Math.max(4,Math.min(canvas.clientHeight-23,y-23));
+ ctx.fillStyle="rgba(10,28,43,.95)";ctx.fillRect(px,py,width,22);
+ ctx.strokeStyle="#ffcf70";ctx.lineWidth=1;ctx.strokeRect(px,py,width,22);
+ ctx.fillStyle="#ffe4a1";ctx.fillText(label,px+7,py+15);
+ ctx.restore();
+}
 function paint(){
  const w=canvas.clientWidth,h=canvas.clientHeight;
  if(!w||!h)return;
  ctx.clearRect(0,0,w,h);ctx.fillStyle="#102231";ctx.fillRect(0,0,w,h);
  tiles();grid();
  if($("showRfCoverage").checked)paintRfCoverage();
+ paintRfModelCentre();
  if($("showTracks").checked){
   for(const [key,points] of state.tracks.entries()){
    if(points.length<2)continue;
