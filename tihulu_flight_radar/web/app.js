@@ -1106,6 +1106,24 @@ function focusRfModelWhenReady(result){
   Math.round(km)+" km";
  rfLocatorFocused=true;rfLastFollowModel=result;
 }
+function paintRfBestPin(result){
+ if(!rfLocatorActive||!$("rfBestPin").checked||!rfBest||result.status!=="region")return;
+ const [x,y]=rfMapXy(rfBest);
+ if(x<0||x>canvas.clientWidth||y<0||y>canvas.clientHeight)return;
+ const [liveX,liveY]=rfMapXy(result.region);
+ const nearlySame=Math.hypot(x-liveX,y-liveY)<25;
+ ctx.save();
+ ctx.fillStyle="rgba(39,25,62,.96)";ctx.strokeStyle="#d3b5ff";
+ ctx.lineWidth=2;ctx.setLineDash([]);
+ ctx.beginPath();ctx.moveTo(x,y-8);ctx.lineTo(x+8,y);
+ ctx.lineTo(x,y+8);ctx.lineTo(x-8,y);ctx.closePath();
+ ctx.fill();ctx.stroke();
+ if(!nearlySame){
+  ctx.font="bold 11px system-ui";ctx.fillStyle="#e6d5ff";
+  ctx.fillText("SESSION BEST MODEL ~"+rfBest.rawExtentKm.toFixed(1)+" km · NOT GPS",x+15,y-12);
+ }
+ ctx.restore();
+}
 function paintRfLocator(result){
  if(!rfLocatorActive||result.status!=="region"||!$("rfModelPin").checked)return;
  const [x,y]=xy(result.region.lat,result.region.lon);
@@ -1640,7 +1658,8 @@ function paint(){
   ctx.fillText((a.flight||a.hex||"Aircraft").trim(),x+19,y-10);
   ctx.shadowBlur=0;
  }
- paintRfLocator(model); // independent of the optional ring display.
+ paintRfBestPin(model); // historical best model, separate from live tracking.
+ paintRfLocator(model); // actual current RF feasible-area model center.
  if(!markers){
   ctx.fillStyle="rgba(13,23,33,.9)";ctx.fillRect(12,12,Math.min(420,w-24),38);
   ctx.fillStyle="#d6e7f7";ctx.font="13px system-ui";
