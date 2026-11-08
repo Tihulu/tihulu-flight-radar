@@ -100,11 +100,30 @@ test("RF horizon applies up to 64 genuine independent aircraft; number is not ac
  assert.equal(r.status,"region");
  assert.equal(Object.prototype.hasOwnProperty.call(r,"accuracyMeters"),false);
 });
+test("Stationary receiver history only accepts real RF and expires after two hours",()=>{
+ const make=(hex,lat,lon)=>{
+  const a={hex,lat,lon,alt_baro:30000,seen:1,seen_pos:1,
+   position_source:"antenna",sources:["antenna"]};
+  a.observations={antenna:{hex,lat,lon,alt_baro:30000,seen:1,seen_pos:1}};
+  return a;
+ };
+ const now=Date.now();
+ const rows=[make("a00001",50.7,6.7),make("a00002",50.2,7.5),
+  make("a00003",51.1,6.2),make("a00004",50.6,7.9)];
+ const history=rows.map(a=>cov.recordedCircle(a,now));
+ assert.ok(history.every(Boolean));
+ const fromHistory=cov.compute([],history);
+ assert.equal(fromHistory.count,4);
+ assert.equal(fromHistory.status,"region");
+ assert.equal(fromHistory.circles.length,4);
+ assert.equal(cov.recordedCircle({...rows[0],position_source:"internet"}),null);
+ assert.equal(cov.compute([],history.map(x=>({...x,capturedAtMs:now-3*3600000}))).count,0);
+});
 test("Shared offline UI, native bridge and service-worker expose laboratory without network upload",()=>{
  const html=src("index.html"),app=src("app.js"),sw=src("sw.js"),
   bridge=fs.readFileSync(path.join(__dirname,"../tihulu_flight_radar/bridge.py"),"utf8"),
   native=fs.readFileSync(path.join(__dirname,"../tihulu_flight_radar/native.py"),"utf8");
- for(const id of ["timingMode","timingFrames","timingUnique","timingInterval",
+ for(const id of ["rfRemember","rfClearHistory","timingMode","timingFrames","timingUnique","timingInterval",
    "timingMad","timingHostRead","timingRetained","timingEvents",
    "timingPlot","timingPause","timingReset","timingSaveJson",
    "timingSaveCsv","timingImport","timingQuality"])
