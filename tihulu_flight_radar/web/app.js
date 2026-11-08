@@ -962,8 +962,16 @@ function renderCoverageStatus(){
      "This is NOT measured accuracy or a statistical error radius.";
    }else rfModelProgressText="RF feasible region initialized; center and sampled spread update as genuine fixes arrive.";
    rfLastRegion={lat:r.lat,lon:r.lon,extentKm:r.extentKm};
-  }else rfModelProgressText="RF area unavailable ("+result.status+
+  }else{
+   rfModelProgressText="RF area unavailable ("+result.status+
     "). No center or error estimate is inferred.";
+   // The camera may still show the prior RF view; never label this as
+   // a currently valid four-aircraft location model.
+   if(rfFollowCenter&&rfLastFollowModel){
+    state.centerLabel="RF model currently unresolved · last view retained, NOT a live receiver fix";
+    rfLastFollowModel=null;
+   }
+  }
  }
  $("rfProgress").textContent=rfModelProgressText;
  const label=$("rfCoverageStatus");
