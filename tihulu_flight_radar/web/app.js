@@ -1468,6 +1468,11 @@ function paintRfCoverage(result){
     ctx.restore();
    }
    if($("rfFill").checked||$("rfHatch").checked){
+    // Hatch strokes alter the active Canvas path; retrace polygon after
+    // clipping so the cyan border always follows the actual feasible hull.
+    ctx.beginPath();
+    hull.forEach((p,i)=>{if(i===0)ctx.moveTo(p[0],p[1]);else ctx.lineTo(p[0],p[1])});
+    ctx.closePath();
     ctx.strokeStyle="rgba(104,230,238,.88)";ctx.lineWidth=2.2;ctx.stroke();
    }
   }
