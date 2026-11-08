@@ -1391,29 +1391,86 @@ function rfConvexHull(points){
  lower.pop();upper.pop();
  return lower.concat(upper);
 }
+// Hull is calculated once per RF model revision, not on each smooth map frame.
+let rfHullModel=null,rfHullCoordinates=[];
+function rfFeasibleHull(result){
+ if(rfHullModel!==result){
+  rfHullModel=result;rfHullCoordinates=[];
+  if(result.status==="region"){
+   const candidates=result.region.possibleSamples||[];
+   const anchor=result.region.lon;
+   const coords=candidates.map(p=>[
+    anchor+((p.lon-anchor+540)%360)-180,p.lat
+   ]);
+   rfHullCoordinates=rfConvexHull(coords).map(p=>({lon:p[0],lat:p[1]}));
+  }
+ }
+ return rfHullCoordinates;
+}
+function rfMapXy(p){
+ // Draw the shortest longitude crossing near the current camera center.
+ const lon=state.lon+((p.lon-state.lon+540)%360)-180;
+ return xy(p.lat,lon);
+}
+function rfDrawRing(ring,color,dash=[5,8],width=1.4){
+ const path=TihuluRFCoverage.horizonPoints(ring,80);
+ ctx.save();ctx.strokeStyle=color;ctx.lineWidth=width;ctx.setLineDash(dash);
+ ctx.beginPath();
+ path.forEach((p,i)=>{
+  const [x,y]=rfMapXy(p);
+  if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+ });
+ ctx.stroke();ctx.restore();
+}
 function paintRfCoverage(result){
- if(result.status==="insufficient")return;
  ctx.save();
  if($("showRfCoverage").checked){
-  // Radio-horizon disks are upper bounds, not measured ranges.
-  ctx.lineWidth=1;ctx.strokeStyle="rgba(88,194,219,.29)";
-  ctx.setLineDash([4,9]);
-  for(const ring of result.circles.slice(0,3)){
-   const path=TihuluRFCoverage.horizonPoints(ring,72);
-   ctx.beginPath();
-   path.forEach((p,i)=>{const [x,y]=xy(p.lat,p.lon);if(i)ctx.lineTo(x,y);else ctx.moveTo(x,y)});
-   ctx.stroke();
-  }
-  ctx.setLineDash([]);
+  // Retain the quick three-horizon diagnostic toggle for compatibility.
+  for(const ring of result.circles.slice(0,3))
+   rfDrawRing(ring,"rgba(88,194,219,.30)",[4,9],1);
  }
- if(result.status==="region" && (rfLocatorActive||$("showRfCoverage").checked)){
-  const samples=(result.region.possibleSamples||[]).map(p=>xy(p.lat,p.lon));
-  const hull=rfConvexHull(samples);
+ // Every real RF aircraft has its own independently switchable outline,
+ // even if there are fewer than four aircraft for a region model.
+ for(const item of result.aircraftCircles||[]){
+  if(!rfSelectedPlanes.has(item.hex))continue;
+  rfDrawRing(item.circle,rfPlaneColor(item.hex),[5,6],1.7);
+ }
+ if(result.status==="region"&&rfLocatorActive){
+  const r=result.region;
+  const hull=rfFeasibleHull(result).map(rfMapXy);
   if(hull.length>=3){
-   ctx.beginPath();hull.forEach((p,i)=>{if(!i)ctx.moveTo(p[0],p[1]);else ctx.lineTo(p[0],p[1])});
+   ctx.beginPath();
+   hull.forEach((p,i)=>{if(i===0)ctx.moveTo(p[0],p[1]);else ctx.lineTo(p[0],p[1])});
    ctx.closePath();
-   ctx.fillStyle="rgba(30,178,205,.19)";ctx.fill();
-   ctx.strokeStyle="rgba(100,232,236,.82)";ctx.lineWidth=2.4;ctx.stroke();
+   if($("rfFill").checked){
+    ctx.fillStyle="rgba(30,178,205,.17)";ctx.fill();
+   }
+   if($("rfHatch").checked){
+    ctx.save();ctx.clip();
+    const xs=hull.map(p=>p[0]),ys=hull.map(p=>p[1]);
+    const left=Math.max(-100,Math.min(...xs)),right=Math.min(canvas.clientWidth+100,Math.max(...xs));
+    const top=Math.max(-100,Math.min(...ys)),bottom=Math.min(canvas.clientHeight+100,Math.max(...ys));
+    const dy=bottom-top;
+    ctx.strokeStyle="rgba(100,225,238,.56)";ctx.lineWidth=1.2;
+    for(let offset=left-dy,i=0;offset<=right+dy&&i<350;offset+=12,i++){
+     ctx.beginPath();ctx.moveTo(offset,top);ctx.lineTo(offset+dy,bottom);ctx.stroke();
+    }
+    ctx.restore();
+   }
+   if($("rfFill").checked||$("rfHatch").checked){
+    ctx.strokeStyle="rgba(104,230,238,.88)";ctx.lineWidth=2.2;ctx.stroke();
+   }
+  }
+  if($("rfModelCircle").checked){
+   // Approximate maximum sampled distance from the *modeled* centroid.
+   // This is deliberately NOT called a confidence/error radius.
+   rfDrawRing({lat:r.lat,lon:r.lon,radiusKm:r.extentKm},
+    "rgba(226,244,255,.95)",[10,6],2);
+   const [cx,cy]=rfMapXy(r);
+   if(cx>=0&&cx<=canvas.clientWidth&&cy>=0&&cy<=canvas.clientHeight){
+    ctx.font="bold 11px system-ui";ctx.fillStyle="#e5f7ff";
+    ctx.fillText("MODEL SPREAD ~"+Math.round(r.extentKm)+" km · NOT ACCURACY",cx+19,cy+28);
+   }
   }
  }
  ctx.restore();
@@ -1425,7 +1482,7 @@ function paint(){
  focusRfModelWhenReady(model);
  ctx.clearRect(0,0,w,h);ctx.fillStyle="#102231";ctx.fillRect(0,0,w,h);
  tiles();grid();
- if($("showRfCoverage").checked||rfLocatorActive)paintRfCoverage(model);
+ if($("showRfCoverage").checked||rfLocatorActive||rfSelectedPlanes.size)paintRfCoverage(model);
  if($("showTracks").checked){
   for(const [key,points] of state.tracks.entries()){
    if(points.length<2)continue;
