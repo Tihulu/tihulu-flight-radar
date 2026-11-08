@@ -163,6 +163,10 @@
      <label><input id="rfModelCircle" type="checkbox" checked> Model spread circle</label>
      <label><input id="rfModelPin" type="checkbox" checked> Center pin</label>
      <label title="Show the session best (smallest sampled model spread), not calibrated GPS accuracy"><input id="rfBestPin" type="checkbox" checked> Best model center</label>
+     <label title="Draw a user-assumed radial Gaussian PSF around each selected aircraft horizon edge. Not a measured RF range, GPS error or 68% confidence."><input id="rfGaussianBand" type="checkbox"> Gaussian PSF · ±1σ</label>
+     <label title="ASSUMED one-sigma softening around each radio-horizon edge in kilometers, not measured range error">Assumed σ (km)
+      <select id="rfSigmaKm" aria-label="Assumed Gaussian horizon edge standard deviation in km"><option value="5">5</option><option value="10">10</option><option value="20" selected>20</option><option value="40">40</option><option value="80">80</option><option value="150">150</option></select>
+     </label>
     </div>
     <span id="rfCoverageStatus" aria-live="polite">Four or more independently positioned local RF aircraft required. A single SDR cannot give a measured location fix.</span>
     <span id="rfProgress" class="rf-progress" aria-live="polite">Model spread and center changes appear here as real RF observations accumulate.</span>
@@ -173,6 +177,7 @@
      <summary>Individual aircraft horizon circles · radio only</summary>
      <div class="rf-aircraft-actions"><button type="button" id="rfAllPlanes">Show all</button><button type="button" id="rfNoPlanes">Hide all</button></div>
      <div id="rfAircraftLayers" class="rf-aircraft-layers" aria-label="Individual real RF aircraft horizon layers">Waiting for valid RF aircraft positions.</div>
+      <small class="rf-psf-note">Gaussian PSF is only an optional, hypothetical soft edge of each selected aircraft's maximum radio-horizon circle. ±1σ is an assumed number of kilometers; it is NOT a measured range error, receiver-position accuracy, or a calibrated 68% probability region. Select individual aircraft circles or Show all to display these bands.</small>
     </details>
     <small>Model spread circle bounds sampled feasible cells and is NOT a statistical accuracy/error circle. Hatched shading is an alternative visual layer, not GPS. Per-aircraft circles are radio-horizon upper limits, not measured aircraft distances. Only genuine position-bearing antenna observations qualify; aircraft counted without positions do not qualify. Native readsb aircraft positions may qualify even when the separate ADC timing laboratory is empty. The displayed coordinates are the <em>center of a modeled possible area</em>, not your measured position or GPS accuracy. A horizon circle represents a maximum plausible range, never a distance measurement. More planes may reduce the area without improving true accuracy. Reverse MLAT requires synchronized reference measurements.</small>
    </section>
