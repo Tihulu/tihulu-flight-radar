@@ -993,8 +993,33 @@ $("rfExportEvidence").onclick=()=>{
  saveTimingText(file,JSON.stringify(details,null,2),"application/json");
  notice("Downloaded local-only RF model diagnostics: no pairing token or Internet aircraft. Sharing may reveal your listening area.");
 };
+function rfCoordinateText(point){
+ // Coordinate formatting only: no GPS, geocoding or additional estimate.
+ if(!point||!Number.isFinite(point.lat)||!Number.isFinite(point.lon))return "unavailable";
+ return Math.abs(point.lat).toFixed(5)+"° "+(point.lat>=0?"N":"S")+
+  ", "+Math.abs(point.lon).toFixed(5)+"° "+(point.lon>=0?"E":"W");
+}
+function renderRfCoordinateReadouts(result){
+ const current=result?.status==="region"?result.region:null;
+ const currentText=current?
+  "LIVE RF model center: "+rfCoordinateText(current)+" · NOT GPS":
+  "LIVE RF model center: unavailable (4+ genuine positioned RF aircraft required)";
+ const bestText=rfBest?
+  "BEST SESSION model center: "+rfCoordinateText(rfBest)+" · NOT GPS":
+  "BEST SESSION model center: not yet available";
+ const liveEl=$("rfCurrentCoordinates"),bestEl=$("rfBestCoordinates"),mapEl=$("rfMapCoordinates");
+ if(liveEl.textContent!==currentText)liveEl.textContent=currentText;
+ if(bestEl.textContent!==bestText)bestEl.textContent=bestText;
+ const mapText=current?
+  "RF LIVE "+rfCoordinateText(current)+" · "+result.count+" aircraft | "+
+   (rfBest?"BEST "+rfCoordinateText(rfBest):"Best: pending")+" · NOT GPS":
+  "RF LIVE: unavailable | "+(rfBest?"BEST "+rfCoordinateText(rfBest):"Best: pending")+
+   " · model, NOT GPS";
+ if(mapEl.textContent!==mapText)mapEl.textContent=mapText;
+}
 function renderCoverageStatus(){
  const result=coverageResult();
+ renderRfCoordinateReadouts(result);
  renderRfPlaneLayers(result);
  if(result!==rfLastProgressModel){
  const evidence=$("rfEvidence");
@@ -1145,6 +1170,7 @@ function paintRfBestPin(result){
  if(!nearlySame){
   ctx.font="bold 11px system-ui";ctx.fillStyle="#e6d5ff";
   ctx.fillText("SESSION BEST MODEL ~"+rfBest.rawExtentKm.toFixed(1)+" km · NOT GPS",x+15,y-12);
+  ctx.fillText(rfCoordinateText(rfBest),x+15,y+3);
  }
  ctx.restore();
 }
@@ -1161,6 +1187,7 @@ function paintRfLocator(result){
  ctx.font="bold 11px system-ui";ctx.fillStyle="#97eef5";
  ctx.shadowColor="#0a1a27";ctx.shadowBlur=5;
  ctx.fillText("RF MODEL CENTER · NOT GPS",x+18,y-12);
+ ctx.fillText(rfCoordinateText(result.region),x+18,y+4);
  ctx.restore();
 }
 function renderPopup(a){
