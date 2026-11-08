@@ -75,3 +75,65 @@ References (technical context):
 - https://streaming-docs.adsbexchange.com/guides/timestamps
 - https://www.radartutorial.eu/02.basics/en/rp52.en.html
 - https://www.flightaware.com/adsb/mlat/
+
+## Offline RF Timing Laboratory (November 2026)
+
+The shared radar UI now contains a native/browser RF Timing Laboratory. It
+works without public ADS-B providers when an actual radio feed is available,
+and it can open a previously exported session with **no antenna and no
+Internet**. All analysis is local: there is no background uploader, geolocation
+API call, artificial aircraft, remote time server or hidden service dependency.
+
+**Direct browser receiver (Brave/Chrome/Edge with permitted WebUSB):**
+- No second RTL-SDR owner: the worker piggybacks on the **existing** 2 Msps
+  I/Q stream, recording a capped batch of CRC-verified Mode S frames.
+- Per record: ICAO24, DF, type code, original 112-bit frame hex, receiver ADC
+  sample index, worker decoder processing UTC, and a segment marker for
+  explicit pauses/resumes. The per-frame **0.5 µs nominal sample period** is
+  not a calibrated UTC accuracy.
+- Statistics: total accepted timing records, distinct aircraft, same-ICAO
+  interarrival median, median absolute deviation (MAD), number of segment
+  interruptions, host USB read duration (last/mean/max), and possible slow
+  host-read windows. Slow host reads and UI records dropped due to a cap are
+  not proof of lost radio samples or an estimate of propagation time.
+- Bounded memory: maximum 4,000 retained frames in the frontend, maximum 512
+  queued decoder events per publication interval. Oldest frontend records
+  are evicted; recording can be paused and cleared explicitly.
+- Exports: user-initiated JSON session (schema
+  `tihulu.rf-timing-lab.v1`) and CSV. Offline import validates format, field
+  types, ascending sample indices and size (4 MiB maximum), and **never**
+  injects replayed frames into the live radar or RF aircraft counts.
+- After first installation/cache fill, the service worker caches UI,
+  decoder, USB drivers and analysis code for offline operation. WebUSB still
+  requires a supported Chromium browser, a working local USB device and
+  operating-system permissions. Cached map tiles are not guaranteed.
+
+**Qt desktop + readsb backend:**
+- Same timing-lab UI is included, and JSON/CSV exports open an OS-local
+  save dialog through Qt WebEngine.
+- `readsb` `aircraft.json` contains aircraft message age estimates but **not**
+  calibrated per-message ADC arrival timestamps. Thus no fine-grained
+  interarrival record is fabricated for this receiver backend. It can still
+  display and export a previous local WebUSB recording, and the genuine
+  `readsb` aircraft contribute to the RF horizon constraints.
+- For a future native high-precision mode, integrate a verified raw readsb
+  Beast/timestamp source with explicit clock origin, sample loss and time
+  uncertainty, without claiming the SDR a second time.
+
+**RF coverage and accumulating aircraft:**
+- The receiver is assumed stationary *only when the user leaves the fixed-site
+  history checkbox on*. The browser retains up to 64 individually
+  **antenna-verified** aircraft position constraints for at most two hours
+  in the current session; historical records are explicitly labeled as
+  historical rather than passed back as fresh live plane positions.
+- More RF aircraft can shrink the **model-dependent feasible region**. The
+  map still draws at most six rings to avoid visual clutter, while up to 64
+  independent records constrain their geometric intersection.
+- Increasing aircraft count does **not guarantee increasing geolocation
+  accuracy**. Radio-horizon ranges are assumptions, not time-of-flight
+  distances, so this version never returns a receiver GPS fix or accuracy
+  figure. Clear the history when moving the receiver.
+
+Physical SDR reception, driver stability, offline first-load setup and Qt
+download dialogs require testing on the target computer. CI simulation is not
+a substitute for hardware calibration.
