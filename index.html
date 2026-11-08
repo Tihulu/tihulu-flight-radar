@@ -150,8 +150,39 @@
    </div>
    <div class="tablewrap"><table><thead><tr><th>Flight / ICAO</th><th id="altitudeColumn">Altitude (ft)</th><th id="speedColumn">Speed (kt)</th><th>Source</th></tr></thead><tbody id="aircraftRows"></tbody></table></div>
    <section class="rf-coverage-panel" aria-label="Experimental RF coverage constraints">
-    <strong>Receiver coverage estimate</strong><span id="rfCoverageStatus" aria-live="polite">RF position data required. One SDR alone cannot determine a receiver's coordinates.</span>
+    <strong>Receiver coverage estimate</strong>
+    <div class="rf-history-controls">
+     <label title="Accumulate only locally verified RF positions while this receiver stays physically fixed"><input id="rfRemember" type="checkbox" checked> Assume stationary receiver · accumulate 2 h of RF observations</label>
+     <button id="rfClearHistory" type="button">Clear RF history</button>
+    </div>
+    <span id="rfCoverageStatus" aria-live="polite">RF position data required. One SDR alone cannot determine a receiver's coordinates.</span>
     <small>Only fresh antenna-positioned aircraft count. Rings show approximate radio-horizon limits, not measured ranges. Reverse MLAT requires synchronized external reference receivers.</small>
+   </section>
+   <section class="rf-lab-panel" aria-label="Offline RF Timing Laboratory">
+    <div class="rf-lab-heading"><h2>RF Timing Laboratory</h2><span class="rf-lab-label">Local · offline-capable</span></div>
+    <p id="timingMode" role="status" aria-live="polite" class="muted">Waiting for real 1090 MHz receiver data. Offline session files can be opened without an antenna.</p>
+    <div class="rf-lab-metrics">
+     <div><span>CRC-valid frames</span><strong id="timingFrames">0</strong></div>
+     <div><span>Unique RF aircraft</span><strong id="timingUnique">0</strong></div>
+     <div><span>Same-aircraft interval (median)</span><strong id="timingInterval">—</strong></div>
+     <div><span>Interval variability (MAD)</span><strong id="timingMad">—</strong></div>
+     <div><span>USB host read (last)</span><strong id="timingHostRead">—</strong></div>
+     <div><span>Records retained</span><strong id="timingRetained">0</strong></div>
+    </div>
+    <canvas id="timingPlot" class="rf-timing-plot" width="320" height="85" role="img" aria-label="Observed per-aircraft message timing histogram; not a distance estimate"></canvas>
+    <p id="timingQuality" class="rf-lab-quality">Nominal ADC interval: 0.5 µs (2 Msps). This is not absolute UTC accuracy. TX UTC and propagation distance are unknown.</p>
+    <div class="rf-lab-actions">
+     <button id="timingPause" type="button" aria-pressed="false">Pause record</button>
+     <button id="timingReset" type="button">Clear session</button>
+     <button id="timingSaveJson" type="button">Export JSON</button>
+     <button id="timingSaveCsv" type="button">Export CSV</button>
+     <label class="rf-import-label">Open offline recording
+      <input id="timingImport" type="file" accept=".json,application/json" aria-label="Open a previously exported local RF timing session">
+     </label>
+    </div>
+    <div class="rf-lab-tablewrap"><table><thead><tr><th>ICAO</th><th>ADC sample #</th><th>Type</th><th>Decode UTC</th></tr></thead>
+      <tbody id="timingEvents"><tr><td colspan="4">No RF timing records yet</td></tr></tbody></table></div>
+    <small>Only CRC-verified WebUSB radio frames populate this lab. The native readsb aircraft.json feed contains snapshot ages, not packet sample indices. Imported files never affect the live map. Ring intersections are modeled coverage constraints, not a measured receiver fix.</small>
    </section>
    <details id="rawAircraftPanel" class="raw-aircraft-panel"><summary>Selected aircraft · Raw / debug JSON</summary><pre id="details" class="details">Select an aircraft to inspect its received fields and source provenance.</pre></details>
   </aside>
@@ -216,6 +247,7 @@
 </main>
 <script src="./multi_sources.js" defer></script>
 <script src="./receiver_coverage.js" defer></script>
+<script src="./rf_timing_lab.js" defer></script>
 <script src="./app.js" defer></script>
 <script type="module" src="./browser_usb.mjs"></script>
 </body></html>
