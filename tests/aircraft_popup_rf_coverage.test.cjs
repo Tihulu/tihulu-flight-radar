@@ -140,7 +140,7 @@ test("RF model is offline and the toggle doesn't depend on GPS or ring checkbox"
  assert.match(js,/paintRfLocator\(model\); \/\/ independent of the optional ring display/);
  assert.match(js,/function focusRfModelWhenReady\(result\)/);
  assert.match(js,/function paintRfCoverage\(result\)/);
- assert.match(js,/rfConvexHull\(samples\)/);
+ assert.match(js,/rfConvexHull\(coords\)/);
  assert.match(html,/smoothMotion/);
  assert.doesNotMatch(model,/\bfetch\s*\(|navigator\.geolocation|\bXMLHttpRequest\b|WebSocket/);
  assert.match(html,/not your measured position or GPS accuracy/);
