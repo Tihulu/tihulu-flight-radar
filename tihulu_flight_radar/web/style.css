@@ -250,3 +250,12 @@ body.tar-open{overflow:hidden}
 .rf-lab-tablewrap th,.rf-lab-tablewrap td{padding:6px 5px;text-align:left;border-bottom:1px solid #27445b}
 .rf-lab-tablewrap th{position:sticky;top:0;background:#14293c;color:var(--muted)}
 .rf-lab-panel>small{display:block;color:#aec3d4;line-height:1.5;font-size:10px;margin-top:9px}
+
+/* RF feasible-area locator: independent from the optional horizon-ring overlay.
+   Highlight the action but never style the model centroid as a GPS fix. */
+#rfLocate{border-color:#a58e56;background:#433922;color:#ffefcf;font-weight:650}
+#rfLocate[aria-pressed="true"]{background:#685124;border-color:#e3b865}
+.rf-locate-output{background:#0c1c2b;border:1px solid #486478;
+ border-radius:8px;padding:10px;margin-top:5px;color:#e8e6d9;
+ font-size:11px;line-height:1.6;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.rf-locate-output strong{color:#ffdfab}
