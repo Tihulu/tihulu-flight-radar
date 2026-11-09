@@ -330,3 +330,12 @@ html.native #receiverStatus[data-pair-state="failed"]{color:#ffbc99}
 #rfBestCoordinates{border-color:#786699;background:#211e32;color:#e2ccff}
 .rf-map-coordinates{color:#b5f1f3;font:600 11px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;
  font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+
+/* Guaranteed visible mini aircraft card and accessible list fallback. */
+.aircraft-row-info{font-size:11px!important;padding:4px 9px!important;
+ border:1px solid #508ca4!important;border-radius:6px!important;
+ background:#163b4d!important;color:#c9f5ff!important;
+ cursor:pointer;white-space:nowrap}
+.aircraft-row-info:hover,.aircraft-row-info:focus-visible{background:#24647a!important;
+ border-color:#9adfed!important;outline:2px solid #6ec9e2;outline-offset:2px}
+#popupAirline,#popupFlightNumber{font-size:12px;line-height:1.5;overflow-wrap:anywhere}
