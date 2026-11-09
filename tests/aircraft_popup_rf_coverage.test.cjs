@@ -85,7 +85,7 @@ test("Session RF history contributes independent old aircraft only at a fixed re
 test("Unit selectors, close-on-outside click, raw JSON and timing claims in common web/Qt UI",()=>{
  const html=read("index.html"),js=read("app.js"),css=read("style.css");
  for(const id of ["unitSystem","altitudeColumn","speedColumn","aircraftPopup",
-   "popupClose","popupTiming","rawAircraftPanel","showRfCoverage","rfCoverageStatus"])
+   "popupClose","popupTiming","rawAircraftPanel","rfAircraftCircleMode","rfCoverageStatus"])
    assert.match(html,new RegExp('id="'+id+'"'));
  assert.match(html,/Altitude \(ft\)/);
  assert.match(html,/Speed \(kt\)/);
