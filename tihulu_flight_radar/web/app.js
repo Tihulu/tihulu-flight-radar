@@ -850,6 +850,8 @@ function clearRfBest(){
  rfLastRegion=null;rfLastProgressModel=null;
 }
 const rfSelectedPlanes=new Set();
+// Explicit map/table choices are independent of the All/None display preset.
+const rfPickedPlanes=new Set();
 let rfAutoSelectNewPlanes=false; // user can always uncheck an individual plane
 let rfAircraftListSignature="";
 const RF_VIEW_CHECKBOXES=["rfFill","rfHatch","rfModelCircle","rfBestCircle",
@@ -868,12 +870,20 @@ function restoreRfViewPreferences(){
   if(Array.isArray(data.selectedPlaneHexes))
    for(const hex of data.selectedPlaneHexes.slice(0,64))
     if(/^[0-9a-f]{6}$/i.test(String(hex)))rfSelectedPlanes.add(hex.toLowerCase());
+  // Older installs stored the active circle mask, which in All mode could
+  // contain every plane. Never mistake that auto-mask for a manual choice.
+  const picked=Array.isArray(data.pickedPlaneHexes)?data.pickedPlaneHexes:
+   data.aircraftMode==="selected"?data.selectedPlaneHexes:[];
+  if(Array.isArray(picked))
+   for(const hex of picked.slice(0,64))
+    if(/^[0-9a-f]{6}$/i.test(String(hex)))rfPickedPlanes.add(hex.toLowerCase());
  }catch{ /* Private-browsing or native storage may be unavailable. */ }
 }
 function persistRfViewPreferences(){
  const data={rfLocatorEnabled:rfLocatorActive,
   aircraftMode:$("rfAircraftCircleMode").value,sigmaKm:$("rfSigmaKm").value,
-  selectedPlaneHexes:[...rfSelectedPlanes].slice(-64)};
+  selectedPlaneHexes:[...rfSelectedPlanes].slice(-64),
+  pickedPlaneHexes:[...rfPickedPlanes].slice(-64)};
  for(const id of RF_VIEW_CHECKBOXES)data[id]=$(id).checked;
  try{window.localStorage.setItem(RF_VIEW_SETTINGS_KEY,JSON.stringify(data));}
  catch{ /* Session controls still work even without storage. */ }
@@ -884,12 +894,17 @@ function setAircraftCircleMode(mode){
  if(!["none","selected","all"].includes(mode))return;
  $("rfAircraftCircleMode").value=mode;
  rfAutoSelectNewPlanes=mode==="all";
- if(mode==="none")rfSelectedPlanes.clear();
+ // Switching from All -> Selected must not leave all aircraft checked.
+ // None hides rings but does not erase explicit choices.
+ rfSelectedPlanes.clear();
+ if(mode==="selected")
+  for(const hex of rfPickedPlanes)rfSelectedPlanes.add(hex);
  if(mode==="all")
   for(const item of coverageResult().aircraftCircles||[])
    rfSelectedPlanes.add(item.hex);
  rfAircraftListSignature="";
  persistRfViewPreferences();
+ renderRfPickedPanel();
  paint();
 }
 const RF_PLANE_COLORS=["#61c5e7","#8dafff","#b5a1f0","#6ddbbd","#f69bba","#eeaea0"];
@@ -969,12 +984,16 @@ function renderRfPlaneLayers(result){
   input.value=item.hex;input.checked=rfSelectedPlanes.has(item.hex);
   input.setAttribute("aria-label","Show RF horizon for "+item.hex);
   input.addEventListener("change",()=>{
-   if(input.checked)rfSelectedPlanes.add(item.hex);else rfSelectedPlanes.delete(item.hex);
+   if(input.checked){
+    rfPickedPlanes.add(item.hex);rfSelectedPlanes.add(item.hex);
+   }else{
+    rfPickedPlanes.delete(item.hex);rfSelectedPlanes.delete(item.hex);
+   }
    // Individual choice switches All/None preset to Selected aircraft.
    $("rfAircraftCircleMode").value="selected";
    rfAutoSelectNewPlanes=false;
    rfAircraftListSignature="";
-   persistRfViewPreferences();paint();
+   persistRfViewPreferences();renderRfPickedPanel();paint();
   });
   const swatch=document.createElement("span");swatch.className="rf-aircraft-swatch";
   swatch.style.background=rfPlaneColor(item.hex);
@@ -1433,7 +1452,8 @@ function positionPopup(a){
 }
 function closePopup(){
  if($("aircraftPopup").hidden)return;
- $("aircraftPopup").hidden=true;state.selected=null;renderTable();paint();
+ // Closing Info changes visibility, NOT the persistent aircraft selection.
+ $("aircraftPopup").hidden=true;renderTable();paint();
 }
 $("unitSystem").onchange=e=>{
  state.units=e.target.value==="metric"?"metric":"aviation";
@@ -1467,6 +1487,63 @@ document.addEventListener("pointerdown",e=>{
 });
 window.addEventListener("keydown",e=>{if(e.key==="Escape")closePopup()});
 
+function renderRfPickedPanel(){
+ const root=$("rfPickedList"),count=$("rfPickedCount"),note=$("rfPickedSummary");
+ const hexes=[...rfPickedPlanes];
+ count.textContent=String(hexes.length);
+ root.replaceChildren();
+ const model=coverageResult();
+ const qualified=new Set((model?.aircraftCircles||[]).map(item=>item.hex));
+ const mode=$("rfAircraftCircleMode").value;
+ if(!hexes.length){
+  note.textContent="Click a plane on the map or an aircraft row. Closing Info keeps the selection.";
+  root.textContent="No selected aircraft.";
+  return;
+ }
+ const available=hexes.filter(hex=>qualified.has(hex)).length;
+ note.textContent=hexes.length+" selected · "+available+
+  " genuine RF horizon(s) available · display: "+
+  (mode==="selected"?"selected only":mode==="all"?"all RF aircraft":"hidden")+
+  ". Internet-only aircraft never produce a fake RF horizon.";
+ for(const hex of hexes.slice(-64).reverse()){
+  const live=state.data.find(a=>String(a.hex||"").toLowerCase()===hex);
+  const row=document.createElement("div");row.className="rf-picked-item";
+  if(hex===state.selected)row.classList.add("current");
+  const detail=document.createElement("div");detail.className="rf-picked-description";
+  const label=document.createElement("strong");
+  label.textContent=(live?.flight||hex).trim()+" · "+hex.toUpperCase();
+  const status=document.createElement("small");
+  status.textContent=qualified.has(hex)
+   ?"Genuine antenna RF horizon available"
+   :live?"Selected · no verified RF position / horizon"
+   :"Selected · aircraft not in current live feed";
+  detail.append(label,status);
+  const info=document.createElement("button");info.type="button";
+  info.className="rf-picked-info";info.textContent="Info";
+  info.disabled=!live;info.setAttribute("aria-label","Info for "+hex);
+  info.onclick=()=>{const current=state.data.find(a=>String(a.hex||"").toLowerCase()===hex);
+   if(current)choose(current);};
+  const remove=document.createElement("button");remove.type="button";
+  remove.className="rf-picked-remove";remove.textContent="×";
+  remove.setAttribute("aria-label","Unselect "+hex);
+  remove.onclick=()=>{
+   rfPickedPlanes.delete(hex);rfSelectedPlanes.delete(hex);
+   if(state.selected===hex){
+    state.selected=null;$("aircraftPopup").hidden=true;
+   }
+   rfAircraftListSignature="";
+   persistRfViewPreferences();renderTable();paint();
+  };
+  row.append(detail,info,remove);root.append(row);
+ }
+}
+$("rfPickedClear").onclick=()=>{
+ rfPickedPlanes.clear();
+ if($("rfAircraftCircleMode").value==="selected")rfSelectedPlanes.clear();
+ state.selected=null;$("aircraftPopup").hidden=true;
+ rfAircraftListSignature="";
+ persistRfViewPreferences();renderTable();paint();
+};
 function renderTable(){
  const rows=$("aircraftRows"); rows.replaceChildren();
  const displayed=state.data.filter(visible);
@@ -1502,12 +1579,25 @@ function renderTable(){
  }
  if(state.selected){
   const found=state.data.find(a=>a.hex===state.selected);
-  if(!found){$("details").textContent="Selected aircraft no longer in the latest snapshot.";renderPopup(null);state.selected=null;}
-  else if(!$("aircraftPopup").hidden)renderPopup(found);
+  if(!found){
+   $("details").textContent="Selected aircraft no longer in the latest snapshot.";
+   renderPopup(null); // keep ICAO selected; never present a stale live marker
+  }else if(!$("aircraftPopup").hidden)renderPopup(found);
  }
+ renderRfPickedPanel();
 }
 function choose(a,{center=false}={}){
- state.selected=a.hex||null;
+ const hex=String(a.hex||"").toLowerCase();
+ state.selected=hex||null;
+ // A click on the map, an aircraft row or Info button makes a durable
+ // explicit choice. Eligibility still requires true antenna RF positions.
+ if(/^[0-9a-f]{6}$/.test(hex)){
+  rfPickedPlanes.delete(hex);rfPickedPlanes.add(hex);
+  if(rfPickedPlanes.size>64)rfPickedPlanes.delete(rfPickedPlanes.values().next().value);
+  if($("rfAircraftCircleMode").value==="selected")rfSelectedPlanes.add(hex);
+  rfAircraftListSignature="";
+  persistRfViewPreferences();
+ }
  $("details").textContent=JSON.stringify({
   callsign:a.flight||null,icao24:a.hex||null,sources:a.sources,
   internet_providers:a.internet_providers||[],
