@@ -1103,7 +1103,7 @@ function renderCoverageStatus(){
  if(!rfLocatorActive){
   const button=$("rfLocate");
   button.textContent="RF area · OFF";button.setAttribute("aria-pressed","false");
-  $("rfFocus").disabled=true;$("rfFollow").disabled=true;
+  $("rfFocus").disabled=true;$("rfFollow").disabled=true;$("rfFocusBest").disabled=true;
   $("rfExportEvidence").disabled=true;
   $("rfLocateStatus").textContent="RF location solver OFF: no sampled receiver area is computed or drawn. ADS-B aircraft, tracks and map controls keep running. Circles preferences and BEST history are retained.";
   $("rfCoverageStatus").textContent="RF locator paused by user (not a radio receiver failure).";
@@ -1114,7 +1114,7 @@ function renderCoverageStatus(){
    "No BEST SESSION model saved yet.";
   return result;
  }
- $("rfFollow").disabled=false;$("rfExportEvidence").disabled=false;
+ $("rfFollow").disabled=false;$("rfExportEvidence").disabled=false;$("rfFocusBest").disabled=!rfBest;
  renderRfPlaneLayers(result);
  if(result!==rfLastProgressModel){
  const evidence=$("rfEvidence");
@@ -1521,6 +1521,14 @@ function focusRfModelCircle(model){
   " RF model circle in view · NOT GPS";
  paint();
 }
+$("rfFocusBest").onclick=()=>{
+ const model=rfModelCardData("best");
+ if(!model){notice("No saved BEST RF model: at least four independent positioned antenna aircraft are required.");return;}
+ $("rfBestCircle").checked=true;$("rfBestPin").checked=true;
+ persistRfViewPreferences();
+ focusRfModelCircle(model);
+ openRfModelPopup("best");
+};
 $("rfPopupClose").onclick=closeRfModelPopup;
 $("rfPopupFocus").onclick=()=>focusRfModelCircle(rfModelCardData(rfOpenModelKind));
 $("rfPopupCopy").onclick=()=>{
