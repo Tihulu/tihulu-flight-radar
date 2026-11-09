@@ -421,6 +421,7 @@ function displayUsbSnapshot(){
  const result=browserSourceResult();
  state.data=result.aircraft;
  updateCounters(result.counts);feedSummary(result.sources);recordTracks();rememberRfPlanes();
+ if(typeof window!=="undefined")window.TihuluJourneyUI?.observe(state.data);
  void window.TihuluRFV2?.ingest(state.data).catch(error=>{
   $("rfModeCalculation").textContent="History ingest: "+String(error.message||error);
  });
@@ -1742,6 +1743,7 @@ function renderPopup(a){
  // model calculation, and a malformed model must not hide aircraft info.
  popup.hidden=false;
  positionPopup(a);
+ if(typeof window!=="undefined")window.TihuluJourneyUI?.render(a);
  const rf=a.observations?.antenna;
  const rfRssi=Number.isFinite(rf?.rssi)?rf.rssi:null;
  const timing=rf?.rf_timing;
@@ -1871,7 +1873,11 @@ function renderRfPickedPanel(){
    ?"Genuine antenna RF horizon available"
    :live?"Selected · no verified RF position / horizon"
    :"Selected · aircraft not in current live feed";
-  detail.append(label,status);
+  const route=document.createElement("small");
+  const journey=live&&typeof window!=="undefined"&&window.TihuluJourneyUI?.row(live);
+  route.textContent=journey?journey.route+" · "+journey.time:
+   "Route: not loaded";
+  detail.append(label,status,route);
   const info=document.createElement("button");info.type="button";
   info.className="rf-picked-info";info.textContent="Info";
   info.disabled=!live;info.setAttribute("aria-label","Info for "+hex);
@@ -1918,6 +1924,14 @@ function renderTable(){
    if(index===1)td.style.color=altitudeColor(a);
    tr.append(td);
   }
+  // Real online route/time metadata and local SDR observations, no guessing.
+  const routeCell=document.createElement("td");routeCell.className="journey-table";
+  const journey=typeof window!=="undefined"?window.TihuluJourneyUI?.row(a):null;
+  const routeTitle=document.createElement("strong");
+  routeTitle.textContent=journey?.route||"Route unknown";
+  const routeTimes=document.createElement("small");
+  routeTimes.textContent=journey?.time||"Timetable unavailable";
+  routeCell.append(routeTitle,routeTimes);tr.append(routeCell);
   // Accessible, explicit fallback if a native Qt canvas click is lost.
   const infoCell=document.createElement("td");
   const info=document.createElement("button");
@@ -1969,6 +1983,7 @@ function choose(a,{center=false}={}){
  // Open the real aircraft card first. A repaint or RF-model update must
  // never be a prerequisite for showing the mini information window.
  renderPopup(a);renderTable();paint();
+ if(typeof window!=="undefined")window.TihuluJourneyUI?.selected(a);
 }
 function feedSummary(feed){
  const l=feed?.antenna||{},i=feed?.internet||{};
@@ -2055,6 +2070,7 @@ async function refresh(raise=false){
   state.lastData=state.data.map(a=>({...a}));
   state.lastFreshAt=Date.now();
   updateCounters(result.counts);feedSummary(result.sources);recordTracks();rememberRfPlanes();
+ if(typeof window!=="undefined")window.TihuluJourneyUI?.observe(state.data);
  void window.TihuluRFV2?.ingest(state.data).catch(error=>{
   $("rfModeCalculation").textContent="History ingest: "+String(error.message||error);
  });
