@@ -244,7 +244,7 @@ test("Live and best RF model centers display geographic coordinates and update o
  const values=vm.runInNewContext([
   "const els={rfCurrentCoordinates:{textContent:''},rfBestCoordinates:{textContent:''},rfMapCoordinates:{textContent:''}};",
   "const $=id=>els[id];",
-  "let rfBest=null;",
+  "let rfBest=null,rfLocatorActive=true;",
   format,render,
   "const before=rfCoordinateText({lat:-4.5,lon:-74.2});",
   "renderRfCoordinateReadouts({status:'insufficient',count:2});",
