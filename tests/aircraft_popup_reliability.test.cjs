@@ -56,7 +56,8 @@ test("A small aircraft card is opened before optional RF calculations and is vis
   showAltitude:()=> "30,000 ft",showSpeed:()=> "420 kt",
   showVerticalRate:()=> "0 ft/min",flightValue:n=>Number.isFinite(n)?n:null,
   isPositioned:()=>true,category:()=> "antenna",aircraftSourceBadge:()=> "R",
-  xy:()=>[230,140],Math,Number,Date,String});
+  xy:()=>[230,140],operatorFromTar:()=>null,
+  enrichAircraftOperator:()=>Promise.resolve(),Math,Number,Date,String});
  function $(id){return node(id);}
  const funcs=["firstAircraftField","aircraftOperatorLabel",
   "aircraftFlightLabel","ensureAircraftPopupLayer",
@@ -72,7 +73,8 @@ test("A small aircraft card is opened before optional RF calculations and is vis
  assert.match(css,/\.aircraft-popup\{position:fixed;z-index:20010/);
 });
 test("Qt click fallback opens a selected aircraft without a pointer-up event",()=>{
- const sourceCode=["pickPaintedAircraft","inspectCanvasAircraft"].map(source).join("\n");
+ const sourceCode=["pickPaintedAircraft","pickPaintedModel",
+  "inspectCanvasAircraft","inspectCanvasTarget"].map(source).join("\n");
  const handler=app.match(/canvas\.addEventListener\("click",e=>\{[\s\S]*?\n\}\);/)?.[0];
  assert.ok(handler,"native click listener must exist");
  const handlers={};const chosen=[];
@@ -81,10 +83,12 @@ test("Qt click fallback opens a selected aircraft without a pointer-up event",()
   addEventListener:(type,fn)=>{handlers[type]=fn;}
  };
  const row={hex:"a00001",lat:50,lon:7,seen_pos:1};
- const ctx=vm.createContext({canvas,paintedAircraftHits:[
+ const ctx=vm.createContext({canvas,paintedModelHits:[],
+  paintedAircraftHits:[
   {hex:"a00001",x:100,y:100,badgeRight:29,labelWidth:60}
  ],state:{data:[row]},visible:()=>true,isPositioned:()=>true,
- choose:a=>chosen.push(a.hex),Math,Date,lastCanvasAircraftOpen:null});
+ toggleAircraftOnMap:a=>chosen.push(a.hex),
+  openRfModelPopup:()=>false,Math,Date,lastCanvasAircraftOpen:null});
  vm.runInContext(sourceCode+"\n"+handler,ctx);
  handlers.click({clientX:110,clientY:120,detail:0}); // Qt can send detail 0
  assert.deepEqual(chosen,["a00001"]);
