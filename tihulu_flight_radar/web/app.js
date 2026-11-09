@@ -1543,6 +1543,83 @@ function firstAircraftField(record,keys){
  }
  return null;
 }
+// Share the exact operator-code directory already used by full tar1090.
+// A callsign prefix is only a hint: display its source, not a proven operator.
+let tarOperators=null,tarOperatorPending=null;
+const operatorLookupCache=new Map();
+function operatorCode(a){
+ const records=[a,a?.flight_source_fields,a?.observations?.internet,
+  a?.observations?.antenna];
+ for(const row of records){
+  const direct=String(row?.airline_icao||"").trim().toUpperCase();
+  if(/^[A-Z]{3}$/.test(direct))return {code:direct,source:"provider ICAO code"};
+ }
+ const call=String(a?.flight||a?.callsign||"").trim().toUpperCase();
+ const match=/^([A-Z]{3})(?:[0-9][A-Z0-9]{0,7})$/.exec(call);
+ return match?{code:match[1],source:"callsign prefix (not verified)"}:null;
+}
+function operatorFromTar(a){
+ const candidate=operatorCode(a);
+ const record=candidate&&tarOperators?.[candidate.code];
+ return record&&typeof record.n==="string"&&record.n.trim()
+  ?record.n.trim()+" · tar1090 "+candidate.source:null;
+}
+async function ensureTarOperators(){
+ if(tarOperators)return tarOperators;
+ if(tarOperatorPending)return tarOperatorPending;
+ tarOperatorPending=(async()=>{
+  for(const url of ["./tar1090/db2/operators.js"]){
+   try{
+    const res=await fetch(url,{cache:"default",credentials:"omit"});
+    if(!res.ok)continue;
+    const raw=await res.text();
+    if(raw.length>1_200_000)continue;
+    const data=JSON.parse(raw);
+    if(data&&typeof data==="object"&&Object.keys(data).length>1000){
+     tarOperators=data;return data;
+    }
+   }catch{}
+  }
+  return null;
+ })().finally(()=>{tarOperatorPending=null;});
+ return tarOperatorPending;
+}
+async function enrichAircraftOperator(a){
+ const hex=String(a?.hex||"").toLowerCase();
+ if(!/^[0-9a-f]{6}$/.test(hex))return;
+ const current=aircraftOperatorLabel(a);
+ if(current!=="Not provided by source"&&!current.includes("name unavailable"))return;
+ const target=$("popupAirline");
+ await ensureTarOperators();
+ let label=operatorFromTar(a);
+ if(!label){
+  const match=operatorCode(a);
+  const code=match?.code;
+  if(code){
+   const old=operatorLookupCache.get(code);
+   if(old&&Date.now()-old.at<30*60*1000)label=old.label;
+   else{
+    try{
+     const response=await fetch("https://api.adsbdb.com/v0/airline/"+code,{
+      mode:"cors",credentials:"omit",cache:"default"});
+     if(response.ok){
+      const body=await response.json();
+      const entries=body?.response;
+      // Reused operator codes may belong to multiple entities: no guess.
+      if(Array.isArray(entries)&&entries.length===1&&
+         typeof entries[0]?.name==="string"&&entries[0].name.length<=100){
+       label=entries[0].name+" · adsbdb "+match.source;
+      }
+     }
+    }catch{} // Offline/CORS errors never block aircraft Info.
+    operatorLookupCache.set(code,{label:label||null,at:Date.now()});
+   }
+  }
+ }
+ // An older asynchronous response must not overwrite a newer selected plane.
+ if(label&&state.selected===hex&&!$("aircraftPopup").hidden)
+  target.textContent=label;
+}
 function aircraftOperatorLabel(a){
  // Name comes from ADS-B/operator database or provider, never from a
  // guessed ICAO prefix (a callsign prefix is not proof of an airline).
@@ -1586,7 +1663,8 @@ function renderPopup(a){
  const popup=ensureAircraftPopupLayer();
  if(!a){popup.hidden=true;return}
  $("popupFlight").textContent=String(a.flight||a.hex||"Aircraft").trim();
- $("popupAirline").textContent=aircraftOperatorLabel(a);
+ $("popupAirline").textContent=operatorFromTar(a)||aircraftOperatorLabel(a);
+ void enrichAircraftOperator(a);
  $("popupFlightNumber").textContent=aircraftFlightLabel(a);
  popup.setAttribute("aria-label","Aircraft details: "+String(a.flight||a.hex||"Aircraft").trim());
  $("popupIcao").textContent="ICAO24 "+String(a.hex||"—").toUpperCase()+
@@ -1796,7 +1874,11 @@ function renderTable(){
   infoCell.append(info);tr.append(infoCell);
   // Keep RF model centering when Follow RF center is selected.
   // The dedicated Center aircraft button remains an explicit opt-out.
-  tr.onclick=()=>choose(a,{center:!(rfLocatorActive&&rfFollowCenter)});
+  tr.onclick=()=>{
+   const hex=String(a.hex||"").toLowerCase();
+   if(rfPickedPlanes.has(hex))deselectAircraft(hex);
+   else choose(a,{center:!(rfLocatorActive&&rfFollowCenter)});
+  };
   rows.append(tr);
  }
  if(state.selected){
