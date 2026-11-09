@@ -55,7 +55,7 @@ test("PWA has diagnostic controls, valid module references and updated offline c
   assert.match(html,new RegExp('id="'+id+'"'));
  assert.match(usb,/normalizeIqSampleBlock\(sampleBlock\)/);
  assert.match(usb,/explainUsbError\(error,platform\)/);
- assert.match(sw,/shell-v27/);
+ assert.match(sw,/shell-v28/);
  assert.match(sw,/usb_tools\.mjs/);
  assert.match(sw,/vendor\/rtlsdr\.mjs/);
  assert.match(bridge,/usb_tools\.mjs/);
