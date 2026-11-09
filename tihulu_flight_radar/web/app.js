@@ -2046,6 +2046,16 @@ function paint(){
    badgeRight:aircraftSourceBadge(a)==="I/R"?42:29,
    labelWidth:Math.min(170,Math.max(24,label.length*7.4))});
   paintAircraft(ctx,a,x,y);
+  if(rfPickedPlanes.has(String(a.hex||"").toLowerCase())){
+   // Persistent selection halo is display-only, never a computed RF circle.
+   // Solid aqua (or bright white for the most recently inspected aircraft)
+   // differs from motion's dashed halo and RF horizon lines.
+   ctx.save();ctx.beginPath();ctx.setLineDash([]);
+   ctx.strokeStyle=state.selected===String(a.hex||"").toLowerCase()
+    ?"rgba(243,250,255,.98)":"rgba(99,223,225,.78)";
+   ctx.lineWidth=state.selected===String(a.hex||"").toLowerCase()?2.6:1.8;
+   ctx.arc(x,y,25,0,2*Math.PI);ctx.stroke();ctx.restore();
+  }
   if(shown?.projected){
    // Dashed halo explicitly distinguishes predicted motion from an RF fix.
    ctx.save();ctx.strokeStyle="rgba(190,228,245,.5)";
