@@ -59,14 +59,27 @@ const TihuluFlightJourney=(()=>{
    source:"adsbdb callsign route · online (not live schedule)",
    matchedCallsign:expected,airline:trim(raw.airline?.name,110),at:Date.now()};
  }
+ function utcEpoch(value){
+  // Only parse strings expressly documented by the source as UTC.
+  if(typeof value!=="string")return null;
+  const input=value.trim().replace(" ","T");
+  const match=/^(\d{4}-\d\d-\d\dT\d\d:\d\d)(?::(\d\d))?$/.exec(input);
+  return match?epoch(match[1]+":"+(match[2]||"00")+"Z"):null;
+ }
  function timesFrom(row){
   const t={},d=row?.departure,ar=row?.arrival;
-  const fields=[["departScheduled",d?.scheduled,row?.departure_scheduled,row?.dep_scheduled],
-   ["departEstimated",d?.estimated,row?.departure_estimated,row?.dep_estimated],
-   ["departActual",d?.actual,row?.departure_actual,row?.dep_actual],
-   ["arriveScheduled",ar?.scheduled,row?.arrival_scheduled,row?.arr_scheduled],
-   ["arriveEstimated",ar?.estimated,row?.arrival_estimated,row?.arr_estimated],
-   ["arriveActual",ar?.actual,row?.arrival_actual,row?.arr_actual]];
+  const fields=[["departScheduled",d?.scheduled,row?.departure_scheduled,
+    row?.dep_scheduled,row?.dep_time_ts,utcEpoch(row?.dep_time_utc)],
+   ["departEstimated",d?.estimated,row?.departure_estimated,
+    row?.dep_estimated,row?.dep_estimated_ts,utcEpoch(row?.dep_estimated_utc)],
+   ["departActual",d?.actual,row?.departure_actual,row?.dep_actual,
+    row?.dep_actual_ts,utcEpoch(row?.dep_actual_utc)],
+   ["arriveScheduled",ar?.scheduled,row?.arrival_scheduled,
+    row?.arr_scheduled,row?.arr_time_ts,utcEpoch(row?.arr_time_utc)],
+   ["arriveEstimated",ar?.estimated,row?.arrival_estimated,
+    row?.arr_estimated,row?.arr_estimated_ts,utcEpoch(row?.arr_estimated_utc)],
+   ["arriveActual",ar?.actual,row?.arrival_actual,row?.arr_actual,
+    row?.arr_actual_ts,utcEpoch(row?.arr_actual_utc)]];
   for(const [key,...values] of fields){
    const stamp=values.map(epoch).find(Number.isFinite);
    if(stamp!==undefined)t[key]=stamp;
