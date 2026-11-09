@@ -268,8 +268,9 @@ test("Live and best RF model centers display geographic coordinates and update o
  assert.match(values.footer,/RF LIVE .* BEST .*NOT GPS/);
  assert.match(values.unavailable,/unavailable/);
  assert.match(values.retained,/50\.94210° N, 6\.97201° E/);
- assert.match(js,/ctx\.fillText\(rfCoordinateText\(result\.region\)/);
- assert.match(js,/ctx\.fillText\(rfCoordinateText\(rfBest\)/);
+ assert.match(js,/paintRfMapLabel\("live"/);
+ assert.match(js,/paintRfMapLabel\("best"/);
+ assert.match(js,/\$\("rfPopupCoordinates"\)\.textContent=rfCoordinateText\(model\)/);
  assert.match(css,/\.rf-coordinate-readout/);
  assert.match(css,/\.rf-map-coordinates/);
 });
