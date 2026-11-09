@@ -839,7 +839,11 @@ function updateRfBest(result,nowMs=Date.now()){
  if(tighter||stronger){
   rfBest={lat:area.lat,lon:area.lon,rawExtentKm:spread,
    displayedExtentKm:area.extentKm,aircraftCount:result.count,
-   constraintsUsed:result.constraintsUsed,updatedAtMs:nowMs};
+   liveCount:result.liveCount??null,historyCount:result.historyCount??null,
+   constraintsUsed:result.constraintsUsed,sampleCount:area.sampleCount??null,
+   geometryStatus:result.geometryStatus??"unknown",
+   contributors:(result.aircraftDistances||[]).map(a=>({...a})),
+   updatedAtMs:nowMs};
   rfBestImprovedThisUpdate=true;
   return true;
  }
@@ -1285,24 +1289,32 @@ function paintRfBestPin(result){
  const [x,y]=rfMapXy(rfBest);
  if(x<0||x>canvas.clientWidth||y<0||y>canvas.clientHeight)return;
  const [liveX,liveY]=result.status==="region"?rfMapXy(result.region):[NaN,NaN];
- const nearlySame=Number.isFinite(liveX)&&Math.hypot(x-liveX,y-liveY)<25;
+ const nearlySame=$("rfModelPin").checked&&Number.isFinite(liveX)&&
+  Math.hypot(x-liveX,y-liveY)<35;
+ // Offset only the visual BEST pin when both locations overlap so both
+ // remain independently clickable. The actual geographic center stays put.
+ const bx=x+(nearlySame?28:0),by=y+(nearlySame?-28:0);
+ paintedModelHits.push({kind:"best",x:bx,y:by});
  ctx.save();
+ if(nearlySame){
+  ctx.beginPath();ctx.setLineDash([3,3]);ctx.strokeStyle="#d3b5ff";
+  ctx.lineWidth=1.3;ctx.moveTo(x,y);ctx.lineTo(bx,by);ctx.stroke();
+ }
  ctx.fillStyle="rgba(39,25,62,.96)";ctx.strokeStyle="#d3b5ff";
  ctx.lineWidth=2;ctx.setLineDash([]);
- ctx.beginPath();ctx.moveTo(x,y-8);ctx.lineTo(x+8,y);
- ctx.lineTo(x,y+8);ctx.lineTo(x-8,y);ctx.closePath();
+ ctx.beginPath();ctx.moveTo(bx,by-9);ctx.lineTo(bx+9,by);
+ ctx.lineTo(bx,by+9);ctx.lineTo(bx-9,by);ctx.closePath();
  ctx.fill();ctx.stroke();
- if(!nearlySame){
-  ctx.font="bold 11px system-ui";ctx.fillStyle="#e6d5ff";
-  ctx.fillText("SESSION BEST MODEL ~"+rfBest.rawExtentKm.toFixed(1)+" km · NOT GPS",x+15,y-12);
-  ctx.fillText(rfCoordinateText(rfBest),x+15,y+3);
- }
+ ctx.font="bold 11px system-ui";ctx.fillStyle="#e6d5ff";
+ ctx.fillText("BEST FIT · "+rfBest.rawExtentKm.toFixed(1)+" km · NOT GPS",bx+15,by-12);
+ if(!nearlySame)ctx.fillText(rfCoordinateText(rfBest),bx+15,by+3);
  ctx.restore();
 }
 function paintRfLocator(result){
  if(!rfLocatorActive||result.status!=="region"||!$("rfModelPin").checked)return;
  const [x,y]=xy(result.region.lat,result.region.lon);
  if(x<0||x>canvas.clientWidth||y<0||y>canvas.clientHeight)return;
+ paintedModelHits.push({kind:"live",x,y});
  ctx.save();
  ctx.fillStyle="rgba(8,34,45,.94)";ctx.strokeStyle="#6fe4ef";
  ctx.lineWidth=2.5;ctx.setLineDash([]);
@@ -1998,7 +2010,15 @@ function paintRfCoverage(result){
 }
 // Record clickable silhouettes, source badges, and callsign labels from
 // the positions actually painted, not another fresh motion projection.
-let paintedAircraftHits=[];
+let paintedAircraftHits=[],paintedModelHits=[];
+function pickPaintedModel(hits,x,y,touchSlack=0){
+ let best=null,distance=Infinity;
+ for(const hit of hits){
+  const d=Math.hypot(x-hit.x,y-hit.y);
+  if(d<=17+touchSlack&&d<distance){best=hit;distance=d;}
+ }
+ return best;
+}
 function pickPaintedAircraft(hits,x,y,touchSlack=0){
  let best=null,score=Infinity;
  for(const hit of hits){
@@ -2023,7 +2043,7 @@ function paint(){
   updateRfBest(model);
   focusRfModelWhenReady(model);
  }
- paintedAircraftHits=[]; // no stale live airplane hit targets
+ paintedAircraftHits=[];paintedModelHits=[]; // no stale hit targets
  ctx.clearRect(0,0,w,h);ctx.fillStyle="#102231";ctx.fillRect(0,0,w,h);
  tiles();grid();
  if(rfLocatorActive)paintRfCoverage(model);
