@@ -1209,10 +1209,62 @@ function displayedAircraftPoint(a){
   ?TihuluMapMotion.displayedPosition(a,state.dataReceivedAt,Date.now()):null;
  return {lat:projected?.lat??a.lat,lon:projected?.lon??a.lon};
 }
-function renderPopup(a){
+function firstAircraftField(record,keys){
+ if(!record||typeof record!=="object")return null;
+ for(const key of keys){
+  const raw=record[key];
+  const value=typeof raw==="string"?raw.trim():
+   Number.isFinite(raw)?String(raw):null;
+  if(value&&value.length<=128)return value;
+ }
+ return null;
+}
+function aircraftOperatorLabel(a){
+ // Name comes from ADS-B/operator database or provider, never from a
+ // guessed ICAO prefix (a callsign prefix is not proof of an airline).
+ const records=[a,a?.flight_source_fields,a?.observations?.internet,
+  a?.observations?.internet?.flight_source_fields,a?.observations?.antenna];
+ for(const record of records){
+  const name=firstAircraftField(record,["airline_name","ownOp",
+   "operator_name","operator","airline","airlineName"]);
+  if(name)return name;
+  const named=record?.airline;
+  if(named&&typeof named==="object"){
+   const nested=firstAircraftField(named,["name","operator"]);
+   if(nested)return nested;
+  }
+ }
+ for(const record of records){
+  const code=firstAircraftField(record,["airline_icao","airline_iata"]);
+  if(code)return code+" (operator code; name unavailable)";
+ }
+ return "Not provided by source";
+}
+function aircraftFlightLabel(a){
+ const records=[a,a?.flight_source_fields,a?.observations?.internet,
+  a?.observations?.internet?.flight_source_fields];
+ for(const record of records){
+  const flight=firstAircraftField(record,
+   ["flight_iata","flight_icao","flight_number"]);
+  if(flight)return flight;
+ }
+ const call=firstAircraftField(a,["flight","callsign"]);
+ return call?call+" (callsign; flight number not verified)":"Not provided by source";
+}
+function ensureAircraftPopupLayer(){
  const popup=$("aircraftPopup");
+ // Native Qt / normal / expanded panels clip their descendants.
+ // A fixed body-level panel is guaranteed visible in every map mode.
+ if(popup.parentElement!==document.body)document.body.appendChild(popup);
+ return popup;
+}
+function renderPopup(a){
+ const popup=ensureAircraftPopupLayer();
  if(!a){popup.hidden=true;return}
  $("popupFlight").textContent=String(a.flight||a.hex||"Aircraft").trim();
+ $("popupAirline").textContent=aircraftOperatorLabel(a);
+ $("popupFlightNumber").textContent=aircraftFlightLabel(a);
+ popup.setAttribute("aria-label","Aircraft details: "+String(a.flight||a.hex||"Aircraft").trim());
  $("popupIcao").textContent="ICAO24 "+String(a.hex||"—").toUpperCase()+
    (a.r?" · "+String(a.r):"");
  $("popupSources").textContent=aircraftSourceBadge(a)+" · "+category(a)+
@@ -1230,6 +1282,10 @@ function renderPopup(a){
   ?a.lat.toFixed(5)+"°, "+a.lon.toFixed(5)+"°":"No fresh position";
  $("popupSeen").textContent=Number.isFinite(a.seen)
   ?"Last received "+a.seen.toFixed(1)+" s ago":"No observation age";
+ // Opening the dialog cannot depend on the slower optional RF coverage
+ // model calculation, and a malformed model must not hide aircraft info.
+ popup.hidden=false;
+ positionPopup(a);
  const rf=a.observations?.antenna;
  const rfRssi=Number.isFinite(rf?.rssi)?rf.rssi:null;
  const timing=rf?.rf_timing;
@@ -1237,7 +1293,9 @@ function renderPopup(a){
   "Aircraft transmit UTC: unavailable — ordinary ADS-B contains no precise departure timestamp.",
   "Receiver arrival UTC: not calibrated; USB buffering and transfer latency unknown."
  ];
- const modeledDistance=TihuluRFCoverage.modelDistanceInterval(coverageResult(),a);
+ let modeledDistance=null;
+ try{modeledDistance=TihuluRFCoverage.modelDistanceInterval(coverageResult(),a);}
+ catch(error){lines.push("Optional RF coverage estimate unavailable; standard flight details are still shown.");}
  if(modeledDistance){
   lines.push("Conditional aircraft distance from feasible RF grid: ~"+
     modeledDistance.minKm+"–"+modeledDistance.maxKm+
@@ -1262,24 +1320,29 @@ function renderPopup(a){
  }
  lines.push("Transmit–receive delay: not computable. Single unsynchronized RTL-SDR cannot solve location by flight timestamps.");
  $("popupTiming").textContent=lines.join("\n");
- popup.hidden=false;
  positionPopup(a);
 }
 function positionPopup(a){
  const popup=$("aircraftPopup");
  if(popup.hidden)return;
- const panel=popup.parentElement, cw=panel.clientWidth, ch=panel.clientHeight;
- let x=cw-340,y=canvas.offsetTop+12;
+ // Position in viewport coordinates, outside the map panel's overflow clip.
+ const rect=canvas.getBoundingClientRect();
+ const viewportWidth=Math.max(320,window.innerWidth||document.documentElement.clientWidth);
+ const viewportHeight=Math.max(240,window.innerHeight||document.documentElement.clientHeight);
+ const width=Math.min(328,viewportWidth-16);
+ const height=Math.min(popup.scrollHeight||450,viewportHeight-16,510);
+ let x=rect.right-width-8,y=rect.top+12;
  if(isPositioned(a)){
   const pos=displayedAircraftPoint(a);
   const [px,py]=xy(pos.lat,pos.lon);
   if(px>=0&&px<=canvas.clientWidth&&py>=0&&py<=canvas.clientHeight){
-   x=canvas.offsetLeft+px+22;y=canvas.offsetTop+py-30;
+   x=rect.left+px+24;y=rect.top+py-35;
+   // Flip to the left if the marker is near the right edge.
+   if(x+width>viewportWidth-8)x=rect.left+px-width-24;
   }
  }
- const width=Math.min(328,cw-16),height=Math.min(popup.scrollHeight,Math.min(ch*.74,510));
- popup.style.left=Math.max(8,Math.min(x,cw-width-8))+"px";
- popup.style.top=Math.max(8,Math.min(y,ch-height-8))+"px";
+ popup.style.left=Math.max(8,Math.min(x,viewportWidth-width-8))+"px";
+ popup.style.top=Math.max(8,Math.min(y,viewportHeight-height-8))+"px";
 }
 function closePopup(){
  if($("aircraftPopup").hidden)return;
@@ -1360,7 +1423,9 @@ function choose(a,{center=false}={}){
   state.lat=a.lat;state.lon=a.lon;state.zoom=Math.max(state.zoom,9);
   state.moved=true;state.centerLabel="Selected "+(a.flight||a.hex||"aircraft");
  }
- renderTable();paint();renderPopup(a);
+ // Open the real aircraft card first. A repaint or RF-model update must
+ // never be a prerequisite for showing the mini information window.
+ renderPopup(a);renderTable();paint();
 }
 function feedSummary(feed){
  const l=feed?.antenna||{},i=feed?.internet||{};
