@@ -9,7 +9,10 @@ import argparse
 import json
 import math
 import mimetypes
+import os
+import re
 import secrets
+import tempfile
 import threading
 import time
 from http import HTTPStatus
@@ -22,6 +25,8 @@ from urllib.request import ProxyHandler, Request, build_opener
 from .network_sources import MultiNetworkProvider, parse_provider_selection
 from .control import ReceiverController
 from .core import DataError, position_is_fresh, recently_seen
+from .offline_maps import (MAP_ROOT, MAX_MAP_BYTES, SAFE_NAME, discover,
+                           metadata as map_metadata, read_tile, select as select_offline_map)
 
 GERMANY = (51.1657, 10.4515)
 MAX_BODY = 2048
@@ -268,6 +273,7 @@ class Bridge:
         self.multi_online = MultiNetworkProvider()
         self.last_start_error: str | None = None
         self._place_lock = threading.Lock()
+        self.offline_map_name: str | None = None
         # Native Qt uses an ephemeral loopback port; browser localStorage
         # changes origin on each launch. This owner-only settings file retains
         # the selected SEARCH region across ports, OS restarts and platforms.
@@ -485,6 +491,31 @@ def make_handler(bridge: Bridge, port: int):
                 self._headers(HTTPStatus.OK, mime + "; charset=utf-8", len(raw))
                 self.wfile.write(raw)
                 return
+            if path.path == "/offline-map/status":
+                archives = discover()
+                active = select_offline_map(bridge.offline_map_name)
+                self._send(HTTPStatus.OK, {
+                    "available": bool(archives),
+                    "active": active[1]["name"] if active else None,
+                    "archives": [m for _, m in archives],
+                    "directory": str(MAP_ROOT),
+                    "format": "raster MBTiles (PNG/JPEG/WebP)",
+                    "note": "Use licensed offline map packages. No OSM tile bulk downloads."})
+                return
+            if path.path.startswith("/offline-tiles/"):
+                match = re.fullmatch(r"/offline-tiles/(\d{1,2})/(\d{1,8})/(\d{1,8})\.png", path.path)
+                active = select_offline_map(bridge.offline_map_name)
+                if not match or not active:
+                    self._send(HTTPStatus.NOT_FOUND, {"error": "Offline map unavailable."})
+                    return
+                tile = read_tile(active[0], *(int(x) for x in match.groups()))
+                if not tile:
+                    self._send(HTTPStatus.NOT_FOUND, {"error": "No offline tile in this archive."})
+                    return
+                raw,mime = tile
+                self._headers(HTTPStatus.OK, mime, len(raw))
+                self.wfile.write(raw)
+                return
             if path.path == "/tar1090":
                 self.send_response(HTTPStatus.PERMANENT_REDIRECT)
                 self.send_header("Location", "/tar1090/")
@@ -543,7 +574,8 @@ def make_handler(bridge: Bridge, port: int):
             if not self._guard():
                 return
             endpoint = urlsplit(self.path).path
-            if endpoint not in ("/api/control", "/api/search-location"):
+            if endpoint not in ("/api/control", "/api/search-location",
+                                "/api/offline-map/select", "/api/offline-map/import"):
                 self._send(HTTPStatus.NOT_FOUND, {"error": "Not found."})
                 return
             if not self._authorized():
@@ -551,9 +583,48 @@ def make_handler(bridge: Bridge, port: int):
                 return
             try:
                 n = int(self.headers.get("Content-Length", "0"))
+                if endpoint == "/api/offline-map/import":
+                    # Explicit user-chosen raster MBTiles file. Stream to a
+                    # private temporary file instead of buffering gigabytes.
+                    name = self.headers.get("X-Tihulu-Map-Name", "")
+                    if (not SAFE_NAME.fullmatch(name) or
+                            not 0 < n <= MAX_MAP_BYTES or
+                            self.headers.get("Content-Type") != "application/octet-stream"):
+                        raise DataError("Import a valid raster .mbtiles archive (maximum 1 GiB).")
+                    MAP_ROOT.mkdir(parents=True, exist_ok=True, mode=0o700)
+                    fd,temp_name = tempfile.mkstemp(prefix=".import-", suffix=".mbtiles",
+                                                   dir=MAP_ROOT)
+                    temp = Path(temp_name)
+                    try:
+                        with os.fdopen(fd, "wb") as output:
+                            remaining = n
+                            while remaining:
+                                chunk = self.rfile.read(min(1_048_576, remaining))
+                                if not chunk:
+                                    raise DataError("Incomplete map upload.")
+                                output.write(chunk)
+                                remaining -= len(chunk)
+                        info = map_metadata(temp)
+                        if not info:
+                            raise DataError("Only raster MBTiles with valid tile data schema and PNG/JPEG/WebP format are supported.")
+                        dest = MAP_ROOT / name
+                        temp.replace(dest)
+                        bridge.offline_map_name = name
+                        self._send(HTTPStatus.OK, {"imported": name, "map": info})
+                        return
+                    finally:
+                        temp.unlink(missing_ok=True)
                 if not 1 <= n <= MAX_BODY:
                     raise DataError("Invalid request length.")
                 body = json.loads(self.rfile.read(n))
+                if endpoint == "/api/offline-map/select":
+                    name = body.get("name") if isinstance(body, dict) else None
+                    active = select_offline_map(name)
+                    if name is not None and (not isinstance(name, str) or not active):
+                        raise DataError("Offline map archive not found.")
+                    bridge.offline_map_name = name
+                    self._send(HTTPStatus.OK, {"active": active[1]["name"] if active else None})
+                    return
                 if endpoint == "/api/search-location":
                     self._send(HTTPStatus.OK, {"place": bridge.save_search_place(body)})
                     return
