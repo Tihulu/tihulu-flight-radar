@@ -13,6 +13,7 @@ function source(name){
 }
 test("LIVE and BEST cards keep independent measured-unknown metadata",()=>{
  const ctx=vm.createContext({rfLocatorActive:true,
+  state:{lastFreshAt:1720000},
   rfBest:{lat:50.938,lon:6.960,displayedExtentKm:80,rawExtentKm:76.5,
    aircraftCount:6,liveCount:4,historyCount:2,constraintsUsed:13,
    sampleCount:14,geometryStatus:"bounded-model",updatedAtMs:1720000},
