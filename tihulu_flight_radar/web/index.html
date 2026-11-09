@@ -100,14 +100,14 @@
       <label><input id="showTiles" type="checkbox" checked> OSM tiles</label>
     </div>
     <div class="maptools">
-      <button id="fullTar1090" type="button" title="Open the complete bundled upstream tar1090 with live in-browser RF and Internet data">Full tar1090 · Internet or Radio</button><button id="expandMap" aria-pressed="false" title="Expand this independent browser radar map, even with readsb stopped">Full radar map</button><button id="focus">Focus aircraft</button><button id="rfLocate" type="button" aria-pressed="true" title="Enable or disable the 4+ genuinely received ADS-B aircraft RF locator, not aircraft reception.">RF area · ON</button>
+      <button id="fullTar1090" type="button" title="Open the complete bundled upstream tar1090 with live in-browser RF and Internet data">Full tar1090 · Internet or Radio</button><button id="expandMap" aria-pressed="false" title="Expand this independent browser radar map, even with readsb stopped">Full radar map</button><button id="focus">Focus aircraft</button><label class="rf-mode-quick">Model <select id="rfMode" aria-label="Active RF location model"><option value="live10" selected>LIVE · 10 min</option><option value="liveX">X-hour LIVE</option><option value="best">BEST Fit · session</option><option value="history">HISTORY · all stored</option><option value="historyBest">HISTORY BEST · weighted</option></select></label><label class="rf-hours-quick" id="rfHoursWrap" hidden>Window <select id="rfHours" aria-label="X-hour LIVE observation window"><option value="1">1 h</option><option value="2" selected>2 h</option><option value="3">3 h</option><option value="4">4 h</option><option value="6">6 h</option><option value="12">12 h</option><option value="24">24 h</option><option value="48">48 h</option></select></label><button id="rfLocate" type="button" aria-pressed="true" title="Enable or disable the 4+ genuinely received ADS-B aircraft RF locator, not aircraft reception.">RF area · ON</button>
        <details id="rfCirclesMenu" class="rf-circles-menu">
         <summary title="Choose visible model and aircraft circles independently of the RF calculation">Circles <span aria-hidden="true">▾</span></summary>
         <div class="rf-circles-dropdown" role="group" aria-label="RF circle visibility settings">
          <strong>RF map layers · display only</strong>
-         <label class="rf-circles-live"><input id="rfModelCircle" type="checkbox" checked> LIVE Fit circle <small>Current model spread · cyan</small></label>
+         <label class="rf-circles-live"><input id="rfModelCircle" type="checkbox" checked> Selected model circle <small>Available only for geometric feasible areas</small></label>
          <label class="rf-circles-best"><input id="rfBestCircle" type="checkbox" checked> BEST Fit circle <small>Tightest session spread · purple</small></label>
-         <label><input id="rfFill" type="checkbox" checked> LIVE feasible area <small>Current RF intersection area</small></label>
+         <label><input id="rfFill" type="checkbox" checked> Selected model feasible area <small>Geometric region only; weighted is a point diagnostic</small></label>
          <label class="rf-circles-aircraft">Aircraft horizon circles
           <select id="rfAircraftCircleMode" aria-label="Aircraft RF horizon circle visibility">
            <option value="none" selected>Hidden (default)</option>
@@ -214,8 +214,34 @@
     <p id="rfPickedSummary" class="muted">Click a plane on the map or an aircraft row. Closing Info keeps the selection.</p>
     <div id="rfPickedList" class="rf-picked-list" aria-live="polite">No selected aircraft.</div>
    </section>
-   <section class="rf-coverage-panel" aria-label="Experimental RF coverage constraints">
-    <strong>Receiver coverage estimate</strong>
+   <section class="rf-mode-panel" aria-label="Five RF geolocation models and persistent RF History">
+     <div class="rf-mode-title"><strong>RF Geolocation · 5 modes</strong><span id="rfModeLabel">LIVE · 10 min</span></div>
+     <p id="rfModeDescription" class="muted">Last 10 minutes of genuinely received and positioned RF aircraft observations.</p>
+     <div class="rf-mode-kpis">
+      <div><small>Independent RF aircraft</small><strong id="rfModeAircraft">—</strong></div>
+      <div><small>Eligible RF observations</small><strong id="rfModeFixes">—</strong></div>
+      <div><small>Geometric spread</small><strong id="rfModeSpread">—</strong></div>
+      <div><small>Measured accuracy</small><strong>Unknown · NOT GPS</strong></div>
+     </div>
+     <div class="rf-mode-work">
+      <label>Processing <select id="rfHistorySpeed"><option value="balanced" selected>Balanced · 60 s</option><option value="performance">Performance · 15 s</option><option value="manual">Manual · only on request</option></select></label>
+      <button id="rfRecalculate" type="button">Recalculate now</button>
+     </div>
+     <p id="rfModeCalculation" class="muted" role="status">Waiting for actual RF observations.</p>
+     <details class="rf-archive-controls" open>
+      <summary>History Recorder · separate persistent RF dataset</summary>
+      <p class="muted">Opt-in only. No Internet aircraft, audio, IQ or full aircraft JSON. Receiver must stay in one physical location within each session. No automatic data deletion.</p>
+      <div class="rf-archive-actions">
+       <button id="rfRecorderToggle" type="button">Start recording</button>
+       <button id="rfNewSession" type="button" title="Start a separate recording session after moving the physical receiver">New receiver session</button>
+      </div>
+      <div id="rfArchiveStatus" class="muted" role="status">Recorder OFF · historical observations kept when paused.</div>
+      <div id="rfArchiveWarning" class="muted"></div>
+     </details>
+     <small class="rf-mode-footnote">All stored verified circles are considered, not limited to 64. Smaller horizons receive more weight only in HISTORY BEST. Model spread is not calibrated error. History may contain conflicting bounds, so a weighted center is not necessarily inside every circle.</small>
+    </section>
+    <section class="rf-coverage-panel" aria-label="Legacy RF coverage constraints">
+    <strong>Legacy session BEST and RF details</strong>
     <div class="rf-history-controls">
      <label title="Accumulate only locally verified RF positions while this receiver stays physically fixed"><input id="rfRemember" type="checkbox" checked> Assume stationary receiver · accumulate 2 h of RF observations</label>
      <button id="rfClearHistory" type="button">Clear RF history</button><button id="rfExportEvidence" type="button" title="Download genuine local RF constraints and modeled center. No token or Internet aircraft. The estimated listening area could be inferred if you share this file.">Export RF diagnostics</button>
@@ -334,6 +360,8 @@
 </main>
 <script src="./multi_sources.js" defer></script>
 <script src="./receiver_coverage.js" defer></script>
+<script src="./rf_history_models.js" defer></script>
+<script src="./rf_history_client.js" defer></script>
  <script src="./map_motion.js" defer></script>
 <script src="./rf_timing_lab.js" defer></script>
 <script src="./app.js" defer></script>
