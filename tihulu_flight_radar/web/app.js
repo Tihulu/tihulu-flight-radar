@@ -812,7 +812,10 @@ function showVerticalRate(a){
 // The assumption is valid only while the RF receiver stays physically fixed.
 const rfHistory=new Map();
 let rfHistoryRevision=0,coverageCacheRows=null,coverageCacheResult=null,coverageCacheRevision=-1;
-let rfLocatorActive=true,rfLocatorFocused=true; // layer on; camera is not automatically stolen
+let rfLocatorActive=true,rfLocatorFocused=true; // solver ON; camera not automatically stolen
+const RF_LOCATOR_DISABLED=Object.freeze({status:"disabled",count:0,liveCount:0,
+ historyCount:0,constraintsUsed:0,circles:[],aircraftCircles:[],region:null});
+const RF_VIEW_SETTINGS_KEY="tihulu-flight-rf-circles-v1";
 let rfFollowCenter=true,rfLastFollowModel=null,rfLastProgressModel=null;
 // Preserve user's manual +/- or wheel zoom during RF center following,
 // including the first model fix after zooming.
@@ -849,13 +852,53 @@ function clearRfBest(){
 const rfSelectedPlanes=new Set();
 let rfAutoSelectNewPlanes=false; // user can always uncheck an individual plane
 let rfAircraftListSignature="";
+const RF_VIEW_CHECKBOXES=["rfFill","rfHatch","rfModelCircle","rfBestCircle",
+ "rfModelPin","rfBestPin","rfGaussianBand"];
+function restoreRfViewPreferences(){
+ try{
+  const data=JSON.parse(window.localStorage.getItem(RF_VIEW_SETTINGS_KEY)||"null");
+  if(!data||typeof data!=="object")return;
+  if(typeof data.rfLocatorEnabled==="boolean")rfLocatorActive=data.rfLocatorEnabled;
+  for(const id of RF_VIEW_CHECKBOXES)
+   if(typeof data[id]==="boolean")$(id).checked=data[id];
+  if(["none","selected","all"].includes(data.aircraftMode))
+   $("rfAircraftCircleMode").value=data.aircraftMode;
+  if(["5","10","20","40","80","150"].includes(String(data.sigmaKm)))
+   $("rfSigmaKm").value=String(data.sigmaKm);
+  if(Array.isArray(data.selectedPlaneHexes))
+   for(const hex of data.selectedPlaneHexes.slice(0,64))
+    if(/^[0-9a-f]{6}$/i.test(String(hex)))rfSelectedPlanes.add(hex.toLowerCase());
+ }catch{ /* Private-browsing or native storage may be unavailable. */ }
+}
+function persistRfViewPreferences(){
+ const data={rfLocatorEnabled:rfLocatorActive,
+  aircraftMode:$("rfAircraftCircleMode").value,sigmaKm:$("rfSigmaKm").value,
+  selectedPlaneHexes:[...rfSelectedPlanes].slice(-64)};
+ for(const id of RF_VIEW_CHECKBOXES)data[id]=$(id).checked;
+ try{window.localStorage.setItem(RF_VIEW_SETTINGS_KEY,JSON.stringify(data));}
+ catch{ /* Session controls still work even without storage. */ }
+}
+restoreRfViewPreferences();
+rfAutoSelectNewPlanes=$("rfAircraftCircleMode").value==="all";
+function setAircraftCircleMode(mode){
+ if(!["none","selected","all"].includes(mode))return;
+ $("rfAircraftCircleMode").value=mode;
+ rfAutoSelectNewPlanes=mode==="all";
+ if(mode==="none")rfSelectedPlanes.clear();
+ if(mode==="all")
+  for(const item of coverageResult().aircraftCircles||[])
+   rfSelectedPlanes.add(item.hex);
+ rfAircraftListSignature="";
+ persistRfViewPreferences();
+ paint();
+}
 const RF_PLANE_COLORS=["#61c5e7","#8dafff","#b5a1f0","#6ddbbd","#f69bba","#eeaea0"];
 function rfPlaneColor(hex){
  let hash=0;for(const c of hex)hash=(hash*31+c.charCodeAt(0))>>>0;
  return RF_PLANE_COLORS[hash%RF_PLANE_COLORS.length];
 }
 function rememberRfPlanes(){
- if(!$("rfRemember").checked)return;
+ if(!rfLocatorActive||!$("rfRemember").checked)return;
  let changed=false,now=Date.now();
  for(const a of state.data){
   if(!Number.isFinite(a.seen)||!Number.isFinite(a.seen_pos)||
@@ -892,6 +935,8 @@ function rememberRfPlanes(){
  if(changed)rfHistoryRevision++;
 }
 function coverageResult(){
+ // RF OFF gates the actual location model; live ADS-B reception continues.
+ if(!rfLocatorActive)return RF_LOCATOR_DISABLED;
  if(state.data!==coverageCacheRows||coverageCacheRevision!==rfHistoryRevision){
   coverageCacheRows=state.data;coverageCacheRevision=rfHistoryRevision;
   coverageCacheResult=TihuluRFCoverage.compute(state.data,
