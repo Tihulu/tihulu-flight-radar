@@ -635,6 +635,7 @@ window.tihuluNativeConnect=async function(base, token){
  $("bridgeUrl").value=base;
  $("token").value=token;
  await connect();
+ void scanOfflineMaps();
 };
 async function api(path,options={}){
  if(!state.base || !state.token) throw Error("Pair with your local bridge first.");
@@ -2088,8 +2089,11 @@ function grid(){
   ctx.fillText(lat.toFixed(2)+"°",5,y-4);
  }
 }
+let offlineMapActive=false,offlineMapActiveName=null;
 function getTile(z,x,y){
- const key=z+"/"+x+"/"+y,old=state.tiles.get(key);
+ const coord=z+"/"+x+"/"+y;
+ const key=(offlineMapActive?"local/":"osm/")+coord;
+ const old=state.tiles.get(key);
  if(old && (!old.failedAt || Date.now()-old.failedAt<300000))return old;
  if(state.tiles.size>120){
   for(const entry of state.tiles.values())if(entry.objectURL)URL.revokeObjectURL(entry.objectURL);
@@ -2099,7 +2103,8 @@ function getTile(z,x,y){
  state.tiles.set(key,info);
  // Inspect HTTP status before drawing, so OSM's 403 "Access blocked"
  // image never appears as if it were a legitimate map tile.
- fetch("https://tile.openstreetmap.org/"+key+".png",{
+ fetch(offlineMapActive?"./offline-tiles/"+coord+".png":
+      "https://tile.openstreetmap.org/"+coord+".png",{
   mode:"cors",credentials:"omit",cache:"default",
   referrerPolicy:"strict-origin-when-cross-origin"
  }).then(response=>{
@@ -2114,8 +2119,9 @@ function getTile(z,x,y){
   img.onerror=()=>{info.failedAt=Date.now();paint()};
   img.src=info.objectURL;
  }).catch(error=>{
-  info.failedAt=Date.now();state.tileFailures++;
-  if(state.tileFailures>=3 && $("showTiles").checked){
+  info.failedAt=Date.now();
+  if(!offlineMapActive)state.tileFailures++;
+  if(!offlineMapActive&&state.tileFailures>=3 && $("showTiles").checked){
    $("showTiles").checked=false;
    notice("Map tiles blocked or unavailable. Showing offline coordinate grid. "+error.message);
   }
@@ -2386,7 +2392,7 @@ function paint(){
  // Keep the RF details card current without stealing focus from aircraft.
  if(rfOpenModelKind&&!$("rfModelPopup").hidden){
   const current=rfModelCardData(rfOpenModelKind);
-  if(current)positionRfModelPopup(current);
+  if(current){positionRfModelPopup(current);drawRfModelMiniMap(current);}
   else closeRfModelPopup();
  }
  // Keep nonmodal aircraft details next to the moving icon, even if the
@@ -2855,6 +2861,69 @@ $("zoomOut").onclick=()=>adjustMapZoom(-1);
 for(const id of selectors)$(id).onchange=()=>{
  if(id==="showTiles" && $("showTiles").checked)state.tileFailures=0;
  renderTable();paint();
+};
+// Explicit local raster maps are independent from aviation Internet feeds.
+async function scanOfflineMaps(){
+ if(!window.tihuluNativeDesktop)return;
+ const label=$("offlineMapStatus"),select=$("offlineMapSource");
+ try{
+  const response=await fetch("./offline-map/status",{cache:"no-store"});
+  if(!response.ok)throw Error("native map endpoint HTTP "+response.status);
+  const data=await response.json();
+  select.replaceChildren();
+  const auto=document.createElement("option");auto.value="";
+  auto.textContent="Auto · first compatible raster map";select.append(auto);
+  for(const item of data.archives||[]){
+   const opt=document.createElement("option");opt.value=item.name;
+   opt.textContent=item.title+" · "+item.format+
+    " · z"+item.minzoom+"–"+item.maxzoom;
+   select.append(opt);
+  }
+  if(data.active)select.value=data.active;
+  offlineMapActive=Boolean(data.active);offlineMapActiveName=data.active||null;
+  label.textContent=data.active
+   ?"Using offline raster MBTiles: "+data.active+
+    " · Internet map requests are not needed inside this archive."
+   :"No raster MBTiles detected. Place a licensed .mbtiles map in "+
+    data.directory+" or import one below. Ordinary OSM tiles remain online only.";
+  state.tiles.clear();paint();
+ }catch(error){
+  offlineMapActive=false;offlineMapActiveName=null;
+  label.textContent="Offline map scan unavailable: "+String(error.message||error);
+ }
+}
+$("offlineMapScan").onclick=()=>void scanOfflineMaps();
+$("offlineMapSource").onchange=async e=>{
+ if(!window.tihuluNativeDesktop||!state.token)return;
+ try{
+  const data=await api("/api/offline-map/select",{
+   method:"POST",headers:{"Content-Type":"application/json"},
+   body:JSON.stringify({name:e.target.value||null})});
+  offlineMapActive=Boolean(data.active);
+  offlineMapActiveName=data.active||null;
+  state.tiles.clear();await scanOfflineMaps();
+ }catch(err){$("offlineMapStatus").textContent=String(err.message||err);}
+};
+$("offlineMapUpload").onclick=async()=>{
+ const file=$("offlineMapFile").files?.[0];
+ if(!window.tihuluNativeDesktop||!state.base||!state.token){
+  $("offlineMapStatus").textContent="Use the native desktop app to import local maps.";return;
+ }
+ if(!file||!file.name.toLowerCase().endsWith(".mbtiles")||file.size>1073741824){
+  $("offlineMapStatus").textContent="Select a raster .mbtiles file up to 1 GiB.";return;
+ }
+ const button=$("offlineMapUpload");button.disabled=true;
+ $("offlineMapStatus").textContent="Importing "+file.name+" (local file, no map upload to Internet)…";
+ try{
+  const response=await fetch(state.base+"/api/offline-map/import",{
+   method:"POST",body:file,headers:{"Content-Type":"application/octet-stream",
+    "Authorization":"Bearer "+state.token,"X-Tihulu-Map-Name":file.name}});
+  const body=await response.json();
+  if(!response.ok)throw Error(body.error||"Import failed: HTTP "+response.status);
+  $("offlineMapFile").value="";
+  await scanOfflineMaps();
+ }catch(err){$("offlineMapStatus").textContent="Import failed: "+String(err.message||err);}
+ finally{button.disabled=false;}
 };
 $("bridgeUrl").value=location.hostname==="127.0.0.1"||location.hostname==="localhost"
  ? location.origin:"http://127.0.0.1:8510";
