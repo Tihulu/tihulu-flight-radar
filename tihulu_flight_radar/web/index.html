@@ -228,6 +228,7 @@
       <button id="rfRecalculate" type="button">Recalculate now</button>
      </div>
      <p id="rfModeCalculation" class="muted" role="status">Waiting for actual RF observations.</p>
+     <label class="rf-model-compare"><input id="rfCompareModels" type="checkbox"> Compare previously calculated models <small>(thin colored circles, active model stays prominent)</small></label>
      <details class="rf-archive-controls" open>
       <summary>History Recorder · separate persistent RF dataset</summary>
       <p class="muted">Opt-in only. No Internet aircraft, audio, IQ or full aircraft JSON. Receiver must stay in one physical location within each session. No automatic data deletion.</p>
@@ -235,6 +236,7 @@
        <button id="rfRecorderToggle" type="button">Start recording</button>
        <button id="rfNewSession" type="button" title="Start a separate recording session after moving the physical receiver">New receiver session</button>
       </div>
+      <label class="rf-session-select">History session <select id="rfHistorySession" aria-label="Select stored physical receiver session"><option value="0">Latest recorded session (automatic)</option></select></label>
       <div id="rfArchiveStatus" class="muted" role="status">Recorder OFF · historical observations kept when paused.</div>
       <div id="rfArchiveWarning" class="muted"></div>
      </details>
