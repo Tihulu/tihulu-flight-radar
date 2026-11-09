@@ -421,6 +421,9 @@ function displayUsbSnapshot(){
  const result=browserSourceResult();
  state.data=result.aircraft;
  updateCounters(result.counts);feedSummary(result.sources);recordTracks();rememberRfPlanes();
+ void window.TihuluRFV2?.ingest(state.data).catch(error=>{
+  $("rfModeCalculation").textContent="History ingest: "+String(error.message||error);
+ });
  applyStartupPriority();
  renderTable();paint();
  $("receiverStatus").textContent="Direct WebUSB 1090 MHz receiver · "+
@@ -1332,8 +1335,8 @@ function paintRfBestPin(result){
  paintedModelHits.push(paintRfMapLabel("best",px,py,label,offscreen));
 }
 function paintRfLocator(result){
- if(!rfLocatorActive||result.status!=="region"||
-  !$("rfModelPin").checked)return;
+ if(!rfLocatorActive||!["region","weighted"].includes(result.status)||
+  !result.region||!$("rfModelPin").checked)return;
  const [x,y]=xy(result.region.lat,result.region.lon);
  if(x<0||x>canvas.clientWidth||y<0||y>canvas.clientHeight)return;
  ctx.save();ctx.fillStyle="rgba(8,34,45,.98)";ctx.strokeStyle="#89edfa";
@@ -1341,8 +1344,13 @@ function paintRfLocator(result){
  ctx.beginPath();ctx.arc(x,y,10,0,Math.PI*2);ctx.fill();ctx.stroke();
  ctx.beginPath();ctx.moveTo(x-16,y);ctx.lineTo(x+16,y);
  ctx.moveTo(x,y-16);ctx.lineTo(x,y+16);ctx.stroke();ctx.restore();
+ const selectedMode=window.TihuluRFV2?.getMode()||"live10";
+ const title={live10:"LIVE 10m",liveX:"X-hour LIVE",best:"BEST FIT",
+  history:"HISTORY",historyBest:"HISTORY BEST"}[selectedMode];
+ const spread=Number.isFinite(result.region.extentKm)
+  ?" · ~"+Math.round(result.region.extentKm)+" km":" · heuristic";
  paintedModelHits.push(paintRfMapLabel("live",x,y,
-  "LIVE · "+result.count+" planes · ~"+Math.round(result.region.extentKm)+" km"));
+  title+" · "+result.count+" planes"+spread));
 }
 // RF model cards never imply a measured GPS position or statistical accuracy.
 let rfOpenModelKind=null;
@@ -2016,6 +2024,9 @@ async function refresh(raise=false){
   state.lastData=state.data.map(a=>({...a}));
   state.lastFreshAt=Date.now();
   updateCounters(result.counts);feedSummary(result.sources);recordTracks();rememberRfPlanes();
+ void window.TihuluRFV2?.ingest(state.data).catch(error=>{
+  $("rfModeCalculation").textContent="History ingest: "+String(error.message||error);
+ });
   applyStartupPriority();
   const providerTime=result.sources?.internet?.updated_at;
   $("lastUpdate").textContent=formatTime(providerTime ?? result.generated_at);
@@ -2339,11 +2350,10 @@ function pickPaintedAircraft(hits,x,y,touchSlack=0){
 function paint(){
  const w=canvas.clientWidth,h=canvas.clientHeight;
  if(!w||!h)return;
- const model=coverageResult();
- if(rfLocatorActive){
-  updateRfBest(model);
-  focusRfModelWhenReady(model);
- }
+ const legacy=coverageResult();
+ if(rfLocatorActive)updateRfBest(legacy);
+ const model=window.TihuluRFV2?.display(legacy)||legacy;
+ if(rfLocatorActive&&model.status==="region")focusRfModelWhenReady(model);
  paintedAircraftHits=[];paintedModelHits=[]; // no stale hit targets
  ctx.clearRect(0,0,w,h);ctx.fillStyle="#102231";ctx.fillRect(0,0,w,h);
  tiles();grid();
@@ -2394,8 +2404,9 @@ function paint(){
   ctx.fillText(label,x+19,y-10);
   ctx.shadowBlur=0;
  }
- paintRfBestPin(model); // historical best model, separate from live tracking.
- paintRfLocator(model); // actual current RF feasible-area model center.
+ if(window.TihuluRFV2?.getMode()!=="best")
+  paintRfBestPin(model); // saved BEST comparison.
+ paintRfLocator(model); // selected RF model center.
  if(!markers){
   ctx.fillStyle="rgba(13,23,33,.9)";ctx.fillRect(12,12,Math.min(420,w-24),38);
   ctx.fillStyle="#d6e7f7";ctx.font="13px system-ui";
