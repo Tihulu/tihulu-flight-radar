@@ -419,3 +419,15 @@ html.native #receiverStatus[data-pair-state="failed"]{color:#ffbc99}
  height:auto;border:1px solid #526d83;border-radius:8px;
  background:#122e40;margin:0 auto}
 .rf-popup-map-credit{display:block;color:#a9c4d5;font-size:9px;line-height:1.4;margin:5px 0}
+
+.offline-map-panel{background:#112535;color:#d4eaf4;border-top:1px solid #355069;
+ padding:8px 12px;font-size:12px}
+.offline-map-panel summary{font-weight:650;color:#bbecff;cursor:pointer}
+.offline-map-controls{display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin:8px 0}
+.offline-map-controls>label{display:flex;flex-direction:column;gap:4px;font-size:11px}
+.offline-map-controls select{max-width:260px;padding:6px}
+.offline-map-controls button{font-size:11px;padding:6px 8px}
+.offline-map-controls input[type=file]{max-width:200px;font-size:11px}
+.offline-map-controls a{font-size:11px;color:#aedfff}
+.offline-map-panel small{color:#aec7d8;line-height:1.55;display:block}
+html:not(.native) .offline-map-controls{display:none}
