@@ -1,0 +1,208 @@
+"use strict";
+/* Explicitly started history recording; browsers use IndexedDB and native
+ * desktop uses authenticated, radio-only SQLite in the local bridge.
+ * No Internet positions are ever converted into RF evidence.
+ */
+const TihuluRFHistoryClient=(()=>{
+ const DB="tihulu-rf-history-v1";
+ const MAX_WINDOW_MS=48*3600000;
+ const BATCH=5000;
+ const MODE_IDS=["live10","liveX","best","history","historyBest"];
+ const isNative=()=>Boolean(window.tihuluNativeDesktop);
+ function openDb(){
+  return new Promise((resolve,reject)=>{
+   if(!globalThis.indexedDB){reject(Error("IndexedDB unavailable"));return;}
+   const req=indexedDB.open(DB,1);
+   req.onupgradeneeded=()=>{
+    const db=req.result;
+    const fixes=db.createObjectStore("fixes",{keyPath:"id",autoIncrement:true});
+    fixes.createIndex("session","session",{unique:false});
+   };
+   req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);
+  });
+ }
+ function client({api,verified,formatStatus,onResult}){
+  let db=null,enabled=false,session=0,status={},recent=[],last=new Map();
+  let worker=null,job=0,mode="live10",hours=2,profile="balanced";
+  let lastCalculation=0,calculating=false,loaded=0,currentResult=null;
+  const notify=msg=>{if(formatStatus)formatStatus(msg);};
+  async function open(){if(!db)db=await openDb();return db;}
+  function remember(rows){
+   const now=Date.now(),accepted=[];
+   for(const row of rows||[]){
+    const r=verified(row,now);
+    if(!r||!TihuluRFHistoryModels.valid(r))continue;
+    const hex=r.hex.toLowerCase(),previous=last.get(hex);
+    if(previous){
+     const decision=TihuluRFCoverage.trackSampleDecision(previous,r);
+     if(!decision.keep)continue;
+    }
+    last.set(hex,r);recent.push(r);accepted.push(r);
+   }
+   const min=now-MAX_WINDOW_MS;
+   if(recent.length&&recent[0].capturedAtMs<min)
+    recent=recent.filter(r=>r.capturedAtMs>=min);
+   return accepted;
+  }
+  async function ingest(rows){
+   const accepted=remember(rows);
+   if(!enabled||!accepted.length||isNative())return;
+   try{
+    await open();
+    await new Promise((resolve,reject)=>{
+     const tx=db.transaction("fixes","readwrite");
+     const os=tx.objectStore("fixes");
+     for(const r of accepted){
+      // Minimal RF data only, not the original aircraft or Internet JSON.
+      os.add({session,hex:r.hex,lat:r.lat,lon:r.lon,
+       radiusKm:r.radiusKm,altitudeFeet:r.altitudeFeet,
+       speedKt:r.speedKt,headingDeg:r.headingDeg,
+       capturedAtMs:r.capturedAtMs,recorded_rf:true});
+     }
+     tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);
+   });
+   }catch(error){enabled=false;notify("Browser History recording stopped: "+error.message);}
+  }
+  async function statusNow(){
+   if(isNative()){
+    status=await api("/api/rf-history/status");enabled=!!status.recording;
+    session=status.activeSessionId||status.sessions?.[0]?.id||0;
+    return status;
+   }
+   await open();
+   let count=0;
+   await new Promise((resolve,reject)=>{
+    const tx=db.transaction("fixes","readonly"),req=tx.objectStore("fixes").count();
+    req.onsuccess=()=>{count=req.result;resolve()};
+    req.onerror=()=>reject(req.error);
+   });
+   status={recording:enabled,activeSessionId:session,
+    observations:count,source:"verified browser SDR",diskBytes:null};
+   return status;
+  }
+  async function recordAction(action){
+   if(!["start","pause","new-session"].includes(action))throw Error("Unknown recording action");
+   if(isNative()){
+    status=await api("/api/rf-history/config",{
+     method:"POST",headers:{"Content-Type":"application/json"},
+     body:JSON.stringify({action})
+    });
+    enabled=!!status.recording;
+    session=status.activeSessionId||0;
+   }else{
+    await open();
+    if(action==="pause"){enabled=false;}
+    else if(action==="new-session"||!session){
+     session=Date.now();last.clear();enabled=true;
+    }else enabled=true;
+   }
+   notify(enabled?"History recording ON · session "+session:
+    "History recording paused; stored observations retained.");
+   return statusNow();
+  }
+  async function streamDbToWorker(send){
+   await open();
+   await new Promise((resolve,reject)=>{
+    const tx=db.transaction("fixes","readonly");
+    const index=tx.objectStore("fixes").index("session");
+    const req=index.openCursor(IDBKeyRange.only(session));
+    let batch=[];
+    req.onsuccess=()=>{
+     const cursor=req.result;
+     if(!cursor){
+      if(batch.length)send(batch);
+      resolve();return;
+     }
+     batch.push(cursor.value);
+     if(batch.length===BATCH){send(batch);batch=[];}
+     cursor.continue();
+    };
+    req.onerror=()=>reject(req.error);
+    tx.onerror=()=>reject(tx.error);
+   });
+  }
+  async function streamNativeToWorker(send){
+   const stat=await statusNow(),sid=stat.activeSessionId||stat.sessions?.[0]?.id;
+   if(!sid)return;
+   let after=0,more=true,pageCount=0;
+   while(more){
+    const result=await api("/api/rf-history/records?session="+sid+
+     "&after="+after+"&limit="+BATCH);
+    if(result.records?.length)send(result.records);
+    after=result.nextAfterId;
+    more=!!result.hasMore;
+    pageCount++;
+    if(pageCount>1000000)throw Error("History pagination safety limit");
+   }
+  }
+  function cancel(){
+   job++;
+   if(worker){worker.terminate();worker=null;}
+   calculating=false;
+  }
+  async function calculate(nextMode=mode,nextHours=hours,{force=false}={}){
+   if(!MODE_IDS.includes(nextMode))throw Error("Invalid RF model mode");
+   mode=nextMode;hours=Math.max(1,Math.min(48,Number(nextHours)||2));
+   if(calculating)return;
+   if(!force&&Date.now()-lastCalculation<
+     (profile==="performance"?15000:60000))return;
+   cancel();calculating=true;loaded=0;
+   const task=job;
+   notify("Calculating "+mode+" using verified RF observations…");
+   try{
+    const w=new Worker("./rf_history_worker.js");
+    worker=w;
+    w.onmessage=e=>{
+     const d=e.data||{};
+     if(d.job!==task)return;
+     if(d.type==="batch"){loaded=d.loaded;}
+     if(d.type==="progress"){
+      notify("History "+d.phase+" · "+d.processed.toLocaleString()+" / "+
+       d.total.toLocaleString()+" observations");
+     }
+     if(d.type==="error"){calculating=false;notify("RF solver: "+d.error);}
+     if(d.type==="result"){
+      calculating=false;currentResult=d.result;lastCalculation=Date.now();
+      onResult?.(mode,d.result,{loaded:d.total,at:lastCalculation});
+      notify("Solved "+mode+": "+d.total.toLocaleString()+" verified RF circles · "+
+       d.result.status+(d.result.status==="weighted"
+       ?" · weighted diagnostic, NOT GPS":""));
+      w.terminate();if(worker===w)worker=null;
+     }
+    };
+    w.onerror=e=>{calculating=false;notify("History worker error: "+e.message);};
+    w.postMessage({type:"clear",job:task});
+    const send=rows=>{
+     if(job!==task)return;
+     w.postMessage({type:"batch",job:task,records:rows});
+     loaded+=rows.length;
+     if(loaded>0&&loaded%BATCH===0)
+      notify("Loading RF constraints: "+loaded.toLocaleString());
+    };
+    if(mode==="history"||mode==="historyBest"){
+     if(isNative())await streamNativeToWorker(send);
+     else await streamDbToWorker(send);
+    }else{
+     for(let i=0;i<recent.length;i+=BATCH)send(recent.slice(i,i+BATCH));
+    }
+    if(job===task)w.postMessage({
+     type:"solve",job:task,mode,hours,nowMs:Date.now()});
+   }catch(error){
+    if(job===task){cancel();notify("History unavailable: "+String(error.message||error));}
+   }
+  }
+  function settings(nextMode,nextHours,nextProfile){
+   if(MODE_IDS.includes(nextMode))mode=nextMode;
+   hours=Math.max(1,Math.min(48,Number(nextHours)||2));
+   if(["balanced","performance","manual"].includes(nextProfile))profile=nextProfile;
+  }
+  function shouldRefresh(){return profile!=="manual"&&!calculating&&
+   Date.now()-lastCalculation>=(profile==="performance"?15000:60000);}
+  return {ingest,recordAction,statusNow,calculate,cancel,settings,shouldRefresh,
+   state:()=>({enabled,session,mode,hours,profile,loaded,calculating,
+    lastCalculation,result:currentResult})};
+ }
+ return {create:client,MODES:MODE_IDS};
+})();
+if(typeof window!=="undefined")window.TihuluRFHistoryClient=TihuluRFHistoryClient;
+if(typeof module!=="undefined"&&module.exports)module.exports=TihuluRFHistoryClient;
