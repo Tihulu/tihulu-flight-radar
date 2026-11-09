@@ -466,7 +466,7 @@ def make_handler(bridge: Bridge, port: int):
                 return
             self.send_response(HTTPStatus.NO_CONTENT)
             self.send_header("Access-Control-Allow-Origin", origin)
-            self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type")
+            self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Tihulu-Map-Name")
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
             self.send_header("Access-Control-Max-Age", "600")
             self.end_headers()
@@ -594,7 +594,7 @@ def make_handler(bridge: Bridge, port: int):
                 if endpoint == "/api/offline-map/import":
                     # Explicit user-chosen raster MBTiles file. Stream to a
                     # private temporary file instead of buffering gigabytes.
-                    name = self.headers.get("X-Tihulu-Map-Name", "")
+                    name = unquote(self.headers.get("X-Tihulu-Map-Name", ""))
                     if (not SAFE_NAME.fullmatch(name) or
                             not 0 < n <= MAX_MAP_BYTES or
                             self.headers.get("Content-Type") != "application/octet-stream"):
