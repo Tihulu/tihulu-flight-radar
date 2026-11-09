@@ -482,7 +482,7 @@ def make_handler(bridge: Bridge, port: int):
             if not self._guard():
                 return
             path = urlsplit(self.path)
-            if path.path in ("/", "/index.html", "/install.html", "/app.js", "/style.css", "/manifest.webmanifest", "/icon.svg", "/sw.js", "/multi_sources.js", "/receiver_coverage.js", "/flight_journey.js", "/rf_history_models.js", "/rf_history_worker.js", "/rf_history_client.js", "/rf_history_ui.js", "/map_motion.js", "/rf_timing_lab.js", "/flight_location_ui.mjs", "/location_search.mjs", "/cities-de-tr.json", "/CITY_DATA_LICENSE.md", "/browser_usb.mjs", "/adsb_worker.mjs", "/usb_tools.mjs"):
+            if path.path in ("/", "/index.html", "/install.html", "/app.js", "/style.css", "/manifest.webmanifest", "/icon.svg", "/sw.js", "/multi_sources.js", "/receiver_coverage.js", "/flight_journey.js", "/flight_journey_ui.js", "/rf_history_models.js", "/rf_history_worker.js", "/rf_history_client.js", "/rf_history_ui.js", "/map_motion.js", "/rf_timing_lab.js", "/flight_location_ui.mjs", "/location_search.mjs", "/cities-de-tr.json", "/CITY_DATA_LICENSE.md", "/browser_usb.mjs", "/adsb_worker.mjs", "/usb_tools.mjs"):
                 name = "index.html" if path.path == "/" else path.path[1:]
                 file = STATIC_DIR / name
                 if not file.is_file():
