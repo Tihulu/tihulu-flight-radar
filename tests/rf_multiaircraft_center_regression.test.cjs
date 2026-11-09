@@ -59,7 +59,7 @@ test("Startup, airplane selection and receiver-model follow are distinct",()=>{
  assert.match(js,/Map startup is NEVER a one-plane RF receiver site estimate/);
  assert.match(js,/return \{lat:COLOGNE\.lat,lon:COLOGNE\.lon,zoom:9,rank:1,source:"cologne"\}/);
  assert.match(js,/let rfFollowCenter=true/);
- assert.match(js,/tr\.onclick=\(\)=>choose\(a,\{center:!rfFollowCenter\}\)/);
+ assert.match(js,/tr\.onclick=\(\)=>choose\(a,\{center:!\(rfLocatorActive&&rfFollowCenter\)\}\)/);
  assert.match(js,/MULTI-AIRCRAFT RF MODEL/);
  assert.match(js,/independent aircraft \/ /);
 });
