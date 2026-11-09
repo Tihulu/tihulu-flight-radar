@@ -1400,6 +1400,14 @@ function renderTable(){
    if(index===1)td.style.color=altitudeColor(a);
    tr.append(td);
   }
+  // Accessible, explicit fallback if a native Qt canvas click is lost.
+  const infoCell=document.createElement("td");
+  const info=document.createElement("button");
+  info.type="button";info.className="aircraft-row-info";
+  info.textContent="Info";info.setAttribute("aria-label",
+   "Show details for "+String(a.flight||a.hex||"aircraft").trim());
+  info.onclick=e=>{e.stopPropagation();choose(a);};
+  infoCell.append(info);tr.append(infoCell);
   // Keep RF model centering when Follow RF center is selected.
   // The dedicated Center aircraft button remains an explicit opt-out.
   tr.onclick=()=>choose(a,{center:!rfFollowCenter});
