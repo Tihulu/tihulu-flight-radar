@@ -472,3 +472,37 @@ html:not(.native) .offline-map-controls{display:none}
  font-size:12px;color:#d4e8f6}
 .rf-session-select select{max-width:100%;flex:1;min-width:145px}
 .rf-model-compare small{color:#abc7d8}
+
+/* Real callsign journey enrichment: static airport route vs provider schedule
+ * vs observed local SDR ground/air transition are never conflated. */
+.aircraft-journey{margin:10px 0;padding:10px;border:1px solid #47748a;
+ border-radius:9px;background:linear-gradient(140deg,#122b3d,#0d2532)}
+.aircraft-journey-title{display:flex;align-items:center;justify-content:space-between;
+ gap:7px;margin-bottom:8px}
+.aircraft-journey-title strong{font-size:12px;color:#ddf6ff}
+.aircraft-journey-title button{font-size:10px;padding:4px 7px;flex:none}
+.aircraft-journey-airports,.aircraft-journey-times{display:grid;
+ grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.aircraft-journey-airports>div{padding:8px;background:#092333;
+ border:1px solid #385a6d;border-radius:7px;min-width:0}
+.aircraft-journey-airports small,.aircraft-journey-times span{
+ display:block;color:#9ec4d7;font-size:10px;margin-bottom:5px}
+.aircraft-journey-airports strong{color:#f2f9ff;font-size:12px;
+ overflow-wrap:anywhere;line-height:1.5;display:block}
+.aircraft-journey-times{margin:8px 0}
+.aircraft-journey-times>div{border-top:1px solid #3a5c70;padding:6px 3px 3px}
+.aircraft-journey-times strong{font-size:11px;font-weight:650;color:#d8ebfa;
+ overflow-wrap:anywhere}
+.aircraft-journey-radio{font-size:10px;line-height:1.5;color:#a5dfca;
+ white-space:pre-line;margin:7px 0 5px}
+.aircraft-journey-source{display:block;font-size:10px;line-height:1.45;color:#a5c4d6}
+.journey-dot{display:inline-block;width:6px;height:6px;border-radius:50%;
+ margin-right:3px;background:#6be1cf}
+.journey-dot.landing{background:#deb17a}
+.journey-table{min-width:105px;line-height:1.4}
+.journey-table strong{font-size:11px;display:block;color:#e7f9ff}
+.journey-table small{display:block;color:#9ebacb;font-size:9px;white-space:normal}
+#aircraftRoutesLoad{font-size:10px;padding:5px 7px;white-space:nowrap}
+.aircraft-table-title{flex-wrap:wrap}
+@media(max-width:620px){.aircraft-journey{margin:7px 0;padding:8px}
+ .aircraft-popup{max-height:80vh}}
