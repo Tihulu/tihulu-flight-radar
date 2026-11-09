@@ -1,6 +1,7 @@
 """Regression tests for local-only raster MBTiles discovery and TMS tile inversion."""
 import sqlite3
 import tempfile
+from contextlib import closing
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -13,7 +14,7 @@ class OfflineMapTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             map_file = root / "Cologne.mbtiles"
-            with sqlite3.connect(map_file) as db:
+            with closing(sqlite3.connect(map_file)) as db:
                 db.execute("CREATE TABLE metadata (name TEXT, value TEXT)")
                 db.execute("CREATE TABLE tiles (zoom_level INTEGER, tile_column INTEGER,"
                            "tile_row INTEGER, tile_data BLOB)")
@@ -42,7 +43,7 @@ class OfflineMapTests(unittest.TestCase):
             invalid = root / "nonmap.mbtiles"
             invalid.write_bytes(b"not sqlite")
             vector = root / "vector.mbtiles"
-            with sqlite3.connect(vector) as db:
+            with closing(sqlite3.connect(vector)) as db:
                 db.execute("CREATE TABLE metadata (name TEXT,value TEXT)")
                 db.execute("CREATE TABLE tiles (zoom_level INTEGER, tile_column INTEGER,"
                            "tile_row INTEGER, tile_data BLOB)")
