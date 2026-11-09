@@ -1042,8 +1042,9 @@ function rfCoordinateText(point){
 }
 function renderRfCoordinateReadouts(result){
  const current=result?.status==="region"?result.region:null;
- const currentText=current?
-  "LIVE RF model center: "+rfCoordinateText(current)+" · NOT GPS":
+ const currentText=!rfLocatorActive?
+  "LIVE RF model: OFF (no position calculations running)":
+  current?"LIVE RF model center: "+rfCoordinateText(current)+" · NOT GPS":
   "LIVE RF model center: unavailable (4+ genuine positioned RF aircraft required)";
  const bestText=rfBest?
   "BEST SESSION model center: "+rfCoordinateText(rfBest)+" · NOT GPS":
@@ -1064,7 +1065,8 @@ function renderCoverageStatus(){
  if(!rfLocatorActive){
   const button=$("rfLocate");
   button.textContent="RF area · OFF";button.setAttribute("aria-pressed","false");
-  $("rfFocus").disabled=true;
+  $("rfFocus").disabled=true;$("rfFollow").disabled=true;
+  $("rfExportEvidence").disabled=true;
   $("rfLocateStatus").textContent="RF location solver OFF: no sampled receiver area is computed or drawn. ADS-B aircraft, tracks and map controls keep running. Circles preferences and BEST history are retained.";
   $("rfCoverageStatus").textContent="RF locator paused by user (not a radio receiver failure).";
   $("rfProgress").textContent="RF model OFF · no location calculations running.";
@@ -1074,6 +1076,7 @@ function renderCoverageStatus(){
    "No BEST SESSION model saved yet.";
   return result;
  }
+ $("rfFollow").disabled=false;$("rfExportEvidence").disabled=false;
  renderRfPlaneLayers(result);
  if(result!==rfLastProgressModel){
  const evidence=$("rfEvidence");
@@ -1190,7 +1193,12 @@ $("rfLocate").onclick=()=>{
  rfLastFollowModel=null;
  // Recalculate with real RF data when reenabled. BEST and session history
  // are retained; turning RF OFF never changes the regular Flight Radar.
- if(rfLocatorActive){coverageCacheRows=null;rfLocatorFocused=false;}
+ if(rfLocatorActive){
+  coverageCacheRows=null;rfLocatorFocused=false;
+  state.centerLabel="RF locator ON · waiting for 4+ real RF aircraft · NOT GPS";
+ }else{
+  state.centerLabel="RF locator OFF · last map view retained; NOT a live RF receiver fix";
+ }
  persistRfViewPreferences();paint();
  notice(rfLocatorActive?
   "RF locator ON: 4+ independent, actually radio-positioned aircraft required. Visible circles are optional, NOT GPS.":
@@ -1839,11 +1847,11 @@ function paintRfCoverage(result){
    // Approximate maximum sampled distance from the *modeled* centroid.
    // This is deliberately NOT called a confidence/error radius.
    rfDrawRing({lat:r.lat,lon:r.lon,radiusKm:r.extentKm},
-    "rgba(226,244,255,.95)",[10,6],2);
+    "rgba(85,217,234,.95)",[10,6],2.3);
    const [cx,cy]=rfMapXy(r);
    if(cx>=0&&cx<=canvas.clientWidth&&cy>=0&&cy<=canvas.clientHeight){
-    ctx.font="bold 11px system-ui";ctx.fillStyle="#e5f7ff";
-    ctx.fillText("MODEL SPREAD ~"+Math.round(r.extentKm)+" km · NOT ACCURACY",cx+19,cy+28);
+    ctx.font="bold 11px system-ui";ctx.fillStyle="#a3f5fb";
+    ctx.fillText("LIVE FIT MODEL SPREAD ~"+Math.round(r.extentKm)+" km · NOT ACCURACY",cx+19,cy+28);
    }
   }
  }
