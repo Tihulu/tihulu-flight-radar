@@ -12,17 +12,22 @@ const TihuluRFHistoryClient=(()=>{
  function openDb(){
   return new Promise((resolve,reject)=>{
    if(!globalThis.indexedDB){reject(Error("IndexedDB unavailable"));return;}
-   const req=indexedDB.open(DB,1);
+   const req=indexedDB.open(DB,2);
    req.onupgradeneeded=()=>{
     const db=req.result;
-    const fixes=db.createObjectStore("fixes",{keyPath:"id",autoIncrement:true});
-    fixes.createIndex("session","session",{unique:false});
+    if(!db.objectStoreNames.contains("fixes")){
+     const fixes=db.createObjectStore("fixes",{keyPath:"id",autoIncrement:true});
+     fixes.createIndex("session","session",{unique:false});
+    }
+    if(!db.objectStoreNames.contains("sessions"))
+     db.createObjectStore("sessions",{keyPath:"id"});
    };
    req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);
   });
  }
  function client({api,verified,formatStatus,onResult}){
-  let db=null,enabled=false,session=0,status={},recent=[],last=new Map();
+  let db=null,enabled=false,session=0,viewSession=0,status={},recent=[],last=new Map();
+  let startedHere=false;
   let worker=null,job=0,mode="live10",hours=2,profile="balanced";
   let lastCalculation=0,calculating=false,loaded=0,currentResult=null;
   const notify=msg=>{if(formatStatus)formatStatus(msg);};
@@ -66,17 +71,21 @@ const TihuluRFHistoryClient=(()=>{
   async function statusNow(){
    if(isNative()){
     status=await api("/api/rf-history/status");enabled=!!status.recording;
-    session=status.activeSessionId||status.sessions?.[0]?.id||0;
+    session=status.activeSessionId||0;
     return status;
    }
    await open();
-   let count=0;
+   let count=0,sessions=[];
    await new Promise((resolve,reject)=>{
-    const tx=db.transaction("fixes","readonly"),req=tx.objectStore("fixes").count();
-    req.onsuccess=()=>{count=req.result;resolve()};
-    req.onerror=()=>reject(req.error);
+    const tx=db.transaction(["fixes","sessions"],"readonly");
+    const c=tx.objectStore("fixes").count();
+    const q=tx.objectStore("sessions").getAll();
+    c.onsuccess=()=>{count=c.result;};
+    q.onsuccess=()=>{sessions=q.result.sort((a,b)=>b.id-a.id).slice(0,40);};
+    tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);
    });
    status={recording:enabled,activeSessionId:session,
+    sessions:sessions.map(x=>({id:x.id,started_ms:x.started_ms,observations:x.observations??null})),
     observations:count,source:"verified browser SDR",diskBytes:null};
    return status;
   }
@@ -92,8 +101,13 @@ const TihuluRFHistoryClient=(()=>{
    }else{
     await open();
     if(action==="pause"){enabled=false;}
-    else if(action==="new-session"||!session){
-     session=Date.now();last.clear();enabled=true;
+    else if(action==="new-session"||!startedHere||!session){
+     session=Date.now();last.clear();enabled=true;startedHere=true;
+     await new Promise((resolve,reject)=>{
+      const tx=db.transaction("sessions","readwrite");
+      tx.objectStore("sessions").put({id:session,started_ms:session});
+      tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);
+     });
     }else enabled=true;
    }
    notify(enabled?"History recording ON · session "+session:
@@ -105,7 +119,8 @@ const TihuluRFHistoryClient=(()=>{
    await new Promise((resolve,reject)=>{
     const tx=db.transaction("fixes","readonly");
     const index=tx.objectStore("fixes").index("session");
-    const req=index.openCursor(IDBKeyRange.only(session));
+    const selected=viewSession||session||status.sessions?.[0]?.id||0;
+    const req=index.openCursor(IDBKeyRange.only(selected));
     let batch=[];
     req.onsuccess=()=>{
      const cursor=req.result;
@@ -122,7 +137,7 @@ const TihuluRFHistoryClient=(()=>{
    });
   }
   async function streamNativeToWorker(send){
-   const stat=await statusNow(),sid=stat.activeSessionId||stat.sessions?.[0]?.id;
+   const stat=await statusNow(),sid=viewSession||stat.activeSessionId||stat.sessions?.[0]?.id;
    if(!sid)return;
    let after=0,more=true,pageCount=0;
    while(more){
@@ -198,8 +213,13 @@ const TihuluRFHistoryClient=(()=>{
   }
   function shouldRefresh(){return profile!=="manual"&&!calculating&&
    Date.now()-lastCalculation>=(profile==="performance"?15000:60000);}
+  function selectSession(id){
+   if(!Number.isSafeInteger(Number(id))||Number(id)<0)throw Error("Invalid History session");
+   viewSession=Number(id);cancel();lastCalculation=0;currentResult=null;
+  }
   return {ingest,recordAction,statusNow,calculate,cancel,settings,shouldRefresh,
-   state:()=>({enabled,session,mode,hours,profile,loaded,calculating,
+   selectSession,
+   state:()=>({enabled,session,viewSession,mode,hours,profile,loaded,calculating,
     lastCalculation,result:currentResult})};
  }
  return {create:client,MODES:MODE_IDS};
