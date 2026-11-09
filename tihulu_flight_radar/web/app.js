@@ -1082,9 +1082,9 @@ function rfCoordinateText(point){
   ", "+Math.abs(point.lon).toFixed(5)+"° "+(point.lon>=0?"E":"W");
 }
 function renderRfCoordinateReadouts(result){
- const displayed=window.TihuluRFV2?.display(result)||result;
+ const displayed=(typeof window!=="undefined"&&window.TihuluRFV2?.display(result))||result;
  const current=["region","weighted"].includes(displayed?.status)?displayed.region:null;
- const modeLabel=window.TihuluRFV2?.getMode()||"LIVE";
+ const modeLabel=(typeof window!=="undefined"&&window.TihuluRFV2?.getMode())||"LIVE";
  const currentText=!rfLocatorActive?
   "LIVE RF model: OFF (no position calculations running)":
   current?modeLabel+" RF model center: "+rfCoordinateText(current)+" · NOT GPS":
