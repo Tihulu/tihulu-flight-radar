@@ -1878,13 +1878,29 @@ function paint(){
   if(selected&&isPositioned(selected))positionPopup(selected);
  }
 }
+let lastCanvasAircraftOpen=null;
+function inspectCanvasAircraft(x,y,preferredHex=null){
+ const rect=canvas.getBoundingClientRect();
+ const hit=pickPaintedAircraft(paintedAircraftHits,x-rect.left,y-rect.top,4);
+ const hex=preferredHex||hit?.hex;
+ const row=hex?state.data.find(a=>a.hex===hex):null;
+ if(!row||!visible(row)||!isPositioned(row))return false;
+ choose(row); // opens card without recentering or disabling RF follow
+ lastCanvasAircraftOpen={hex,x,y,at:Date.now()};
+ return true;
+}
 canvas.addEventListener("pointerdown",e=>{
  if(e.pointerType==="mouse"&&e.button!==0)return;
+ lastCanvasAircraftOpen=null;
  const rect=canvas.getBoundingClientRect();
  const hit=pickPaintedAircraft(paintedAircraftHits,
   e.clientX-rect.left,e.clientY-rect.top,e.pointerType==="touch"?8:2);
  state.pointer=[e.clientX,e.clientY,state.lon,state.lat,false,hit?.hex??null];
- canvas.setPointerCapture(e.pointerId);
+ // Some native Qt WebEngine versions implement Pointer Events but reject
+ // pointer capture. A normal click handler below is the fallback path.
+ if(typeof canvas.setPointerCapture==="function"){
+  try{canvas.setPointerCapture(e.pointerId);}catch{}
+ }
 });
 canvas.addEventListener("pointermove",e=>{
  if(!state.pointer)return;
@@ -1906,11 +1922,18 @@ canvas.addEventListener("pointerup",e=>{
  const rect=canvas.getBoundingClientRect();
  const hit=pickPaintedAircraft(paintedAircraftHits,
   e.clientX-rect.left,e.clientY-rect.top,e.pointerType==="touch"?8:2);
- // If the aircraft moved during the click, prefer the marker pressed.
- const hex=p[5]||hit?.hex;
- const a=hex?state.data.find(row=>row.hex===hex):null;
- if(a&&visible(a)&&isPositioned(a))choose(a);
- else closePopup();
+ // If the plane moved during the press, prefer the original ICAO.
+ if(!inspectCanvasAircraft(e.clientX,e.clientY,p[5]||hit?.hex||null))
+  closePopup();
+});
+canvas.addEventListener("click",e=>{
+ // Qt WebEngine and some touch/mouse integrations may deliver click but
+ // not a matching pointerup after capture. This is a real fallback path.
+ if(e.detail===0)return; // keyboard navigation uses the aircraft list
+ if(lastCanvasAircraftOpen&&Date.now()-lastCanvasAircraftOpen.at<700&&
+    Math.hypot(e.clientX-lastCanvasAircraftOpen.x,
+               e.clientY-lastCanvasAircraftOpen.y)<12)return;
+ inspectCanvasAircraft(e.clientX,e.clientY);
 });
 canvas.addEventListener("pointercancel",()=>{state.pointer=null;});
 canvas.addEventListener("lostpointercapture",()=>{state.pointer=null;});
