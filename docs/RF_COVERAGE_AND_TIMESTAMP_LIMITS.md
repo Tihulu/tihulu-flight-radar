@@ -70,8 +70,30 @@ aggregator `now`/age fields, browser `Date.now` or `performance.now`.
   expandable raw JSON view is preserved.
 - RF timing disclosure displays actual sample indices, decoder time and
   missing TX time separately.
-- Coverage checkbox and RF locator are independent. Ring rendering and model
-  both use the same fixed-site history (up to 2 hours) when enabled.
+- **RF area ON/OFF** is the only master control for the four-aircraft
+  receiver-location solver. OFF skips both the solver and RF history sampling;
+  normal ADS-B reception, Internet overlays, flight details and map remain
+  operational. Existing session BEST is retained, not recomputed or displayed
+  while OFF. Reenable to resume valid real RF model calculations.
+- **Circles dropdown**, beside RF area ON/OFF, controls visual layers
+  independently of the solver: LIVE Fit circle (default ON), BEST Fit
+  circle (default OFF), LIVE feasible area (default ON), and individual
+  aircraft horizons (default hidden, Selected or All). Gaussian PSF remains
+  display-only on explicitly selected aircraft horizons; enabling Gaussian
+  never auto-enables unwanted aircraft circles. LIVE and BEST center pins
+  are also independently controlled in the advanced RF panel.
+- The **LIVE Fit circle** is centered at the current four-aircraft
+  feasible-grid area centroid with the rounded maximum sampled radial spread;
+  its cyan outline is not a confidence interval or GPS accuracy estimate.
+  The **BEST Fit circle** is centered at the stored session model with
+  the smallest *unrounded* sampled spread. It has a distinct purple outline
+  and remains visible when LIVE later becomes insufficient, provided RF
+  locator ON is still enabled. Smaller sampled spread does not prove a more
+  accurate receiver position.
+- Source browser and bundled Qt desktop use the **same** JavaScript/CSS
+  and preferences; best model and raw RF history remain session-only.
+  Preferences persist when the engine permits localStorage. Offline
+  PWA shell cache is versioned so upgraded controls replace old copies.
 - The optional centroid marker and its displayed coordinates are labeled
   model outputs, never actual measured receiver coordinates.
 - Node regression tests cover four genuine RF observations, rejected
@@ -342,3 +364,34 @@ per-plane choice or Hide all.
 CI regression tests cover zoom before and after valid 4+ aircraft model
 updates, camera jitter, best unrounded spread selection, the per-plane
 Gaussian function at ±1σ, and the no-GPS/no-calibrated-range assertions.
+
+## 2026-11-09: Independent LIVE / BEST / aircraft Circles controls
+
+The LIVE and BEST circle overlays **do not alter** `compute()` in
+`receiver_coverage.js`: that solver still accepts only genuine local
+antenna-origin aircraft positions, with four distinct ICAO24 identifiers,
+real recorded trajectory points and no fabricated range, TOA or GPS fix.
+The optional Gaussian ±1σ display has NO weighting in model selection.
+
+The UI exposes separate `rfModelCircle`, `rfBestCircle`, `rfFill`,
+`rfAircraftCircleMode` and original per-aircraft selection controls
+from a top `Circles` dropdown. Existing `rfHatch`,
+`rfModelPin`, `rfBestPin`, `rfGaussianBand` and `rfSigmaKm`
+remain in the advanced RF panel. No duplicate controls/element IDs.
+Normal 1090 MHz antenna reception and Internet display continue
+when the RF *locator* is OFF. The solver/remember-history functions
+short-circuit immediately in that mode; user settings and the previous
+session BEST record are kept for later use.
+
+The initial visual default is LIVE circle + feasible-area fill,
+BEST circle OFF, individual aircraft horizons hidden and Gaussian OFF.
+The BEST pin and BEST ring use stored session data even when current LIVE
+is unavailable, so an RF history shortage does not erase a valid
+earlier session model. Neither circle represents measured error.
+Zoom-in/out and live map follow remain independent of layer choices.
+Cross-platform regression `tests/rf_circles_layers.test.cjs` exercises
+actual function behavior for model gating, independent drawings, selected
+aircraft and session BEST retention. The same UI assets ship in
+Linux/Pop!_OS, Windows, macOS and Raspberry Pi packages; no new
+native dependency or second SDR owner was added. Real RF and Qt GUI
+acceptance tests remain necessary.
