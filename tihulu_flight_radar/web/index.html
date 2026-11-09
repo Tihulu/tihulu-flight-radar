@@ -149,6 +149,22 @@
       <div><span>Aircraft type</span><strong id="popupType">—</strong></div>
       <div><span>Squawk</span><strong id="popupSquawk">—</strong></div>
      </div>
+     <section class="aircraft-journey" aria-label="Aircraft departure and arrival information">
+      <div class="aircraft-journey-title">
+       <strong><icon aria-hidden="true">✈</icon> From → To</strong>
+       <button id="popupJourneyRefresh" type="button" title="Look up this callsign's route online only when requested">Refresh route</button>
+      </div>
+      <div class="aircraft-journey-airports">
+       <div><small><span class="journey-dot takeoff"></span> Departure</small><strong id="popupDepartAirport">Unknown</strong></div>
+       <div><small><span class="journey-dot landing"></span> Arrival</small><strong id="popupArriveAirport">Unknown</strong></div>
+      </div>
+      <div class="aircraft-journey-times">
+       <div><span>Departure time</span><strong id="popupDepartureTime">Not available</strong></div>
+       <div><span>Arrival time</span><strong id="popupArrivalTime">Not available</strong></div>
+      </div>
+      <p id="popupRadioJourney" class="aircraft-journey-radio">Radio observations: waiting for genuine antenna data.</p>
+      <small id="popupJourneySource" class="aircraft-journey-source">Online: callsign route lookup when aircraft is selected. ADS-B alone has no timetable.</small>
+     </section>
      <p class="aircraft-popup-meta"><span id="popupPosition">Position unavailable</span><span id="popupSeen"></span></p>
      <details class="aircraft-popup-timing">
       <summary>RF timestamp / propagation diagnostics</summary>
@@ -205,10 +221,10 @@
    <p id="receiverStatus" class="muted">WebUSB can receive directly in supported browsers. A paired bridge is optional.</p>
    <div class="buttons"><button id="start">Start</button><button id="stop">Stop</button><button id="restart">Restart</button></div>
    <h2>Sources</h2><p id="feedStatus" class="muted">No source connected.</p>
-   <div class="aircraft-table-title"><h2>Aircraft <span id="visibleCount" class="muted">0</span></h2>
+   <div class="aircraft-table-title"><h2>Aircraft <span id="visibleCount" class="muted">0</span></h2><button id="aircraftRoutesLoad" type="button" title="Fetch routes for up to 30 visible callsigns, only when requested.">Load routes · Internet</button>
     <label for="unitSystem">Units <select id="unitSystem" aria-label="Flight information units"><option value="aviation">Aviation · ft / kt</option><option value="metric">Metric · m / km/h</option></select></label>
    </div>
-   <div class="tablewrap"><table><thead><tr><th>Flight / ICAO</th><th id="altitudeColumn">Altitude (ft)</th><th id="speedColumn">Speed (kt)</th><th>Source</th><th>Info</th></tr></thead><tbody id="aircraftRows"></tbody></table></div>
+   <div class="tablewrap"><table><thead><tr><th>Flight / ICAO</th><th id="altitudeColumn">Altitude (ft)</th><th id="speedColumn">Speed (kt)</th><th>Source</th><th>From → To / times</th><th>Info</th></tr></thead><tbody id="aircraftRows"></tbody></table></div>
    <section class="rf-picked-panel" aria-label="Persistent selected aircraft">
     <div class="rf-picked-head"><strong>Selected aircraft <span id="rfPickedCount">0</span></strong><button id="rfPickedClear" type="button">Clear selected</button></div>
     <p id="rfPickedSummary" class="muted">Click a plane on the map or an aircraft row. Closing Info keeps the selection.</p>
@@ -362,6 +378,7 @@
 </main>
 <script src="./multi_sources.js" defer></script>
 <script src="./receiver_coverage.js" defer></script>
+<script src="./flight_journey.js" defer></script>
 <script src="./rf_history_models.js" defer></script>
 <script src="./rf_history_client.js" defer></script>
  <script src="./map_motion.js" defer></script>
