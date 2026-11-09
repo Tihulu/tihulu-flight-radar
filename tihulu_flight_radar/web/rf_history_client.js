@@ -256,8 +256,12 @@ const TihuluRFHistoryClient=(()=>{
    if(!Number.isSafeInteger(Number(id))||Number(id)<0)throw Error("Invalid History session");
    viewSession=Number(id);cancel();lastCalculation=0;currentResult=null;
   }
+  function resetRecent(){
+   recent=[];last.clear();newestDirectRf.clear();
+   cancel();lastCalculation=0;currentResult=null;
+  }
   return {ingest,recordAction,statusNow,calculate,cancel,settings,shouldRefresh,
-   selectSession,
+   selectSession,resetRecent,
    state:()=>({enabled,session,viewSession,mode,hours,profile,loaded,calculating,
     lastCalculation,result:currentResult})};
  }
