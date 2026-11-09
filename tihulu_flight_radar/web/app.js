@@ -1301,12 +1301,12 @@ function paintRfMapLabel(kind,x,y,message,offscreen=false){
  return {kind,x,y,rect:{left,top,right:left+width,bottom:top+h},offscreen};
 }
 function paintRfBestPin(result){
- // BEST pin and BEST ring use the same visibility setting.
- if(!rfLocatorActive||!$("rfBestPin").checked||!$("rfBestCircle").checked||!rfBest)return;
+ // The BEST center pin is independently selectable from its model-spread ring.
+ if(!rfLocatorActive||!$("rfBestPin").checked||!rfBest)return;
  const [x,y]=rfMapXy(rfBest);
  if(!Number.isFinite(x)||!Number.isFinite(y))return;
- const [liveX,liveY]=result.status==="region"&&$("rfModelCircle").checked
-  &&$("rfModelPin").checked?rfMapXy(result.region):[NaN,NaN];
+ const [liveX,liveY]=result.status==="region"&&$("rfModelPin").checked
+  ?rfMapXy(result.region):[NaN,NaN];
  const nearlySame=Number.isFinite(liveX)&&
   Math.hypot(x-liveX,y-liveY)<48;
  const bx=x+(nearlySame?30:0),by=y+(nearlySame?-30:0);
@@ -1333,7 +1333,7 @@ function paintRfBestPin(result){
 }
 function paintRfLocator(result){
  if(!rfLocatorActive||result.status!=="region"||
-  !$("rfModelPin").checked||!$("rfModelCircle").checked)return;
+  !$("rfModelPin").checked)return;
  const [x,y]=xy(result.region.lat,result.region.lon);
  if(x<0||x>canvas.clientWidth||y<0||y>canvas.clientHeight)return;
  ctx.save();ctx.fillStyle="rgba(8,34,45,.98)";ctx.strokeStyle="#89edfa";
