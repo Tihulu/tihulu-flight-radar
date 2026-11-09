@@ -131,7 +131,7 @@ test("RF ON/OFF is sole engine toggle, not Follow or Circles or Gaussian",()=>{
  let persisted=0,painted=0;
  const ctx=vm.createContext({
   $:id=>{if(!listeners[id])listeners[id]={};return listeners[id];},
-  rfBest:best,persistRfViewPreferences:()=>persisted++,
+  rfBest:best,state:{centerLabel:""},persistRfViewPreferences:()=>persisted++,
   paint:()=>painted++,notice:()=>{}
  });
  vm.runInContext(`
