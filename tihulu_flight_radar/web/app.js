@@ -1061,6 +1061,19 @@ function renderRfCoordinateReadouts(result){
 function renderCoverageStatus(){
  const result=coverageResult();
  renderRfCoordinateReadouts(result);
+ if(!rfLocatorActive){
+  const button=$("rfLocate");
+  button.textContent="RF area · OFF";button.setAttribute("aria-pressed","false");
+  $("rfFocus").disabled=true;
+  $("rfLocateStatus").textContent="RF location solver OFF: no sampled receiver area is computed or drawn. ADS-B aircraft, tracks and map controls keep running. Circles preferences and BEST history are retained.";
+  $("rfCoverageStatus").textContent="RF locator paused by user (not a radio receiver failure).";
+  $("rfProgress").textContent="RF model OFF · no location calculations running.";
+  $("rfEvidence").textContent="Enable RF area to recompute using real local RF aircraft.";
+  $("rfBestStatus").textContent=rfBest?
+   "Saved BEST SESSION spread "+rfBest.rawExtentKm.toFixed(1)+" km · retained while RF OFF; NOT GPS accuracy.":
+   "No BEST SESSION model saved yet.";
+  return result;
+ }
  renderRfPlaneLayers(result);
  if(result!==rfLastProgressModel){
  const evidence=$("rfEvidence");
@@ -1151,7 +1164,7 @@ function renderCoverageStatus(){
  $("rfFocus").disabled=result.status!=="region";
  button.setAttribute("aria-pressed",String(rfLocatorActive));
  if(!rfLocatorActive){
-  output.textContent="RF area overlay is off. Enable RF area to see the modeled region without drawing giant horizon rings.";
+  output.textContent="RF locator OFF: no location solving; normal aircraft reception continues.";
  }else if(result.status==="region"){
   const r=result.region;
   output.textContent="LIVE MODEL CENTER (NOT GPS): "+
@@ -1204,11 +1217,12 @@ function focusRfModelWhenReady(result){
  rfLocatorFocused=true;rfLastFollowModel=result;
 }
 function paintRfBestPin(result){
- if(!rfLocatorActive||!$("rfBestPin").checked||!rfBest||result.status!=="region")return;
+ // BEST is independently stored; it survives temporary LIVE insufficiency.
+ if(!rfLocatorActive||!$("rfBestPin").checked||!rfBest)return;
  const [x,y]=rfMapXy(rfBest);
  if(x<0||x>canvas.clientWidth||y<0||y>canvas.clientHeight)return;
- const [liveX,liveY]=rfMapXy(result.region);
- const nearlySame=Math.hypot(x-liveX,y-liveY)<25;
+ const [liveX,liveY]=result.status==="region"?rfMapXy(result.region):[NaN,NaN];
+ const nearlySame=Number.isFinite(liveX)&&Math.hypot(x-liveX,y-liveY)<25;
  ctx.save();
  ctx.fillStyle="rgba(39,25,62,.96)";ctx.strokeStyle="#d3b5ff";
  ctx.lineWidth=2;ctx.setLineDash([]);
@@ -1445,7 +1459,7 @@ function renderTable(){
   infoCell.append(info);tr.append(infoCell);
   // Keep RF model centering when Follow RF center is selected.
   // The dedicated Center aircraft button remains an explicit opt-out.
-  tr.onclick=()=>choose(a,{center:!rfFollowCenter});
+  tr.onclick=()=>choose(a,{center:!(rfLocatorActive&&rfFollowCenter)});
   rows.append(tr);
  }
  if(state.selected){
@@ -1777,20 +1791,15 @@ function rfDrawGaussianBand(ring,color,sigmaKm){
  rfDrawRing({...ring,radiusKm:band.outerKm},rfHexToRgba(color,.70),[3,5],1);
 }
 function paintRfCoverage(result){
+ if(!rfLocatorActive)return;
  ctx.save();
- if($("showRfCoverage").checked){
-  // Retain the quick three-horizon diagnostic toggle for compatibility.
-  for(const ring of result.circles.slice(0,3))
-   rfDrawRing(ring,"rgba(88,194,219,.30)",[4,9],1);
- }
- // Every real RF aircraft has its own independently switchable outline,
- // even if there are fewer than four aircraft for a region model.
- for(const item of result.aircraftCircles||[]){
-  if(!rfSelectedPlanes.has(item.hex))continue;
+ const aircraftMode=$("rfAircraftCircleMode").value;
+ // Aircraft horizon display is independent of the feasible-area solver.
+ if(aircraftMode!=="none")for(const item of result.aircraftCircles||[]){
+  if(aircraftMode!=="all"&&!rfSelectedPlanes.has(item.hex))continue;
   const color=rfPlaneColor(item.hex);
   if($("rfGaussianBand").checked){
    const sigmaKm=Number($("rfSigmaKm").value);
-   // Even at high zoom draw only locally received radio-horizon rings.
    rfDrawGaussianBand(item.circle,color,sigmaKm);
   }
   rfDrawRing(item.circle,color,[5,6],1.7);
@@ -1838,6 +1847,19 @@ function paintRfCoverage(result){
    }
   }
  }
+ // Historical BEST Fit circle remains selectable even without valid LIVE Fit.
+ if($("rfBestCircle").checked&&rfBest){
+  rfDrawRing({lat:rfBest.lat,lon:rfBest.lon,
+   radiusKm:rfBest.displayedExtentKm},
+   "rgba(208,164,252,.95)",[4,7],2.4);
+  const [bx,by]=rfMapXy(rfBest);
+  if(bx>=0&&bx<=canvas.clientWidth&&by>=0&&by<=canvas.clientHeight){
+   ctx.save();ctx.font="bold 11px system-ui";ctx.fillStyle="#e6cdff";
+   ctx.fillText("BEST SESSION SPREAD ~"+
+    rfBest.rawExtentKm.toFixed(1)+" km · NOT ACCURACY",bx+18,by+30);
+   ctx.restore();
+  }
+ }
  ctx.restore();
 }
 // Record clickable silhouettes, source badges, and callsign labels from
@@ -1863,12 +1885,14 @@ function paint(){
  const w=canvas.clientWidth,h=canvas.clientHeight;
  if(!w||!h)return;
  const model=coverageResult();
- updateRfBest(model);
- focusRfModelWhenReady(model);
+ if(rfLocatorActive){
+  updateRfBest(model);
+  focusRfModelWhenReady(model);
+ }
  paintedAircraftHits=[]; // no stale live airplane hit targets
  ctx.clearRect(0,0,w,h);ctx.fillStyle="#102231";ctx.fillRect(0,0,w,h);
  tiles();grid();
- if($("showRfCoverage").checked||rfLocatorActive||rfSelectedPlanes.size)paintRfCoverage(model);
+ if(rfLocatorActive)paintRfCoverage(model);
  if($("showTracks").checked){
   for(const [key,points] of state.tracks.entries()){
    if(points.length<2)continue;
