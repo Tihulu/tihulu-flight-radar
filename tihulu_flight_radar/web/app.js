@@ -963,9 +963,11 @@ function renderRfPlaneLayers(result){
   input.setAttribute("aria-label","Show RF horizon for "+item.hex);
   input.addEventListener("change",()=>{
    if(input.checked)rfSelectedPlanes.add(item.hex);else rfSelectedPlanes.delete(item.hex);
-   // An explicit per-plane choice overrides future auto-inclusion.
+   // Individual choice switches All/None preset to Selected aircraft.
+   $("rfAircraftCircleMode").value="selected";
    rfAutoSelectNewPlanes=false;
-   paint();
+   rfAircraftListSignature="";
+   persistRfViewPreferences();paint();
   });
   const swatch=document.createElement("span");swatch.className="rf-aircraft-swatch";
   swatch.style.background=rfPlaneColor(item.hex);
@@ -975,35 +977,16 @@ function renderRfPlaneLayers(result){
   label.append(input,swatch,title);node.append(label);
  }
 }
-$("rfAllPlanes").onclick=()=>{
- rfAutoSelectNewPlanes=true;
- for(const item of coverageResult().aircraftCircles||[])rfSelectedPlanes.add(item.hex);
- for(const cb of $("rfAircraftLayers").querySelectorAll('input[type="checkbox"]'))cb.checked=true;
- paint();
-};
-$("rfNoPlanes").onclick=()=>{
- rfAutoSelectNewPlanes=false;
- rfSelectedPlanes.clear();
- for(const cb of $("rfAircraftLayers").querySelectorAll('input[type="checkbox"]'))cb.checked=false;
- paint();
-};
-for(const id of ["rfFill","rfHatch","rfModelCircle","rfModelPin","rfBestPin"])
- $(id).addEventListener("change",()=>paint());
-$("rfGaussianBand").onchange=()=>{
- if($("rfGaussianBand").checked && !rfSelectedPlanes.size){
-  // Make the checkbox immediately useful, including when future local
-  // aircraft become eligible; users may uncheck any individual plane.
-  rfAutoSelectNewPlanes=true;
-  for(const item of coverageResult().aircraftCircles||[])
-   rfSelectedPlanes.add(item.hex);
-  rfAircraftListSignature=""; // refresh individual-plane checkboxes
- }
- paint();
-};
-$("rfSigmaKm").onchange=()=>paint();
+$("rfAllPlanes").onclick=()=>setAircraftCircleMode("all");
+$("rfNoPlanes").onclick=()=>setAircraftCircleMode("none");
+$("rfAircraftCircleMode").onchange=e=>setAircraftCircleMode(e.target.value);
+for(const id of RF_VIEW_CHECKBOXES)
+ $(id).addEventListener("change",()=>{persistRfViewPreferences();paint();});
+$("rfSigmaKm").onchange=()=>{persistRfViewPreferences();paint();};
+// Follow changes camera behavior only; it never enables the RF engine.
 $("rfFollow").onchange=()=>{
  rfFollowCenter=$("rfFollow").checked;
- if(rfFollowCenter){rfLocatorActive=true;rfLocatorFocused=false;rfLastFollowModel=null;}
+ if(rfFollowCenter){rfLocatorFocused=false;rfLastFollowModel=null;}
  paint();
 };
 function disableRfFollow(){
@@ -1190,12 +1173,19 @@ function renderCoverageStatus(){
 }
 $("rfLocate").onclick=()=>{
  rfLocatorActive=!rfLocatorActive;
- rfLocatorFocused=true;
- paint();
- if(rfLocatorActive)notice("RF possible-area overlay enabled: positioned antenna aircraft only. Use Focus RF area to center the map; not GPS.");
+ rfLocatorFocused=!rfLocatorActive;
+ rfLastFollowModel=null;
+ // Recalculate with real RF data when reenabled. BEST and session history
+ // are retained; turning RF OFF never changes the regular Flight Radar.
+ if(rfLocatorActive){coverageCacheRows=null;rfLocatorFocused=false;}
+ persistRfViewPreferences();paint();
+ notice(rfLocatorActive?
+  "RF locator ON: 4+ independent, actually radio-positioned aircraft required. Visible circles are optional, NOT GPS.":
+  "RF locator OFF: location solver and modeled overlays stopped; normal aircraft reception continues.");
 };
 $("rfFocus").onclick=()=>{
- rfLocatorActive=true;rfLocatorFocused=false;rfLastFollowModel=null;paint();
+ if(!rfLocatorActive)return;
+ rfLocatorFocused=false;rfLastFollowModel=null;paint();
  notice("Map centered on a modeled RF feasible area, NOT your measured position.");
 };
 function focusRfModelWhenReady(result){
