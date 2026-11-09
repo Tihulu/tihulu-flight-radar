@@ -194,13 +194,13 @@ test("Gaussian 1-sigma option uses individual radio-plane toggles; pointer jitte
  assert.match(html,/id="rfGaussianBand"/);
  assert.match(html,/id="rfSigmaKm"/);
  assert.match(html,/Assumed σ \(km\)/);
- assert.match(html,/NOT a measured range error/);
+ assert.match(html,/NOT measured accuracy/);
  assert.match(js,/function rfDrawGaussianBand\(ring,color,sigmaKm\)/);
  assert.match(js,/gaussianHorizonPsf\(ring\.radiusKm,sigmaKm,middle\)/);
  assert.match(js,/ctx\.fill\("evenodd"\)/);
  assert.match(js,/if\(\$\("rfGaussianBand"\)\.checked\)/);
  assert.match(js,/rfSelectedPlanes\.has\(item\.hex\)/);
- assert.match(js,/rfAutoSelectNewPlanes=true/);
+ assert.match(js,/rfAutoSelectNewPlanes=mode==="all"/);
  assert.match(js,/if\(!p\[4\]&&Math\.hypot\(e\.clientX-p\[0\],e\.clientY-p\[1\]\)<7\)return/);
  const wheel=js.slice(js.indexOf('canvas.addEventListener("wheel"'),js.indexOf('// Provider selection',js.indexOf('canvas.addEventListener("wheel"')));
  assert.doesNotMatch(wheel,/disableRfFollow/);
