@@ -49,7 +49,9 @@
   const notFound=call&&cached(call)&&!cached(call).route;
   $("popupJourneySource").textContent=journey
    ?"Airports / timetable source: "+journey.source+
-    ". Route is callsign-based, not proof of this specific flight. Local times follow device settings."
+    ". Route is callsign-based, not proof of this specific flight. Local times follow device settings."+
+    (journey.source.includes("adsbdb")?
+     " Route data: David J Taylor (Edinburgh) and Jim Mason (Glasgow), via adsbdb.com. No route-data archive is created.":"")
    :notFound?"Online callsign route unavailable; ADS-B alone cannot supply origin, destination or schedule.":
     call?"Route not yet retrieved. Opening aircraft Info checks the public callsign database on demand.":
     "No verifiable callsign. Ordinary ADS-B does not carry airport route or scheduled flight times.";
