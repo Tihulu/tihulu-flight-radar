@@ -30,6 +30,7 @@ const TihuluRFHistoryClient=(()=>{
   let startedHere=false;
   let worker=null,job=0,mode="live10",hours=2,profile="balanced";
   let lastCalculation=0,calculating=false,loaded=0,currentResult=null;
+  let lastHistoryKey=null,lastHistoryCount=-1,pendingHistoryKey=null,pendingHistoryCount=0;
   const notify=msg=>{if(formatStatus)formatStatus(msg);};
   async function open(){if(!db)db=await openDb();return db;}
   function remember(rows){
@@ -161,6 +162,20 @@ const TihuluRFHistoryClient=(()=>{
    if(calculating)return;
    if(!force&&Date.now()-lastCalculation<
      (profile==="performance"?15000:60000))return;
+   if(!force&&(mode==="history"||mode==="historyBest")&&lastHistoryKey){
+    try{
+     const stat=await statusNow(),sid=viewSession||stat.activeSessionId||
+      stat.sessions?.[0]?.id||0;
+     const amount=stat.sessions?.find(r=>r.id===sid)?.observations??stat.observations;
+     const key=mode+":"+sid;
+     if(key===lastHistoryKey&&amount===lastHistoryCount){
+      lastCalculation=Date.now();
+      notify("History cache reused: "+Number(amount).toLocaleString()+
+       " stored RF records unchanged; no repeat full-archive scan.");
+      return;
+     }
+    }catch{} // If a source is unavailable, surface its normal solver error.
+   }
    cancel();calculating=true;loaded=0;
    const task=job;
    notify("Calculating "+mode+" using verified RF observations…");
@@ -178,6 +193,9 @@ const TihuluRFHistoryClient=(()=>{
      if(d.type==="error"){calculating=false;notify("RF solver: "+d.error);}
      if(d.type==="result"){
       calculating=false;currentResult=d.result;lastCalculation=Date.now();
+      if(mode==="history"||mode==="historyBest"){
+       lastHistoryKey=pendingHistoryKey;lastHistoryCount=pendingHistoryCount;
+      }
       onResult?.(mode,d.result,{loaded:d.total,at:lastCalculation});
       notify("Solved "+mode+": "+d.total.toLocaleString()+" verified RF circles · "+
        d.result.status+(d.result.status==="weighted"
@@ -195,6 +213,11 @@ const TihuluRFHistoryClient=(()=>{
       notify("Loading RF constraints: "+loaded.toLocaleString());
     };
     if(mode==="history"||mode==="historyBest"){
+     const stat=await statusNow(),sid=viewSession||stat.activeSessionId||
+      stat.sessions?.[0]?.id||0;
+     pendingHistoryKey=mode+":"+sid;
+     pendingHistoryCount=stat.sessions?.find(r=>r.id===sid)?.observations??
+      stat.observations;
      if(isNative())await streamNativeToWorker(send);
      else await streamDbToWorker(send);
     }else{
