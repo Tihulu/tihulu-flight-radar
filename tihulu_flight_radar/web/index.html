@@ -160,6 +160,30 @@
       <button id="popupRaw" type="button">Raw JSON</button>
      </div>
     </section>
+    <section id="rfModelPopup" class="aircraft-popup rf-model-popup" role="dialog" aria-modal="false" aria-label="RF model details" hidden>
+     <header class="aircraft-popup-head">
+      <div><strong id="rfPopupTitle">LIVE RF Fit</strong><small id="rfPopupSub">Modeled possible-area center · NOT GPS</small></div>
+      <button id="rfPopupClose" type="button" aria-label="Close RF model details">×</button>
+     </header>
+     <div class="aircraft-popup-grid rf-popup-grid">
+      <div><span>Independent RF aircraft</span><strong id="rfPopupAircraft">—</strong></div>
+      <div><span>Real RF position samples</span><strong id="rfPopupConstraints">—</strong></div>
+      <div><span>Current / session RF aircraft</span><strong id="rfPopupSources">—</strong></div>
+      <div><span>Model geometry</span><strong id="rfPopupGeometry">—</strong></div>
+      <div class="rf-popup-wide"><span>Modeled center · WGS84 coordinates</span><strong id="rfPopupCoordinates">—</strong></div>
+      <div><span>Bounding-circle radius (range)</span><strong id="rfPopupRadius">—</strong></div>
+      <div><span>Bounding-circle diameter</span><strong id="rfPopupDiameter">—</strong></div>
+      <div class="rf-popup-wide"><span>Actual location accuracy</span><strong id="rfPopupAccuracy">Unmeasured · not GPS</strong></div>
+     </div>
+     <div class="rf-preview-heading"><strong>Model circle · geographic preview</strong><small id="rfPopupMapScale">Auto-fit</small></div>
+     <canvas id="rfModelMiniMap" width="280" height="280" role="img" aria-label="Geographic map preview showing complete modeled RF spread circle"></canvas>
+     <small id="rfPopupMapCredit" class="rf-popup-map-credit">© OpenStreetMap contributors when OSM tiles load · offline grid otherwise</small>
+     <p id="rfPopupNote" class="aircraft-popup-sources">RF horizon intersection is only a modeled possibility, not a measured receiver location, confidence or true distance.</p>
+     <div class="aircraft-popup-actions">
+      <button id="rfPopupFocus" type="button">Focus model</button>
+      <button id="rfPopupCopy" type="button">Copy coordinates</button>
+     </div>
+    </section>
    <div class="mapfooter"><span id="mapLabel">Germany default view · no receiver position assumed</span><span id="rfMapCoordinates" class="rf-map-coordinates" aria-live="polite">RF model center: waiting for 4+ local RF aircraft</span><span><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a> · <span id="sourceCredits">Source attribution shown after connection</span></span></div>
   </section>
   <aside class="side">
