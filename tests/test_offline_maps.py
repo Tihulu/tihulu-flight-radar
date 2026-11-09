@@ -24,6 +24,7 @@ class OfflineMapTests(unittest.TestCase):
                 # XYZ 1/0/0 is stored as MBTiles TMS y=1.
                 db.execute("INSERT INTO tiles VALUES (1,0,1,?)",
                            (b"\x89PNG\r\n\x1a\nvalid tile",))
+                db.commit()  # closing() closes without an implicit transaction commit
             with patch.object(offline_maps, "MAP_DIRECTORIES", (root,)):
                 hits = offline_maps.discover()
                 self.assertEqual(len(hits), 1)
