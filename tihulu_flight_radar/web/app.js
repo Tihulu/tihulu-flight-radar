@@ -985,10 +985,16 @@ function renderRfPlaneLayers(result){
   input.setAttribute("aria-label","Show RF horizon for "+item.hex);
   input.addEventListener("change",()=>{
    if(input.checked){
-    rfPickedPlanes.add(item.hex);rfSelectedPlanes.add(item.hex);
+    rfPickedPlanes.add(item.hex);
    }else{
-    rfPickedPlanes.delete(item.hex);rfSelectedPlanes.delete(item.hex);
+    rfPickedPlanes.delete(item.hex);
+    if(state.selected===item.hex){
+     state.selected=null;$("aircraftPopup").hidden=true;
+    }
    }
+   // Switching from All to Selected must discard automatically added rings.
+   rfSelectedPlanes.clear();
+   for(const hex of rfPickedPlanes)rfSelectedPlanes.add(hex);
    // Individual choice switches All/None preset to Selected aircraft.
    $("rfAircraftCircleMode").value="selected";
    rfAutoSelectNewPlanes=false;
