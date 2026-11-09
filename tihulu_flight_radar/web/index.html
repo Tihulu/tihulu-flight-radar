@@ -111,7 +111,7 @@
          <label class="rf-circles-aircraft">Aircraft horizon circles
           <select id="rfAircraftCircleMode" aria-label="Aircraft RF horizon circle visibility">
            <option value="none" selected>Hidden (default)</option>
-           <option value="selected">Selected aircraft only</option>
+           <option value="selected">Selected aircraft only (map / table clicks)</option>
            <option value="all">All genuine RF aircraft</option>
           </select>
          </label>
@@ -171,6 +171,11 @@
     <label for="unitSystem">Units <select id="unitSystem" aria-label="Flight information units"><option value="aviation">Aviation · ft / kt</option><option value="metric">Metric · m / km/h</option></select></label>
    </div>
    <div class="tablewrap"><table><thead><tr><th>Flight / ICAO</th><th id="altitudeColumn">Altitude (ft)</th><th id="speedColumn">Speed (kt)</th><th>Source</th><th>Info</th></tr></thead><tbody id="aircraftRows"></tbody></table></div>
+   <section class="rf-picked-panel" aria-label="Persistent selected aircraft">
+    <div class="rf-picked-head"><strong>Selected aircraft <span id="rfPickedCount">0</span></strong><button id="rfPickedClear" type="button">Clear selected</button></div>
+    <p id="rfPickedSummary" class="muted">Click a plane on the map or an aircraft row. Closing Info keeps the selection.</p>
+    <div id="rfPickedList" class="rf-picked-list" aria-live="polite">No selected aircraft.</div>
+   </section>
    <section class="rf-coverage-panel" aria-label="Experimental RF coverage constraints">
     <strong>Receiver coverage estimate</strong>
     <div class="rf-history-controls">
