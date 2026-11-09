@@ -168,6 +168,7 @@ class RFHistoryStore:
     def status(self) -> dict:
         with self.lock:
             with closing(self._connect()) as db, db:
+                total_count = db.execute("SELECT COUNT(*) FROM fixes").fetchone()[0]
                 sessions = [dict(id=x[0],started_ms=x[1],observations=x[2])
                             for x in db.execute(
                              """SELECT s.id,s.started_ms,COUNT(f.id) FROM sessions s
@@ -176,7 +177,7 @@ class RFHistoryStore:
             return {
                 "recording": self.enabled, "activeSessionId": self.session_id,
                 "sessions": sessions,
-                "observations": sum(item["observations"] for item in sessions),
+                "observations": total_count,
                 "diskBytes": self.path.stat().st_size if self.path.exists() else 0,
                 "warning": ("Archive exceeds 1 GiB. No data deleted."
                             if self.path.exists() and self.path.stat().st_size >= WARN_BYTES
