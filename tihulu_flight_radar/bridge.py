@@ -608,6 +608,8 @@ def make_handler(bridge: Bridge, port: int):
                         if not info:
                             raise DataError("Only raster MBTiles with valid tile data schema and PNG/JPEG/WebP format are supported.")
                         dest = MAP_ROOT / name
+                        if dest.exists():
+                            raise DataError("A map with this filename already exists; rename the imported file.")
                         temp.replace(dest)
                         bridge.offline_map_name = name
                         self._send(HTTPStatus.OK, {"imported": name, "map": info})
