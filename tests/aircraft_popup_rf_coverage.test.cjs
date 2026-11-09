@@ -169,7 +169,8 @@ test("Clicking a moving aircraft still opens its details without ending RF follo
  const down=js.match(/canvas\.addEventListener\("pointerdown",e=>\{[\s\S]*?\n\}\);/)?.[0];
  const up=js.match(/canvas\.addEventListener\("pointerup",e=>\{[\s\S]*?\n\}\);/)?.[0];
  const pick=js.match(/function pickPaintedAircraft\(hits,x,y,touchSlack=0\)\{[\s\S]*?\n\}/)?.[0];
- assert.ok(down&&up&&pick);
+ const inspect=js.match(/function inspectCanvasAircraft\(x,y,preferredHex=null\)\{[\s\S]*?\n\}/)?.[0];
+ assert.ok(down&&up&&pick&&inspect);
  const handlers={},opened=[],state={pointer:null,data:[{hex:"a00001",lat:50,lon:7,seen_pos:1}]};
  const canvas={
   addEventListener:(event,fn)=>{handlers[event]=fn;},
@@ -178,10 +179,10 @@ test("Clicking a moving aircraft still opens its details without ending RF follo
  };
  const ctx={canvas,state,paintedAircraftHits:[
   {hex:"a00001",x:100,y:100,badgeRight:29,labelWidth:60}
- ],Math,
+ ],Math,Date,lastCanvasAircraftOpen:null,
  visible:()=>true,isPositioned:()=>true,
  choose:a=>opened.push(a.hex),closePopup:()=>opened.push("closed")};
- vm.runInNewContext([pick,down,up].join("\n"),ctx);
+ vm.runInNewContext([pick,inspect,down,up].join("\n"),ctx);
  handlers.pointerdown({pointerType:"mouse",button:0,clientX:110,clientY:120,pointerId:1});
  assert.equal(state.pointer[5],"a00001");
  // A position update arrives before button release: keep the pressed ICAO.
