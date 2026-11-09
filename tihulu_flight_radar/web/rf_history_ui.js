@@ -7,6 +7,7 @@
  const labels={live10:"LIVE · 10 min",liveX:"X-hour LIVE",best:"BEST Fit · session",
   history:"HISTORY · all",historyBest:"HISTORY BEST · weighted"};
  let mode="live10",latest=null,latestMode=null,calculated=0;
+ const modelCache=new Map();
  const client=TihuluRFHistoryClient.create({
   api:(url,options)=>api(url,options),
   verified:(row,now)=>TihuluRFCoverage.recordedCircle(row,now),
@@ -14,7 +15,7 @@
   onResult:(kind,result,meta)=>{
    if(kind!==mode)return;
    latest=result;latestMode=kind;calculated=meta.at;
-   show(result);paint();
+   modelCache.set(kind,result);show(result);paint();
   }
  });
  function display(legacy){
@@ -59,6 +60,18 @@
     " km · "+model.violatedConstraints+" violated bounds; NOT GPS or accuracy.";
  }
  function archiveStatus(stat){
+  const picker=$("rfHistorySession"),prior=picker.value||"0";
+  picker.replaceChildren();
+  const auto=document.createElement("option");auto.value="0";
+  auto.textContent="Latest session (automatic)";picker.append(auto);
+  for(const row of stat.sessions||[]){
+   const option=document.createElement("option");
+   option.value=String(row.id);
+   option.textContent="#"+row.id+" · "+new Date(row.started_ms).toLocaleString()+
+    (Number.isFinite(row.observations)?" · "+row.observations+" fixes":"");
+   picker.append(option);
+  }
+  picker.value=[...picker.options].some(o=>o.value===prior)?prior:"0";
   $("rfRecorderToggle").textContent=stat.recording?"Pause recording":"Start recording";
   $("rfArchiveStatus").textContent=(stat.recording?"Recording ON":"Recorder OFF")+
    " · session "+(stat.activeSessionId||stat.sessions?.[0]?.id||"none")+
@@ -103,10 +116,21 @@
   }catch(err){$("rfArchiveStatus").textContent="Recorder: "+String(err.message||err);}
   finally{button.disabled=false;}
  });
+ $("rfHistorySession").addEventListener("change",()=>{
+  try{
+   client.selectSession(Number($("rfHistorySession").value));
+   latest=null;latestMode=null;
+   if(mode==="history"||mode==="historyBest")calculate(true);
+   show(display());paint();
+  }catch(err){$("rfArchiveStatus").textContent="Session selection: "+err.message;}
+ });
+ $("rfCompareModels").addEventListener("change",()=>paint());
  $("rfNewSession").addEventListener("click",async()=>{
   if(!window.confirm("Start a NEW physical receiver History session? Old RF records remain stored but will not be mixed with the new antenna location."))return;
   try{archiveStatus(await client.recordAction("new-session"));
-   client.cancel();latest=null;latestMode=null;calculate(true);
+   client.selectSession(0);
+   $("rfHistorySession").value="0";
+   latest=null;latestMode=null;calculate(true);
   }catch(err){$("rfArchiveStatus").textContent="New session: "+String(err.message||err);}
  });
  async function ingest(rows){
@@ -117,7 +141,13 @@
   if(document.hidden||!state.connected||!rfLocatorActive)return;
   if(mode!=="best"&&client.shouldRefresh())calculate();
  }
- window.TihuluRFV2={display,show,ingest,tick,getMode:()=>mode,client};
+ function comparisons(){
+  if(!$("rfCompareModels").checked)return [];
+  return [...modelCache.entries()].filter(([id,r])=>
+   id!==mode&&r?.status==="region"&&Number.isFinite(r.region?.extentKm))
+   .map(([id,result])=>({id,result}));
+ }
+ window.TihuluRFV2={display,show,ingest,tick,comparisons,getMode:()=>mode,client};
  show(display());
  void client.statusNow().then(archiveStatus).catch(err=>{
   $("rfArchiveStatus").textContent="Recorder not yet connected: "+err.message;
