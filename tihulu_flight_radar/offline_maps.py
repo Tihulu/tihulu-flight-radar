@@ -93,7 +93,13 @@ def read_tile(map_file: Path, z: int, x: int, y: int) -> tuple[bytes, str] | Non
                 "AND tile_column=? AND tile_row=? LIMIT 1",
                 (z, x, 2**z - 1 - y)).fetchone()  # MBTiles stores TMS y
             if record and isinstance(record[0], bytes) and len(record[0]) <= MAX_TILE_BYTES:
-                return record[0], FORMAT_MIME[info["format"]]
+                data = record[0]
+                fmt = info["format"]
+                valid = (fmt == "png" and data.startswith(b"\x89PNG\r\n\x1a\n") or
+                         fmt in ("jpg", "jpeg") and data.startswith(b"\xff\xd8\xff") or
+                         fmt == "webp" and data.startswith(b"RIFF") and data[8:12] == b"WEBP")
+                if valid:
+                    return data, FORMAT_MIME[fmt]
     except (sqlite3.Error, OSError):
         pass
     return None
