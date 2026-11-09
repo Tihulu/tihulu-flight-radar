@@ -103,6 +103,10 @@ class RFHistoryStore:
                     ON fixes(session_id,observed_ms)""")
                 db.execute("""CREATE INDEX IF NOT EXISTS idx_rf_fixes_aircraft
                     ON fixes(session_id,hex,id)""")
+                db.execute("""CREATE INDEX IF NOT EXISTS idx_rf_fixes_geo
+                    ON fixes(session_id,lat,lon)""")
+            # Receiver observations may disclose the listener's area. Owner-only.
+            self.path.chmod(0o600)
 
     def config(self, action: str) -> dict:
         with self.lock:
