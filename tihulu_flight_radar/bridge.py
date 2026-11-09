@@ -24,6 +24,7 @@ from urllib.request import ProxyHandler, Request, build_opener
 
 from .network_sources import MultiNetworkProvider, parse_provider_selection
 from .control import ReceiverController
+from .rf_history_store import RFHistoryStore
 from .core import DataError, position_is_fresh, recently_seen
 from .offline_maps import (MAP_ROOT, MAX_MAP_BYTES, SAFE_NAME, discover,
                            metadata as map_metadata, read_tile, select as select_offline_map)
@@ -275,6 +276,7 @@ class Bridge:
         self._place_lock = threading.Lock()
         self.offline_map_name: str | None = None
         self.offline_map_path: Path | None = None
+        self.rf_history = RFHistoryStore()
         # Native Qt uses an ephemeral loopback port; browser localStorage
         # changes origin on each launch. This owner-only settings file retains
         # the selected SEARCH region across ports, OS restarts and platforms.
@@ -321,6 +323,9 @@ class Bridge:
                 with self.receiver_lock:
                     data = self.receiver.snapshot()
                 local = [a for a in data.get("aircraft", []) if isinstance(a, dict) and recently_seen(a)]
+                # Only receiver-origin rows, never merged Internet positions.
+                if self.rf_history.enabled:
+                    self.rf_history.append(local)
                 count = data.get("messages")
                 # A live readsb process writing aircraft.json may be decoding
                 # zero radio frames. Keep this distinct from "receiving".
@@ -475,7 +480,7 @@ def make_handler(bridge: Bridge, port: int):
             if not self._guard():
                 return
             path = urlsplit(self.path)
-            if path.path in ("/", "/index.html", "/install.html", "/app.js", "/style.css", "/manifest.webmanifest", "/icon.svg", "/sw.js", "/multi_sources.js", "/receiver_coverage.js", "/map_motion.js", "/rf_timing_lab.js", "/flight_location_ui.mjs", "/location_search.mjs", "/cities-de-tr.json", "/CITY_DATA_LICENSE.md", "/browser_usb.mjs", "/adsb_worker.mjs", "/usb_tools.mjs"):
+            if path.path in ("/", "/index.html", "/install.html", "/app.js", "/style.css", "/manifest.webmanifest", "/icon.svg", "/sw.js", "/multi_sources.js", "/receiver_coverage.js", "/rf_history_models.js", "/rf_history_worker.js", "/rf_history_client.js", "/map_motion.js", "/rf_timing_lab.js", "/flight_location_ui.mjs", "/location_search.mjs", "/cities-de-tr.json", "/CITY_DATA_LICENSE.md", "/browser_usb.mjs", "/adsb_worker.mjs", "/usb_tools.mjs"):
                 name = "index.html" if path.path == "/" else path.path[1:]
                 file = STATIC_DIR / name
                 if not file.is_file():
@@ -560,6 +565,19 @@ def make_handler(bridge: Bridge, port: int):
             if path.path == "/api/search-location":
                 self._send(HTTPStatus.OK, {"place": bridge.get_saved_search_place()})
                 return
+            if path.path == "/api/rf-history/status":
+                self._send(HTTPStatus.OK, bridge.rf_history.status())
+                return
+            if path.path == "/api/rf-history/records":
+                try:
+                    query = parse_qs(path.query)
+                    sid = int(query.get("session", ["0"])[0])
+                    after = int(query.get("after", ["0"])[0])
+                    limit = int(query.get("limit", ["5000"])[0])
+                    self._send(HTTPStatus.OK, bridge.rf_history.page(sid, after, limit))
+                except (ValueError, OverflowError) as exc:
+                    self._send(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+                return
             if path.path != "/api/aircraft":
                 self._send(HTTPStatus.NOT_FOUND, {"error": "Not found."})
                 return
@@ -583,7 +601,8 @@ def make_handler(bridge: Bridge, port: int):
                 return
             endpoint = urlsplit(self.path).path
             if endpoint not in ("/api/control", "/api/search-location",
-                                "/api/offline-map/select", "/api/offline-map/import"):
+                                "/api/offline-map/select", "/api/offline-map/import",
+                                "/api/rf-history/config"):
                 self._send(HTTPStatus.NOT_FOUND, {"error": "Not found."})
                 return
             if not self._authorized():
@@ -636,6 +655,11 @@ def make_handler(bridge: Bridge, port: int):
                     bridge.offline_map_name = name
                     bridge.offline_map_path = active[0] if active else None
                     self._send(HTTPStatus.OK, {"active": active[1]["name"] if active else None})
+                    return
+                if endpoint == "/api/rf-history/config":
+                    if not isinstance(body, dict) or not isinstance(body.get("action"), str):
+                        raise DataError("Invalid History action.")
+                    self._send(HTTPStatus.OK, bridge.rf_history.config(body["action"]))
                     return
                 if endpoint == "/api/search-location":
                     self._send(HTTPStatus.OK, {"place": bridge.save_search_place(body)})
