@@ -1283,49 +1283,64 @@ function focusRfModelWhenReady(result){
   Math.round(km)+" km";
  rfLocatorFocused=true;rfLastFollowModel=result;
 }
+function paintRfMapLabel(kind,x,y,message,offscreen=false){
+ // An opaque short label remains legible on map tiles and dense aircraft names.
+ const width=Math.min(226,Math.max(122,Math.ceil(message.length*6.4)+16));
+ const h=26,w=canvas.clientWidth,vh=canvas.clientHeight;
+ let left=Math.max(5,Math.min(x+19,w-width-5));
+ let top=Math.max(5,Math.min(y-32,vh-h-5));
+ if(kind==="best")top=Math.max(5,Math.min(y+10,vh-h-5));
+ const color=kind==="best"?"#d8b8ff":"#87edfb";
+ ctx.save();ctx.setLineDash([]);ctx.fillStyle="rgba(7,19,31,.96)";
+ ctx.strokeStyle=color;ctx.lineWidth=1.5;
+ ctx.fillRect(left,top,width,h);ctx.strokeRect(left+.5,top+.5,width-1,h-1);
+ ctx.font="bold 11px system-ui";ctx.fillStyle=color;
+ ctx.fillText(message,left+8,top+17,Math.max(0,width-16));ctx.restore();
+ return {kind,x,y,rect:{left,top,right:left+width,bottom:top+h},offscreen};
+}
 function paintRfBestPin(result){
- // BEST is independently stored; it survives temporary LIVE insufficiency.
- if(!rfLocatorActive||!$("rfBestPin").checked||!rfBest)return;
+ // BEST pin and BEST ring use the same visibility setting.
+ if(!rfLocatorActive||!$("rfBestPin").checked||!$("rfBestCircle").checked||!rfBest)return;
  const [x,y]=rfMapXy(rfBest);
- if(x<0||x>canvas.clientWidth||y<0||y>canvas.clientHeight)return;
- const [liveX,liveY]=result.status==="region"?rfMapXy(result.region):[NaN,NaN];
- const nearlySame=$("rfModelPin").checked&&Number.isFinite(liveX)&&
-  Math.hypot(x-liveX,y-liveY)<35;
- // Offset only the visual BEST pin when both locations overlap so both
- // remain independently clickable. The actual geographic center stays put.
- const bx=x+(nearlySame?28:0),by=y+(nearlySame?-28:0);
- paintedModelHits.push({kind:"best",x:bx,y:by});
- ctx.save();
- if(nearlySame){
+ if(!Number.isFinite(x)||!Number.isFinite(y))return;
+ const [liveX,liveY]=result.status==="region"&&$("rfModelCircle").checked
+  &&$("rfModelPin").checked?rfMapXy(result.region):[NaN,NaN];
+ const nearlySame=Number.isFinite(liveX)&&
+  Math.hypot(x-liveX,y-liveY)<48;
+ const bx=x+(nearlySame?30:0),by=y+(nearlySame?-30:0);
+ const w=canvas.clientWidth,h=canvas.clientHeight;
+ const offscreen=bx<0||bx>w||by<0||by>h;
+ // Keep an explicit edge indicator instead of silently losing BEST when
+ // the center falls outside the current viewport. It never claims an
+ // offscreen coordinate is geographically at the viewport edge.
+ const px=Math.max(22,Math.min(w-22,bx)),py=Math.max(22,Math.min(h-38,by));
+ ctx.save();ctx.setLineDash([]);
+ if(nearlySame&&!offscreen){
   ctx.beginPath();ctx.setLineDash([3,3]);ctx.strokeStyle="#d3b5ff";
-  ctx.lineWidth=1.3;ctx.moveTo(x,y);ctx.lineTo(bx,by);ctx.stroke();
+  ctx.lineWidth=1.3;ctx.moveTo(x,y);ctx.lineTo(px,py);ctx.stroke();
+  ctx.setLineDash([]);
  }
- ctx.fillStyle="rgba(39,25,62,.96)";ctx.strokeStyle="#d3b5ff";
- ctx.lineWidth=2;ctx.setLineDash([]);
- ctx.beginPath();ctx.moveTo(bx,by-9);ctx.lineTo(bx+9,by);
- ctx.lineTo(bx,by+9);ctx.lineTo(bx-9,by);ctx.closePath();
- ctx.fill();ctx.stroke();
- ctx.font="bold 11px system-ui";ctx.fillStyle="#e6d5ff";
- ctx.fillText("BEST FIT · "+rfBest.rawExtentKm.toFixed(1)+" km · NOT GPS",bx+15,by-12);
- if(!nearlySame)ctx.fillText(rfCoordinateText(rfBest),bx+15,by+3);
- ctx.restore();
+ ctx.fillStyle="rgba(39,25,62,.97)";ctx.strokeStyle="#e2c7ff";
+ ctx.lineWidth=2.5;ctx.beginPath();
+ ctx.moveTo(px,py-10);ctx.lineTo(px+10,py);
+ ctx.lineTo(px,py+10);ctx.lineTo(px-10,py);ctx.closePath();
+ ctx.fill();ctx.stroke();ctx.restore();
+ const label=offscreen?"BEST OFFSCREEN · open / focus":
+  "BEST · "+rfBest.aircraftCount+" planes · ~"+Math.round(rfBest.displayedExtentKm)+" km";
+ paintedModelHits.push(paintRfMapLabel("best",px,py,label,offscreen));
 }
 function paintRfLocator(result){
- if(!rfLocatorActive||result.status!=="region"||!$("rfModelPin").checked)return;
+ if(!rfLocatorActive||result.status!=="region"||
+  !$("rfModelPin").checked||!$("rfModelCircle").checked)return;
  const [x,y]=xy(result.region.lat,result.region.lon);
  if(x<0||x>canvas.clientWidth||y<0||y>canvas.clientHeight)return;
- paintedModelHits.push({kind:"live",x,y});
- ctx.save();
- ctx.fillStyle="rgba(8,34,45,.94)";ctx.strokeStyle="#6fe4ef";
+ ctx.save();ctx.fillStyle="rgba(8,34,45,.98)";ctx.strokeStyle="#89edfa";
  ctx.lineWidth=2.5;ctx.setLineDash([]);
- ctx.beginPath();ctx.arc(x,y,9,0,Math.PI*2);ctx.fill();ctx.stroke();
+ ctx.beginPath();ctx.arc(x,y,10,0,Math.PI*2);ctx.fill();ctx.stroke();
  ctx.beginPath();ctx.moveTo(x-16,y);ctx.lineTo(x+16,y);
- ctx.moveTo(x,y-16);ctx.lineTo(x,y+16);ctx.stroke();
- ctx.font="bold 11px system-ui";ctx.fillStyle="#97eef5";
- ctx.shadowColor="#0a1a27";ctx.shadowBlur=5;
- ctx.fillText("RF MODEL CENTER · NOT GPS",x+18,y-12);
- ctx.fillText(rfCoordinateText(result.region),x+18,y+4);
- ctx.restore();
+ ctx.moveTo(x,y-16);ctx.lineTo(x,y+16);ctx.stroke();ctx.restore();
+ paintedModelHits.push(paintRfMapLabel("live",x,y,
+  "LIVE · "+result.count+" planes · ~"+Math.round(result.region.extentKm)+" km"));
 }
 // RF model cards never imply a measured GPS position or statistical accuracy.
 let rfOpenModelKind=null;
@@ -2171,11 +2186,8 @@ function paintRfCoverage(result){
    // This is deliberately NOT called a confidence/error radius.
    rfDrawRing({lat:r.lat,lon:r.lon,radiusKm:r.extentKm},
     "rgba(85,217,234,.95)",[10,6],2.3);
-   const [cx,cy]=rfMapXy(r);
-   if(cx>=0&&cx<=canvas.clientWidth&&cy>=0&&cy<=canvas.clientHeight){
-    ctx.font="bold 11px system-ui";ctx.fillStyle="#a3f5fb";
-    ctx.fillText("LIVE FIT MODEL SPREAD ~"+Math.round(r.extentKm)+" km · NOT ACCURACY",cx+19,cy+28);
-   }
+   // The clickable, high-contrast LIVE pin carries the short label.
+   // Circle-only view must not draw a second unreadable text overlay.
   }
  }
  // Historical BEST Fit circle remains selectable even without valid LIVE Fit.
@@ -2183,13 +2195,7 @@ function paintRfCoverage(result){
   rfDrawRing({lat:rfBest.lat,lon:rfBest.lon,
    radiusKm:rfBest.displayedExtentKm},
    "rgba(208,164,252,.95)",[4,7],2.4);
-  const [bx,by]=rfMapXy(rfBest);
-  if(bx>=0&&bx<=canvas.clientWidth&&by>=0&&by<=canvas.clientHeight){
-   ctx.save();ctx.font="bold 11px system-ui";ctx.fillStyle="#e6cdff";
-   ctx.fillText("BEST SESSION SPREAD ~"+
-    rfBest.rawExtentKm.toFixed(1)+" km · NOT ACCURACY",bx+18,by+30);
-   ctx.restore();
-  }
+  // BEST label belongs to the clickable BEST marker, not the ring path.
  }
  ctx.restore();
 }
