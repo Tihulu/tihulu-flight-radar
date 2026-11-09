@@ -121,6 +121,8 @@
  $("rfHistorySession").addEventListener("change",()=>{
   try{
    client.selectSession(Number($("rfHistorySession").value));
+   modelCache.delete("history");modelCache.delete("historyBest");
+   $("rfCompareModels").checked=false;
    latest=null;latestMode=null;
    if(mode==="history"||mode==="historyBest")calculate(true);
    show(display());paint();
@@ -130,7 +132,11 @@
  $("rfNewSession").addEventListener("click",async()=>{
   if(!window.confirm("Start a NEW physical receiver History session? Old RF records remain stored but will not be mixed with the new antenna location."))return;
   try{archiveStatus(await client.recordAction("new-session"));
-   client.selectSession(0);
+   client.selectSession(0);client.resetRecent();
+   // Prevent old antenna geometry and previous BEST from leaking into a
+   // different physical receiver location after an explicit new session.
+   rfHistory.clear();rfHistoryRevision++;clearRfBest();
+   modelCache.clear();$("rfCompareModels").checked=false;
    $("rfHistorySession").value="0";
    latest=null;latestMode=null;calculate(true);
   }catch(err){$("rfArchiveStatus").textContent="New session: "+String(err.message||err);}
