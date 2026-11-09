@@ -1082,11 +1082,13 @@ function rfCoordinateText(point){
   ", "+Math.abs(point.lon).toFixed(5)+"° "+(point.lon>=0?"E":"W");
 }
 function renderRfCoordinateReadouts(result){
- const current=result?.status==="region"?result.region:null;
+ const displayed=window.TihuluRFV2?.display(result)||result;
+ const current=["region","weighted"].includes(displayed?.status)?displayed.region:null;
+ const modeLabel=window.TihuluRFV2?.getMode()||"LIVE";
  const currentText=!rfLocatorActive?
   "LIVE RF model: OFF (no position calculations running)":
-  current?"LIVE RF model center: "+rfCoordinateText(current)+" · NOT GPS":
-  "LIVE RF model center: unavailable (4+ genuine positioned RF aircraft required)";
+  current?modeLabel+" RF model center: "+rfCoordinateText(current)+" · NOT GPS":
+  modeLabel+" RF model center: unavailable (4+ genuine positioned RF aircraft required)";
  const bestText=rfBest?
   "BEST SESSION model center: "+rfCoordinateText(rfBest)+" · NOT GPS":
   "BEST SESSION model center: not yet available";
@@ -1094,9 +1096,9 @@ function renderRfCoordinateReadouts(result){
  if(liveEl.textContent!==currentText)liveEl.textContent=currentText;
  if(bestEl.textContent!==bestText)bestEl.textContent=bestText;
  const mapText=current?
-  "RF LIVE "+rfCoordinateText(current)+" · "+result.count+" aircraft | "+
+  "RF "+modeLabel+" "+rfCoordinateText(current)+" · "+displayed.count+" aircraft | "+
    (rfBest?"BEST "+rfCoordinateText(rfBest):"Best: pending")+" · NOT GPS":
-  "RF LIVE: unavailable | "+(rfBest?"BEST "+rfCoordinateText(rfBest):"Best: pending")+
+  "RF "+modeLabel+": unavailable | "+(rfBest?"BEST "+rfCoordinateText(rfBest):"Best: pending")+
    " · model, NOT GPS";
  if(mapEl.textContent!==mapText)mapEl.textContent=mapText;
 }
@@ -1357,7 +1359,8 @@ let rfOpenModelKind=null;
 function rfModelCardData(kind,live=coverageResult()){
  if(!rfLocatorActive)return null;
  if(kind==="live"){
-  if(live?.status!=="region"||!live.region)return null;
+  live=window.TihuluRFV2?.display(live)||live;
+  if(!["region","weighted"].includes(live?.status)||!live.region)return null;
   const r=live.region;
   return {kind,lat:r.lat,lon:r.lon,radiusKm:r.extentKm,
    rawKm:r.rawExtentKm??r.extentKm,count:live.count,
@@ -1406,7 +1409,18 @@ function drawRfModelMiniMap(model){
  if(!mini||popup.hidden)return;
  const c=mini.getContext("2d"),w=mini.width,h=mini.height;
  const fit=rfMiniMapFit(model,w,h);
- if(!fit)return;
+ if(!fit){
+  c.clearRect(0,0,w,h);
+  c.fillStyle="#122d3d";c.fillRect(0,0,w,h);
+  c.fillStyle="#ffd294";c.font="bold 12px system-ui";
+  c.fillText("Weighted RF center",18,105);
+  c.font="11px system-ui";
+  c.fillText("No validated spread circle",18,127);
+  c.fillText("No GPS accuracy estimate",18,149);
+  $("rfPopupMapScale").textContent="Weighted point · no circle";
+  $("rfPopupMapCredit").textContent="A weighted constraint minimizer is NOT a location confidence region.";
+  return;
+ }
  c.clearRect(0,0,w,h);c.fillStyle="#122d3d";c.fillRect(0,0,w,h);
  let tilesLoaded=0;
  if($("showTiles").checked){
@@ -1477,10 +1491,15 @@ function renderRfModelPopup(kind,model=rfModelCardData(kind)){
  const popup=$("rfModelPopup");
  if(popup.parentElement!==document.body)document.body.appendChild(popup);
  popup.classList.toggle("best",kind==="best");
- $("rfPopupTitle").textContent=kind==="best"?"BEST SESSION Fit":"LIVE RF Fit";
- $("rfPopupSub").textContent=kind==="best"
-  ?"Tightest stored session model · NOT GPS"
-  :"Current antenna-only feasible-area model · NOT GPS";
+ const activeMode=window.TihuluRFV2?.getMode()||"live10";
+ const titles={live10:"LIVE · 10 min",liveX:"X-hour LIVE",
+  best:"BEST Fit · session",history:"HISTORY",
+  historyBest:"HISTORY BEST · weighted"};
+ $("rfPopupTitle").textContent=kind==="best"?"BEST SESSION Fit":titles[activeMode];
+ $("rfPopupSub").textContent=kind==="best"?
+  "Tightest legacy session model · NOT GPS":
+  activeMode==="historyBest"?"Weighted radio-horizon violations · not a range":
+  "Modeled possible-area center · NOT GPS";
  $("rfPopupAircraft").textContent=Number.isFinite(model.count)
   ?String(model.count)+" independent":"Unavailable";
  $("rfPopupConstraints").textContent=Number.isFinite(model.constraints)
@@ -1490,13 +1509,16 @@ function renderRfModelPopup(kind,model=rfModelCardData(kind)){
   :"Not recorded";
  $("rfPopupGeometry").textContent=model.geometry||"Unspecified";
  $("rfPopupCoordinates").textContent=rfCoordinateText(model);
- $("rfPopupRadius").textContent=model.radiusKm.toFixed(1)+" km (modeled)";
- $("rfPopupDiameter").textContent=(model.radiusKm*2).toFixed(1)+" km";
+ $("rfPopupRadius").textContent=Number.isFinite(model.radiusKm)?
+  model.radiusKm.toFixed(1)+" km (modeled)":"Not defined for weighted model";
+ $("rfPopupDiameter").textContent=Number.isFinite(model.radiusKm)?
+  (model.radiusKm*2).toFixed(1)+" km":"Not defined";
  $("rfPopupAccuracy").textContent="UNKNOWN · no calibrated accuracy or GPS error";
  const timestamp=Number.isFinite(model.updatedAtMs)
   ?new Date(model.updatedAtMs).toLocaleString():"unknown";
  $("rfPopupNote").textContent=
-  "Modeled spread (unrounded): ~"+Number(model.rawKm).toFixed(1)+
+  "Modeled spread (unrounded): "+
+  (Number.isFinite(model.rawKm)?"~"+model.rawKm.toFixed(1)+" km":"not defined") +
   " km · sampled cells: "+(model.samples??"not recorded")+
   " · model observation: "+timestamp+
   ". Circle contains a sampled possible-area model, NOT measured range, "+
