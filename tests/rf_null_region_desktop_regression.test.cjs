@@ -88,7 +88,7 @@ test("RF status panel never reads extentKm from absent region",()=>{
   constraintsUsed:1,region:null,aircraftCircles:[]};
  assert.doesNotThrow(()=>vm.runInContext("renderCoverageStatus()",ctx));
  assert.match($("rfBestStatus").textContent,/CURRENT MODEL spread unavailable/);
- assert.match($("rfCoverageStatus").textContent,/1/4/);
+ assert.ok($("rfCoverageStatus").textContent.includes("1/4"));
 });
 
 test("Circles panel closes by outside click, Escape and Done",()=>{
