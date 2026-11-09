@@ -2459,7 +2459,7 @@ function paint(){
  // Keep the RF details card current without stealing focus from aircraft.
  if(rfOpenModelKind&&!$("rfModelPopup").hidden){
   const current=rfModelCardData(rfOpenModelKind);
-  if(current){positionRfModelPopup(current);drawRfModelMiniMap(current);}
+  if(current)renderRfModelPopup(rfOpenModelKind,current);
   else closeRfModelPopup();
  }
  // Keep nonmodal aircraft details next to the moving icon, even if the
