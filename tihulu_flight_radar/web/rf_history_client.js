@@ -27,6 +27,7 @@ const TihuluRFHistoryClient=(()=>{
  }
  function client({api,verified,formatStatus,onResult}){
   let db=null,enabled=false,session=0,viewSession=0,status={},recent=[],last=new Map();
+  const newestDirectRf=new Map();
   let startedHere=false;
   let worker=null,job=0,mode="live10",hours=2,profile="balanced";
   let lastCalculation=0,calculating=false,loaded=0,currentResult=null;
@@ -39,6 +40,12 @@ const TihuluRFHistoryClient=(()=>{
     const r=verified(row,now);
     if(!r||!TihuluRFHistoryModels.valid(r))continue;
     const hex=r.hex.toLowerCase(),previous=last.get(hex);
+    // Keep a separate current-position snapshot. Stationary/slow aircraft
+    // must count as current LIVE even when path-distance sampling rejects
+    // a redundant archive record.
+    newestDirectRf.set(hex,{...r,
+     capturedAtMs:Number.isFinite(r.observationTimeMs)?
+      r.observationTimeMs:r.capturedAtMs});
     if(previous){
      const decision=TihuluRFCoverage.trackSampleDecision(previous,r);
      if(!decision.keep)continue;
@@ -221,7 +228,16 @@ const TihuluRFHistoryClient=(()=>{
      if(isNative())await streamNativeToWorker(send);
      else await streamDbToWorker(send);
     }else{
-     for(let i=0;i<recent.length;i+=BATCH)send(recent.slice(i,i+BATCH));
+     const now=Date.now(),source=recent.filter(r=>r.capturedAtMs>=
+      now-(mode==="live10"?600000:hours*3600000));
+     const existing=new Set(source.map(r=>[r.hex,r.observationTimeMs,
+      r.lat,r.lon].join(":")));
+     for(const r of newestDirectRf.values()){
+      if(now-r.capturedAtMs>(mode==="live10"?600000:hours*3600000))continue;
+      const key=[r.hex,r.observationTimeMs,r.lat,r.lon].join(":");
+      if(!existing.has(key)){source.push(r);existing.add(key);}
+     }
+     for(let i=0;i<source.length;i+=BATCH)send(source.slice(i,i+BATCH));
     }
     if(job===task)w.postMessage({
      type:"solve",job:task,mode,hours,nowMs:Date.now()});
