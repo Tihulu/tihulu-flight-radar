@@ -106,7 +106,7 @@
         <div class="rf-circles-dropdown" role="group" aria-label="RF circle visibility settings">
          <strong>RF map layers · display only</strong>
          <label class="rf-circles-live"><input id="rfModelCircle" type="checkbox" checked> LIVE Fit circle <small>Current model spread · cyan</small></label>
-         <label class="rf-circles-best"><input id="rfBestCircle" type="checkbox"> BEST Fit circle <small>Tightest session spread · purple</small></label>
+         <label class="rf-circles-best"><input id="rfBestCircle" type="checkbox" checked> BEST Fit circle <small>Tightest session spread · purple</small></label>
          <label><input id="rfFill" type="checkbox" checked> LIVE feasible area <small>Current RF intersection area</small></label>
          <label class="rf-circles-aircraft">Aircraft horizon circles
           <select id="rfAircraftCircleMode" aria-label="Aircraft RF horizon circle visibility">
@@ -194,9 +194,9 @@
       <input id="offlineMapFile" type="file" accept=".mbtiles">
      </label>
      <button id="offlineMapUpload" type="button">Import selected map</button>
-     <a href="https://docs.protomaps.com/guide/getting-started" target="_blank" rel="noopener noreferrer">Find offline map providers</a>
+     <a href="https://www.maptiler.com/data/" target="_blank" rel="noopener noreferrer">Get licensed raster MBTiles (MapTiler)</a>
     </div>
-    <small>Native desktop uses existing raster MBTiles from ~/Maps, ~/Downloads or ~/.local/share/tihulu-flight-radar/maps. A file picker can import maps up to 1 GiB. Only raster PNG/JPG/WebP MBTiles are currently supported; PMTiles vector files need conversion. No automated scraping of volunteer OpenStreetMap tile servers.</small>
+    <small>Native desktop uses existing raster MBTiles from ~/Maps, ~/Downloads or ~/.local/share/tihulu-flight-radar/maps. A file picker can import maps up to 1 GiB. Only raster PNG/JPG/WebP MBTiles are currently supported; PBF vector MBTiles and PMTiles cannot be displayed here yet. MapTiler offline raster imagery/datasets may require a paid license. No automated scraping of volunteer OpenStreetMap tile servers.</small>
    </details>
    <div class="mapfooter"><span id="mapLabel">Germany default view · no receiver position assumed</span><span id="rfMapCoordinates" class="rf-map-coordinates" aria-live="polite">RF model center: waiting for 4+ local RF aircraft</span><span><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a> · <span id="sourceCredits">Source attribution shown after connection</span></span></div>
   </section>
