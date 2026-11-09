@@ -841,7 +841,8 @@ function updateRfBest(result,nowMs=Date.now()){
   rfBest={lat:area.lat,lon:area.lon,rawExtentKm:spread,
    displayedExtentKm:area.extentKm,aircraftCount:result.count,
    liveCount:result.liveCount??null,historyCount:result.historyCount??null,
-   constraintsUsed:result.constraintsUsed,sampleCount:area.sampleCount??null,
+   constraintsUsed:result.constraintsUsed,
+   sampleCount:area.sampleCount??area.possibleSamples?.length??null,
    geometryStatus:result.geometryStatus??"unknown",
    contributors:(result.aircraftDistances||[]).map(a=>({...a})),
    updatedAtMs:nowMs};
@@ -1353,8 +1354,10 @@ function rfModelCardData(kind,live=coverageResult()){
   return {kind,lat:r.lat,lon:r.lon,radiusKm:r.extentKm,
    rawKm:r.rawExtentKm??r.extentKm,count:live.count,
    liveCount:live.liveCount,historyCount:live.historyCount,
-   constraints:live.constraintsUsed,samples:r.sampleCount,
-   geometry:live.geometryStatus,updatedAtMs:Date.now(),liveResult:live};
+   constraints:live.constraintsUsed,
+   samples:r.sampleCount??r.possibleSamples?.length??null,
+   geometry:live.geometryStatus,
+   updatedAtMs:state.lastFreshAt||Date.now(),liveResult:live};
  }
  if(kind==="best"&&rfBest){
   return {kind,lat:rfBest.lat,lon:rfBest.lon,
@@ -1664,7 +1667,10 @@ function renderPopup(a){
  const popup=ensureAircraftPopupLayer();
  if(!a){popup.hidden=true;return}
  $("popupFlight").textContent=String(a.flight||a.hex||"Aircraft").trim();
- $("popupAirline").textContent=operatorFromTar(a)||aircraftOperatorLabel(a);
+ const providerOperator=aircraftOperatorLabel(a);
+ $("popupAirline").textContent=providerOperator!=="Not provided by source"&&
+  !providerOperator.includes("name unavailable")
+  ?providerOperator:operatorFromTar(a)||providerOperator;
  void enrichAircraftOperator(a);
  $("popupFlightNumber").textContent=aircraftFlightLabel(a);
  popup.setAttribute("aria-label","Aircraft details: "+String(a.flight||a.hex||"Aircraft").trim());
