@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import re
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 from urllib.parse import quote
 
@@ -31,7 +32,7 @@ def metadata(path: Path) -> dict | None:
     try:
         if not path.is_file() or path.is_symlink() or path.stat().st_size > MAX_MAP_BYTES:
             return None
-        with _open(path) as db:
+        with closing(_open(path)) as db:
             db.execute("PRAGMA query_only=ON")
             tables = {r[0] for r in db.execute(
                 "SELECT name FROM sqlite_master WHERE type IN ('table','view')")}
@@ -85,7 +86,7 @@ def read_tile(map_file: Path, z: int, x: int, y: int) -> tuple[bytes, str] | Non
     if not info or not 0 <= z <= 16 or not 0 <= x < 2**z or not 0 <= y < 2**z:
         return None
     try:
-        with _open(map_file) as db:
+        with closing(_open(map_file)) as db:
             db.execute("PRAGMA query_only=ON")
             record = db.execute(
                 "SELECT tile_data FROM tiles WHERE zoom_level=? "
