@@ -1257,6 +1257,8 @@ $("rfLocate").onclick=()=>{
  rfLocatorActive=!rfLocatorActive;
  rfLocatorFocused=!rfLocatorActive;
  rfLastFollowModel=null;
+ if(!rfLocatorActive&&typeof window!=="undefined")
+  window.TihuluRFV2?.client?.cancel();
  // Recalculate with real RF data when reenabled. BEST and session history
  // are retained; turning RF OFF never changes the regular Flight Radar.
  if(rfLocatorActive){
