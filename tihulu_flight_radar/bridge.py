@@ -25,6 +25,7 @@ from urllib.request import ProxyHandler, Request, build_opener
 from .network_sources import MultiNetworkProvider, parse_provider_selection
 from .control import ReceiverController
 from .rf_history_store import RFHistoryStore
+from .flight_route_lookup import CallsignRouteLookup
 from .core import DataError, position_is_fresh, recently_seen
 from .offline_maps import (MAP_ROOT, MAX_MAP_BYTES, SAFE_NAME, discover,
                            metadata as map_metadata, read_tile, select as select_offline_map)
@@ -277,6 +278,7 @@ class Bridge:
         self.offline_map_name: str | None = None
         self.offline_map_path: Path | None = None
         self.rf_history = RFHistoryStore()
+        self.flight_routes = CallsignRouteLookup()
         # Native Qt uses an ephemeral loopback port; browser localStorage
         # changes origin on each launch. This owner-only settings file retains
         # the selected SEARCH region across ports, OS restarts and platforms.
@@ -480,7 +482,7 @@ def make_handler(bridge: Bridge, port: int):
             if not self._guard():
                 return
             path = urlsplit(self.path)
-            if path.path in ("/", "/index.html", "/install.html", "/app.js", "/style.css", "/manifest.webmanifest", "/icon.svg", "/sw.js", "/multi_sources.js", "/receiver_coverage.js", "/rf_history_models.js", "/rf_history_worker.js", "/rf_history_client.js", "/rf_history_ui.js", "/map_motion.js", "/rf_timing_lab.js", "/flight_location_ui.mjs", "/location_search.mjs", "/cities-de-tr.json", "/CITY_DATA_LICENSE.md", "/browser_usb.mjs", "/adsb_worker.mjs", "/usb_tools.mjs"):
+            if path.path in ("/", "/index.html", "/install.html", "/app.js", "/style.css", "/manifest.webmanifest", "/icon.svg", "/sw.js", "/multi_sources.js", "/receiver_coverage.js", "/flight_journey.js", "/rf_history_models.js", "/rf_history_worker.js", "/rf_history_client.js", "/rf_history_ui.js", "/map_motion.js", "/rf_timing_lab.js", "/flight_location_ui.mjs", "/location_search.mjs", "/cities-de-tr.json", "/CITY_DATA_LICENSE.md", "/browser_usb.mjs", "/adsb_worker.mjs", "/usb_tools.mjs"):
                 name = "index.html" if path.path == "/" else path.path[1:]
                 file = STATIC_DIR / name
                 if not file.is_file():
@@ -561,6 +563,15 @@ def make_handler(bridge: Bridge, port: int):
                 return
             if path.path == "/api/tar-status":
                 self._send(HTTPStatus.OK, bridge.tar1090_status())
+                return
+            if path.path == "/api/flight-route":
+                # Explicit selected-aircraft enrichment, fixed upstream host,
+                # bounded response. Never treat route lookup as a timetable.
+                call = parse_qs(path.query).get("callsign", [""])[0]
+                try:
+                    self._send(HTTPStatus.OK, bridge.flight_routes.query(call))
+                except ValueError as exc:
+                    self._send(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
                 return
             if path.path == "/api/search-location":
                 self._send(HTTPStatus.OK, {"place": bridge.get_saved_search_place()})
