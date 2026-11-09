@@ -74,7 +74,7 @@ const state = {
   centerLabel:"Cologne startup fallback · awaiting location permission / radio aircraft",
   units:"aviation"
 };
-const selectors = ["showAntenna","showInternet","showBoth","showTracks","showTiles","showRfCoverage","smoothMotion"];
+const selectors = ["showAntenna","showInternet","showBoth","showTracks","showTiles","smoothMotion"];
 const multiInternet = TihuluMultiSources.createManager();
 const multiIds = ["adsblol","adsbfi","opensky","intelsky"];
 const layerFields = {adsblol:"netAdsbLol",adsbfi:"netAdsbFi",opensky:"netOpenSky",intelsky:"netIntelSky"};
