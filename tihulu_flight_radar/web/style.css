@@ -402,3 +402,20 @@ html.native #receiverStatus[data-pair-state="failed"]{color:#ffbc99}
 .rf-picked-description small{font-size:10px;color:#a9cede;line-height:1.4}
 .rf-picked-item button{font-size:11px;padding:5px 7px;flex:none}
 .rf-picked-remove{min-width:28px}
+
+/* LIVE/BEST click details are viewport-fixed, like aircraft cards. */
+.rf-model-popup{width:min(338px,calc(100vw - 16px));max-height:min(88dvh,760px);
+ border-color:#5599b0}
+.rf-model-popup.best{border-color:#b99add}
+.rf-model-popup .rf-popup-grid{margin-top:12px}
+.rf-popup-grid .rf-popup-wide{grid-column:1/-1}
+.rf-popup-grid strong{font-variant-numeric:tabular-nums}
+.rf-popup-grid #rfPopupAccuracy{color:#ffcf99}
+.rf-preview-heading{display:flex;align-items:center;justify-content:space-between;
+ gap:6px;flex-wrap:wrap;margin:12px 0 7px;font-size:11px}
+.rf-preview-heading strong{font-size:12px;color:#dceaf7}
+.rf-preview-heading small{color:#b2ccdf}
+#rfModelMiniMap{display:block;width:100%;max-width:280px;aspect-ratio:1;
+ height:auto;border:1px solid #526d83;border-radius:8px;
+ background:#122e40;margin:0 auto}
+.rf-popup-map-credit{display:block;color:#a9c4d5;font-size:9px;line-height:1.4;margin:5px 0}
