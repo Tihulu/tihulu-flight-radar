@@ -2933,7 +2933,7 @@ $("offlineMapUpload").onclick=async()=>{
  try{
   const response=await fetch(state.base+"/api/offline-map/import",{
    method:"POST",body:file,headers:{"Content-Type":"application/octet-stream",
-    "Authorization":"Bearer "+state.token,"X-Tihulu-Map-Name":file.name}});
+    "Authorization":"Bearer "+state.token,"X-Tihulu-Map-Name":encodeURIComponent(file.name)}});
   const body=await response.json();
   if(!response.ok)throw Error(body.error||"Import failed: HTTP "+response.status);
   $("offlineMapFile").value="";
