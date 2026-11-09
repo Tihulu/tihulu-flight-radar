@@ -1702,8 +1702,12 @@ $("popupRaw").onclick=()=>{
 document.addEventListener("pointerdown",e=>{
  if(!$("aircraftPopup").hidden && !$("aircraftPopup").contains(e.target) &&
     !canvas.contains(e.target) && !$("aircraftRows").contains(e.target))closePopup();
+ if(!$("rfModelPopup").hidden && !$("rfModelPopup").contains(e.target) &&
+    !canvas.contains(e.target))closeRfModelPopup();
 });
-window.addEventListener("keydown",e=>{if(e.key==="Escape")closePopup()});
+window.addEventListener("keydown",e=>{
+ if(e.key==="Escape"){closePopup();closeRfModelPopup();}
+});
 
 function renderRfPickedPanel(){
  const root=$("rfPickedList"),count=$("rfPickedCount"),note=$("rfPickedSummary");
@@ -2206,7 +2210,11 @@ function pickPaintedModel(hits,x,y,touchSlack=0){
  let best=null,distance=Infinity;
  for(const hit of hits){
   const d=Math.hypot(x-hit.x,y-hit.y);
-  if(d<=17+touchSlack&&d<distance){best=hit;distance=d;}
+  const rect=hit.rect;
+  const inLabel=rect&&x>=rect.left-touchSlack&&x<=rect.right+touchSlack&&
+   y>=rect.top-touchSlack&&y<=rect.bottom+touchSlack;
+  const score=inLabel?d*.01:d;
+  if((d<=18+touchSlack||inLabel)&&score<distance){best=hit;distance=score;}
  }
  return best;
 }
@@ -2293,6 +2301,12 @@ function paint(){
  }
  $("mapLabel").textContent=state.centerLabel;
  renderCoverageStatus();
+ // Keep the RF details card current without stealing focus from aircraft.
+ if(rfOpenModelKind&&!$("rfModelPopup").hidden){
+  const current=rfModelCardData(rfOpenModelKind);
+  if(current)positionRfModelPopup(current);
+  else closeRfModelPopup();
+ }
  // Keep nonmodal aircraft details next to the moving icon, even if the
  // RF-centered map pans. Do not auto-focus the camera on the aircraft.
  if(state.selected&&!$("aircraftPopup").hidden){
@@ -2301,23 +2315,68 @@ function paint(){
  }
 }
 let lastCanvasAircraftOpen=null;
+function deselectAircraft(hex){
+ const key=String(hex||"").toLowerCase();
+ if(!rfPickedPlanes.has(key))return false;
+ rfPickedPlanes.delete(key);rfSelectedPlanes.delete(key);
+ if(state.selected===key){state.selected=null;$("aircraftPopup").hidden=true;}
+ rfAircraftListSignature="";
+ persistRfViewPreferences();renderTable();paint();
+ return true;
+}
+function toggleAircraftOnMap(a){
+ const key=String(a?.hex||"").toLowerCase();
+ if(rfPickedPlanes.has(key)){
+  deselectAircraft(key);
+  return "deselected";
+ }
+ closeRfModelPopup();
+ choose(a);return "selected";
+}
 function inspectCanvasAircraft(x,y,preferredHex=null){
  const rect=canvas.getBoundingClientRect();
  const hit=pickPaintedAircraft(paintedAircraftHits,x-rect.left,y-rect.top,4);
  const hex=preferredHex||hit?.hex;
  const row=hex?state.data.find(a=>a.hex===hex):null;
  if(!row||!visible(row)||!isPositioned(row))return false;
- choose(row); // opens card without recentering or disabling RF follow
+ toggleAircraftOnMap(row); // second marker click deselects, first opens Info
  lastCanvasAircraftOpen={hex,x,y,at:Date.now()};
  return true;
+}
+function inspectCanvasTarget(x,y,preferred=null){
+ const rect=canvas.getBoundingClientRect(),px=x-rect.left,py=y-rect.top;
+ const planeHit=pickPaintedAircraft(paintedAircraftHits,px,py,4);
+ const modelHit=pickPaintedModel(paintedModelHits,px,py,4);
+ const modelKind=preferred?.kind==="model"?preferred.value:modelHit?.kind;
+ const hex=preferred?.kind==="aircraft"?preferred.value:planeHit?.hex;
+ // Prefer the precise model pin/label over an aircraft text overlapping it.
+ const modelPriority=modelHit&&
+  Math.hypot(px-modelHit.x,py-modelHit.y)<=14;
+ if(modelKind&&(preferred?.kind==="model"||modelPriority||!hex)){
+  if(openRfModelPopup(modelKind)){
+   lastCanvasAircraftOpen={hex:"model:"+modelKind,x,y,at:Date.now()};
+   return true;
+  }
+ }
+ if(inspectCanvasAircraft(x,y,hex))return true;
+ if(modelKind&&openRfModelPopup(modelKind)){
+  lastCanvasAircraftOpen={hex:"model:"+modelKind,x,y,at:Date.now()};
+  return true;
+ }
+ return false;
 }
 canvas.addEventListener("pointerdown",e=>{
  if(e.pointerType==="mouse"&&e.button!==0)return;
  lastCanvasAircraftOpen=null;
  const rect=canvas.getBoundingClientRect();
- const hit=pickPaintedAircraft(paintedAircraftHits,
-  e.clientX-rect.left,e.clientY-rect.top,e.pointerType==="touch"?8:2);
- state.pointer=[e.clientX,e.clientY,state.lon,state.lat,false,hit?.hex??null];
+ const px=e.clientX-rect.left,py=e.clientY-rect.top;
+ const model=pickPaintedModel(paintedModelHits,px,py,e.pointerType==="touch"?8:2);
+ const hit=pickPaintedAircraft(paintedAircraftHits,px,py,e.pointerType==="touch"?8:2);
+ const preferred=model&&Math.hypot(px-model.x,py-model.y)<=14
+  ?{kind:"model",value:model.kind}
+  :hit?{kind:"aircraft",value:hit.hex}
+  :model?{kind:"model",value:model.kind}:null;
+ state.pointer=[e.clientX,e.clientY,state.lon,state.lat,false,preferred];
  // Some native Qt WebEngine versions implement Pointer Events but reject
  // pointer capture. A normal click handler below is the fallback path.
  if(typeof canvas.setPointerCapture==="function"){
@@ -2341,12 +2400,10 @@ canvas.addEventListener("pointerup",e=>{
  if(!state.pointer)return;
  const p=state.pointer;state.pointer=null;
  if(p[4]||Math.hypot(e.clientX-p[0],e.clientY-p[1])>10)return;
- const rect=canvas.getBoundingClientRect();
- const hit=pickPaintedAircraft(paintedAircraftHits,
-  e.clientX-rect.left,e.clientY-rect.top,e.pointerType==="touch"?8:2);
- // If the plane moved during the press, prefer the original ICAO.
- if(!inspectCanvasAircraft(e.clientX,e.clientY,p[5]||hit?.hex||null))
-  closePopup();
+ // Preserve the clicked identity while planes move between paint frames.
+ if(!inspectCanvasTarget(e.clientX,e.clientY,p[5])){
+  closePopup();closeRfModelPopup();
+ }
 });
 canvas.addEventListener("click",e=>{
  // Qt WebEngine and some touch/mouse integrations may deliver click but
@@ -2355,16 +2412,17 @@ canvas.addEventListener("click",e=>{
  if(lastCanvasAircraftOpen&&Date.now()-lastCanvasAircraftOpen.at<700&&
     Math.hypot(e.clientX-lastCanvasAircraftOpen.x,
                e.clientY-lastCanvasAircraftOpen.y)<12)return;
- inspectCanvasAircraft(e.clientX,e.clientY);
+ inspectCanvasTarget(e.clientX,e.clientY);
 });
 canvas.addEventListener("pointercancel",()=>{state.pointer=null;});
 canvas.addEventListener("lostpointercapture",()=>{state.pointer=null;});
 canvas.addEventListener("pointermove",e=>{
  if(state.pointer)return; // an active drag retains the grabbing cursor
  const bounds=canvas.getBoundingClientRect();
- const hit=pickPaintedAircraft(paintedAircraftHits,
-  e.clientX-bounds.left,e.clientY-bounds.top,2);
- canvas.style.cursor=hit?"pointer":"grab";
+ const px=e.clientX-bounds.left,py=e.clientY-bounds.top;
+ const hit=pickPaintedAircraft(paintedAircraftHits,px,py,2);
+ const model=pickPaintedModel(paintedModelHits,px,py,2);
+ canvas.style.cursor=hit||model?"pointer":"grab";
 });
 canvas.addEventListener("pointerleave",()=>{if(!state.pointer)canvas.style.cursor="grab";});
 function adjustMapZoom(delta){
