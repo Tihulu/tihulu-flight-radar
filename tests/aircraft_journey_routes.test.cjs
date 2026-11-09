@@ -40,6 +40,22 @@ test("only named, absolute provider schedule times are accepted; no RF times mis
  assert.equal(F.epoch("2026-11-10"),null);
  assert.equal(F.fromProvider(original),null,"radio-only ADS-B never supplies airport or timetable");
 });
+test("AirLabs fields use UTC/UNIX times without interpreting local airport clock incorrectly",()=>{
+ const internet={hex:"3c6645",sources:["internet"],flight_source_fields:{
+  flight_icao:"DLH1234",dep_iata:"CGN",arr_iata:"IST",
+  dep_time_ts:1794307200,
+  arr_estimated_utc:"2026-11-10 19:15",
+  dep_time:"14:30",arr_time:"19:15"}};
+ const j=F.fromProvider(internet);
+ assert.equal(F.shortRoute(j),"CGN → IST");
+ assert.equal(j.times.departScheduled,1794307200*1000);
+ assert.equal(j.times.arriveEstimated,Date.parse("2026-11-10T19:15:00Z"));
+ assert.equal(j.times.arriveScheduled,undefined,
+  "local clock strings without date/timezone must not be treated as UTC");
+ const js=fs.readFileSync(path.join(root,"app.js"),"utf8");
+ assert.match(js,/dep_iata:a\.dep_iata,dep_icao:a\.dep_icao/);
+ assert.match(js,/arr_time_ts,arr_estimated_ts,arr_actual_ts/);
+});
 test("explicit local radio ground-to-air state transition is observed and never an actual gate time",()=>{
  const epoch=Date.now();
  const a1=station("ground"),a2=station(3500);
