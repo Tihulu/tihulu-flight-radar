@@ -19,6 +19,8 @@
   }
  });
  function display(legacy){
+  if(!rfLocatorActive)return {status:"disabled",count:0,
+   constraintsUsed:0,region:null,aircraftCircles:[]};
   if(mode==="best"){
    if(!rfBest)return {status:"insufficient",count:0,
     constraintsUsed:0,region:null,aircraftCircles:[]};
