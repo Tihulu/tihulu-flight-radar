@@ -1297,7 +1297,10 @@ function paintRfMapLabel(kind,x,y,message,offscreen=false){
  let left=Math.max(5,Math.min(x+19,w-width-5));
  let top=Math.max(5,Math.min(y-32,vh-h-5));
  if(kind==="best")top=Math.max(5,Math.min(y+10,vh-h-5));
- const color=kind==="best"?"#d8b8ff":"#87edfb";
+ const colors={live10:"#87edfb",liveX:"#80b2ff",
+   best:"#d8b8ff",history:"#79e0b1",historyBest:"#edbc73"};
+ const color=kind==="best"?"#d8b8ff":
+  colors[(typeof window!=="undefined"&&window.TihuluRFV2?.getMode())||"live10"];
  ctx.save();ctx.setLineDash([]);ctx.fillStyle="rgba(7,19,31,.96)";
  ctx.strokeStyle=color;ctx.lineWidth=1.5;
  ctx.fillRect(left,top,width,h);ctx.strokeRect(left+.5,top+.5,width-1,h-1);
@@ -1341,7 +1344,11 @@ function paintRfLocator(result){
   !result.region||!$("rfModelPin").checked)return;
  const [x,y]=xy(result.region.lat,result.region.lon);
  if(x<0||x>canvas.clientWidth||y<0||y>canvas.clientHeight)return;
- ctx.save();ctx.fillStyle="rgba(8,34,45,.98)";ctx.strokeStyle="#89edfa";
+ const colors={live10:"#89edfa",liveX:"#80b2ff",best:"#d8b8ff",
+  history:"#79e0b1",historyBest:"#edbc73"};
+ const selected=(typeof window!=="undefined"&&window.TihuluRFV2?.getMode())||"live10";
+ ctx.save();ctx.fillStyle="rgba(8,34,45,.98)";
+ ctx.strokeStyle=colors[selected]||"#89edfa";
  ctx.lineWidth=2.5;ctx.setLineDash([]);
  ctx.beginPath();ctx.arc(x,y,10,0,Math.PI*2);ctx.fill();ctx.stroke();
  ctx.beginPath();ctx.moveTo(x-16,y);ctx.lineTo(x+16,y);
@@ -2369,6 +2376,19 @@ function pickPaintedAircraft(hits,x,y,touchSlack=0){
  }
  return best;
 }
+function paintRfComparisons(){
+ if(typeof window==="undefined")return;
+ const others=window.TihuluRFV2?.comparisons?.()||[];
+ const colors={live10:"rgba(117,229,246,.48)",
+  liveX:"rgba(116,163,245,.48)",best:"rgba(204,170,255,.48)",
+  history:"rgba(105,220,164,.48)",historyBest:"rgba(240,190,102,.48)"};
+ for(const item of others){
+  const r=item.result.region;
+  if(!r||!Number.isFinite(r.extentKm)||r.extentKm<=0)continue;
+  rfDrawRing({lat:r.lat,lon:r.lon,radiusKm:r.extentKm},
+   colors[item.id]||"rgba(225,231,235,.45)",[3,9],1.5);
+ }
+}
 function paint(){
  const w=canvas.clientWidth,h=canvas.clientHeight;
  if(!w||!h)return;
@@ -2379,7 +2399,7 @@ function paint(){
  paintedAircraftHits=[];paintedModelHits=[]; // no stale hit targets
  ctx.clearRect(0,0,w,h);ctx.fillStyle="#102231";ctx.fillRect(0,0,w,h);
  tiles();grid();
- if(rfLocatorActive)paintRfCoverage(model);
+ if(rfLocatorActive){paintRfCoverage(model);paintRfComparisons();}
  if($("showTracks").checked){
   for(const [key,points] of state.tracks.entries()){
    if(points.length<2)continue;
