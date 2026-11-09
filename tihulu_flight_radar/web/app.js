@@ -2444,8 +2444,10 @@ function inspectCanvasTarget(x,y,preferred=null){
  const modelKind=preferred?.kind==="model"?preferred.value:modelHit?.kind;
  const hex=preferred?.kind==="aircraft"?preferred.value:planeHit?.hex;
  // Prefer the precise model pin/label over an aircraft text overlapping it.
- const modelPriority=modelHit&&
-  Math.hypot(px-modelHit.x,py-modelHit.y)<=14;
+ const modelPriority=modelHit&&(
+  Math.hypot(px-modelHit.x,py-modelHit.y)<=14||
+  (modelHit.rect&&px>=modelHit.rect.left&&px<=modelHit.rect.right&&
+   py>=modelHit.rect.top&&py<=modelHit.rect.bottom));
  if(modelKind&&(preferred?.kind==="model"||modelPriority||!hex)){
   if(openRfModelPopup(modelKind)){
    lastCanvasAircraftOpen={hex:"model:"+modelKind,x,y,at:Date.now()};
