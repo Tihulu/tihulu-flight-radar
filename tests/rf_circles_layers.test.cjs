@@ -56,11 +56,12 @@ test("RF OFF prevents solver calls and returns stable disabled model",()=>{
 });
 test("Aircraft circle modes never change solver input and selected means selected ICAOs only",()=>{
  const elements={rfAircraftCircleMode:{value:"none"}};
- const selected=new Set();const current={aircraftCircles:[
+ const selected=new Set(),picked=new Set(["a00001"]);const current={aircraftCircles:[
   {hex:"a00001"},{hex:"a00002"}]};
  let paints=0,saves=0;
  const context=vm.createContext({
-  $:id=>elements[id],rfSelectedPlanes:selected,
+  $:id=>elements[id],rfSelectedPlanes:selected,rfPickedPlanes:picked,
+  renderRfPickedPanel:()=>{},
   coverageResult:()=>current,paint:()=>paints++,persistRfViewPreferences:()=>saves++
  });
  vm.runInContext("let rfAutoSelectNewPlanes=false,rfAircraftListSignature='cached';\n"+
@@ -70,10 +71,11 @@ test("Aircraft circle modes never change solver input and selected means selecte
  assert.equal(elements.rfAircraftCircleMode.value,"all");
  vm.runInContext('setAircraftCircleMode("selected")',context);
  assert.equal(elements.rfAircraftCircleMode.value,"selected");
- assert.deepEqual([...selected].sort(),["a00001","a00002"]);
+ assert.deepEqual([...selected],["a00001"],"All -> Selected must keep explicit picks only");
  vm.runInContext('setAircraftCircleMode("none")',context);
  assert.equal(selected.size,0);
  assert.equal(elements.rfAircraftCircleMode.value,"none");
+ assert.deepEqual([...picked],["a00001"],"hide must not forget explicit picks");
  assert.equal(paints,3);assert.equal(saves,3);
 });
 test("BEST circle and BEST center survive loss of LIVE model",()=>{
