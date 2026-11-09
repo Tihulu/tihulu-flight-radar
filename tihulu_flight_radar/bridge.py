@@ -274,6 +274,7 @@ class Bridge:
         self.last_start_error: str | None = None
         self._place_lock = threading.Lock()
         self.offline_map_name: str | None = None
+        self.offline_map_path: Path | None = None
         # Native Qt uses an ephemeral loopback port; browser localStorage
         # changes origin on each launch. This owner-only settings file retains
         # the selected SEARCH region across ports, OS restarts and platforms.
@@ -494,6 +495,7 @@ def make_handler(bridge: Bridge, port: int):
             if path.path == "/offline-map/status":
                 archives = discover()
                 active = select_offline_map(bridge.offline_map_name)
+                bridge.offline_map_path = active[0] if active else None
                 self._send(HTTPStatus.OK, {
                     "available": bool(archives),
                     "active": active[1]["name"] if active else None,
@@ -504,11 +506,17 @@ def make_handler(bridge: Bridge, port: int):
                 return
             if path.path.startswith("/offline-tiles/"):
                 match = re.fullmatch(r"/offline-tiles/(\d{1,2})/(\d{1,8})/(\d{1,8})\.png", path.path)
-                active = select_offline_map(bridge.offline_map_name)
-                if not match or not active:
+                # Do not rescan every directory and open every MBTiles
+                # metadata table on each individual map tile request.
+                selected = bridge.offline_map_path
+                if selected is None or not selected.is_file():
+                    active = select_offline_map(bridge.offline_map_name)
+                    selected = active[0] if active else None
+                    bridge.offline_map_path = selected
+                if not match or selected is None:
                     self._send(HTTPStatus.NOT_FOUND, {"error": "Offline map unavailable."})
                     return
-                tile = read_tile(active[0], *(int(x) for x in match.groups()))
+                tile = read_tile(selected, *(int(x) for x in match.groups()))
                 if not tile:
                     self._send(HTTPStatus.NOT_FOUND, {"error": "No offline tile in this archive."})
                     return
@@ -612,6 +620,7 @@ def make_handler(bridge: Bridge, port: int):
                             raise DataError("A map with this filename already exists; rename the imported file.")
                         temp.replace(dest)
                         bridge.offline_map_name = name
+                        bridge.offline_map_path = dest
                         self._send(HTTPStatus.OK, {"imported": name, "map": info})
                         return
                     finally:
@@ -625,6 +634,7 @@ def make_handler(bridge: Bridge, port: int):
                     if name is not None and (not isinstance(name, str) or not active):
                         raise DataError("Offline map archive not found.")
                     bridge.offline_map_name = name
+                    bridge.offline_map_path = active[0] if active else None
                     self._send(HTTPStatus.OK, {"active": active[1]["name"] if active else None})
                     return
                 if endpoint == "/api/search-location":
