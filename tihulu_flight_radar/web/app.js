@@ -1327,6 +1327,191 @@ function paintRfLocator(result){
  ctx.fillText(rfCoordinateText(result.region),x+18,y+4);
  ctx.restore();
 }
+// RF model cards never imply a measured GPS position or statistical accuracy.
+let rfOpenModelKind=null;
+function rfModelCardData(kind,live=coverageResult()){
+ if(!rfLocatorActive)return null;
+ if(kind==="live"){
+  if(live?.status!=="region"||!live.region)return null;
+  const r=live.region;
+  return {kind,lat:r.lat,lon:r.lon,radiusKm:r.extentKm,
+   rawKm:r.rawExtentKm??r.extentKm,count:live.count,
+   liveCount:live.liveCount,historyCount:live.historyCount,
+   constraints:live.constraintsUsed,samples:r.sampleCount,
+   geometry:live.geometryStatus,updatedAtMs:Date.now(),liveResult:live};
+ }
+ if(kind==="best"&&rfBest){
+  return {kind,lat:rfBest.lat,lon:rfBest.lon,
+   radiusKm:rfBest.displayedExtentKm,rawKm:rfBest.rawExtentKm,
+   count:rfBest.aircraftCount,liveCount:rfBest.liveCount,
+   historyCount:rfBest.historyCount,constraints:rfBest.constraintsUsed,
+   samples:rfBest.sampleCount,geometry:rfBest.geometryStatus,
+   updatedAtMs:rfBest.updatedAtMs,liveResult:null};
+ }
+ return null;
+}
+function rfMiniMapFit(model,width=280,height=280){
+ if(!model||![model.lat,model.lon,model.radiusKm].every(Number.isFinite)||
+  model.radiusKm<=0||Math.abs(model.lat)>85||Math.abs(model.lon)>180)return null;
+ const path=TihuluRFCoverage.horizonPoints({
+  lat:model.lat,lon:model.lon,radiusKm:model.radiusKm},96);
+ const view=zoom=>{
+  const world=256*2**zoom;
+  const originX=(model.lon+180)/360*world,originY=mercY(model.lat)*world;
+  const project=p=>{
+   const rawX=(p.lon+180)/360*world-originX;
+   const dx=((rawX+world*1.5)%world)-world/2;
+   return [width/2+dx,height/2+(mercY(p.lat)*world-originY)];
+  };
+  return {zoom,originX,originY,world,project,outline:path.map(project)};
+ };
+ // Fit the entire geographic model circle, not just an illustrative fixed
+ // radius in pixels. Map tiles are optional; offline grid always works.
+ for(let z=12;z>=0;z--){
+  const fit=view(z);
+  if(fit.outline.every(([x,y])=>x>=22&&x<=width-22&&y>=22&&y<=height-22))
+   return fit;
+ }
+ return view(0);
+}
+function drawRfModelMiniMap(model){
+ const mini=$("rfModelMiniMap"),popup=$("rfModelPopup");
+ if(!mini||popup.hidden)return;
+ const c=mini.getContext("2d"),w=mini.width,h=mini.height;
+ const fit=rfMiniMapFit(model,w,h);
+ if(!fit)return;
+ c.clearRect(0,0,w,h);c.fillStyle="#122d3d";c.fillRect(0,0,w,h);
+ let tilesLoaded=0;
+ if($("showTiles").checked){
+  const z=fit.zoom,n=2**z,left=(fit.originX-w/2)/256;
+  const top=(fit.originY-h/2)/256;
+  for(let tx=Math.floor(left);tx<=Math.ceil(left+w/256);tx++)
+   for(let ty=Math.floor(top);ty<=Math.ceil(top+h/256);ty++){
+    if(ty<0||ty>=n)continue;
+    const tile=getTile(z,((tx%n)+n)%n,ty);
+    if(tile.img&&tile.img.complete&&tile.img.naturalWidth){
+     c.drawImage(tile.img,(tx-left)*256,(ty-top)*256,256,256);
+     tilesLoaded++;
+    }
+   }
+ }
+ c.save();c.strokeStyle="rgba(175,205,228,.25)";c.lineWidth=1;
+ for(let k=1;k<=3;k++){
+  const v=k*w/4;c.beginPath();c.moveTo(v,0);c.lineTo(v,h);
+  c.moveTo(0,v);c.lineTo(w,v);c.stroke();
+ }
+ if(model.kind==="live"&&model.liveResult?.status==="region"){
+  const hull=rfFeasibleHull(model.liveResult);
+  if(hull.length>=3){
+   c.beginPath();
+   hull.forEach((p,i)=>{
+    const [x,y]=fit.project(p);
+    if(!i)c.moveTo(x,y);else c.lineTo(x,y);
+   });
+   c.closePath();c.fillStyle="rgba(75,220,233,.20)";
+   c.strokeStyle="rgba(79,228,236,.92)";
+   c.fill();c.stroke();
+  }
+ }
+ const color=model.kind==="best"?"#d6afff":"#7feafa";
+ c.strokeStyle=color;c.lineWidth=2.8;c.setLineDash([]);
+ c.beginPath();
+ fit.outline.forEach(([x,y],i)=>{if(!i)c.moveTo(x,y);else c.lineTo(x,y)});
+ c.closePath();c.stroke();
+ c.beginPath();c.strokeStyle="#f4fbff";c.lineWidth=1.6;
+ c.moveTo(w/2-10,h/2);c.lineTo(w/2+10,h/2);
+ c.moveTo(w/2,h/2-10);c.lineTo(w/2,h/2+10);c.stroke();
+ c.fillStyle="rgba(11,29,41,.88)";c.fillRect(8,h-32,w-16,24);
+ c.fillStyle="#e7f4ff";c.font="11px system-ui";
+ c.fillText("Radius "+model.radiusKm.toFixed(0)+" km · NOT accuracy",15,h-16);
+ c.restore();
+ $("rfPopupMapScale").textContent="Auto-fit · OSM z"+fit.zoom;
+ $("rfPopupMapCredit").textContent=tilesLoaded
+  ?"© OpenStreetMap contributors · auto-fit geographic circle"
+  :"Offline coordinate grid · tiles unavailable or disabled";
+}
+function positionRfModelPopup(model){
+ const popup=$("rfModelPopup");if(popup.hidden)return;
+ const bounds=canvas.getBoundingClientRect();
+ const vw=Math.max(320,window.innerWidth||document.documentElement.clientWidth);
+ const vh=Math.max(240,window.innerHeight||document.documentElement.clientHeight);
+ const width=Math.min(338,vw-16),height=Math.min(popup.scrollHeight||680,vh-16);
+ const hit=paintedModelHits.find(hit=>hit.kind===model.kind);
+ let x=bounds.right-width-8,y=bounds.top+12;
+ if(hit){
+  x=bounds.left+hit.x+24;y=bounds.top+hit.y-24;
+  if(x+width>vw-8)x=bounds.left+hit.x-width-24;
+ }
+ popup.style.left=Math.max(8,Math.min(x,vw-width-8))+"px";
+ popup.style.top=Math.max(8,Math.min(y,vh-height-8))+"px";
+}
+function renderRfModelPopup(kind,model=rfModelCardData(kind)){
+ if(!model)return false;
+ const popup=$("rfModelPopup");
+ if(popup.parentElement!==document.body)document.body.appendChild(popup);
+ popup.classList.toggle("best",kind==="best");
+ $("rfPopupTitle").textContent=kind==="best"?"BEST SESSION Fit":"LIVE RF Fit";
+ $("rfPopupSub").textContent=kind==="best"
+  ?"Tightest stored session model · NOT GPS"
+  :"Current antenna-only feasible-area model · NOT GPS";
+ $("rfPopupAircraft").textContent=Number.isFinite(model.count)
+  ?String(model.count)+" independent":"Unavailable";
+ $("rfPopupConstraints").textContent=Number.isFinite(model.constraints)
+  ?String(model.constraints):"Unavailable";
+ $("rfPopupSources").textContent=Number.isFinite(model.liveCount)
+  ?model.liveCount+" live / "+(model.historyCount??0)+" history"
+  :"Not recorded";
+ $("rfPopupGeometry").textContent=model.geometry||"Unspecified";
+ $("rfPopupCoordinates").textContent=rfCoordinateText(model);
+ $("rfPopupRadius").textContent=model.radiusKm.toFixed(1)+" km (modeled)";
+ $("rfPopupDiameter").textContent=(model.radiusKm*2).toFixed(1)+" km";
+ $("rfPopupAccuracy").textContent="UNKNOWN · no calibrated accuracy or GPS error";
+ const timestamp=Number.isFinite(model.updatedAtMs)
+  ?new Date(model.updatedAtMs).toLocaleString():"unknown";
+ $("rfPopupNote").textContent=
+  "Modeled spread (unrounded): ~"+Number(model.rawKm).toFixed(1)+
+  " km · sampled cells: "+(model.samples??"not recorded")+
+  " · model observation: "+timestamp+
+  ". Circle contains a sampled possible-area model, NOT measured range, "+
+  "statistical confidence or real receiver accuracy. BEST retains the "+
+  "session snapshot and can differ from the current LIVE model.";
+ popup.hidden=false;
+ positionRfModelPopup(model);
+ drawRfModelMiniMap(model);
+ return true;
+}
+function closeRfModelPopup(){
+ rfOpenModelKind=null;$("rfModelPopup").hidden=true;
+}
+function openRfModelPopup(kind){
+ const model=rfModelCardData(kind);
+ if(!model)return false;
+ $("aircraftPopup").hidden=true;
+ rfOpenModelKind=kind;
+ return renderRfModelPopup(kind,model);
+}
+function focusRfModelCircle(model){
+ if(!model)return;
+ disableRfFollow();
+ rfLocatorFocused=true;rfLastFollowModel=null;
+ state.lat=model.lat;state.lon=model.lon;state.moved=true;
+ const fit=rfMiniMapFit(model,Math.max(240,canvas.clientWidth),
+  Math.max(240,canvas.clientHeight));
+ if(fit)state.zoom=Math.max(2,Math.min(12,fit.zoom));
+ state.centerLabel=(model.kind==="best"?"BEST SESSION":"LIVE")+
+  " RF model circle in view · NOT GPS";
+ paint();
+}
+$("rfPopupClose").onclick=closeRfModelPopup;
+$("rfPopupFocus").onclick=()=>focusRfModelCircle(rfModelCardData(rfOpenModelKind));
+$("rfPopupCopy").onclick=()=>{
+ const model=rfModelCardData(rfOpenModelKind);
+ if(!model)return;
+ const text=model.lat.toFixed(6)+", "+model.lon.toFixed(6)+
+  " · modeled possible-area center, NOT GPS";
+ if(navigator.clipboard?.writeText)
+  navigator.clipboard.writeText(text).catch(()=>notice("Clipboard unavailable"));
+};
 function displayedAircraftPoint(a){
  // Same display-only prediction as the icon; not an RF observation.
  const projected=$("smoothMotion").checked
