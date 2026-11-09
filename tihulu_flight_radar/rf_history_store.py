@@ -7,6 +7,7 @@ share the same store. Logging is always OFF when a new process starts.
 from __future__ import annotations
 
 import math
+from contextlib import closing
 import shutil
 import sqlite3
 import threading
@@ -85,7 +86,7 @@ class RFHistoryStore:
     def _prepare(self):
         with self.lock:
             self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-            with self._connect() as db:
+            with closing(self._connect()) as db, db:
                 db.execute("""CREATE TABLE IF NOT EXISTS sessions(
                     id INTEGER PRIMARY KEY, started_ms INTEGER NOT NULL,
                     ended_ms INTEGER, label TEXT NOT NULL DEFAULT '')""")
@@ -115,7 +116,7 @@ class RFHistoryStore:
                     self.session_id = None
                     self._last.clear()
                 if self.session_id is None:
-                    with self._connect() as db:
+                    with closing(self._connect()) as db, db:
                         c = db.execute("INSERT INTO sessions(started_ms) VALUES(?)",
                                        (int(time.time()*1000),))
                         self.session_id = int(c.lastrowid)
@@ -153,7 +154,7 @@ class RFHistoryStore:
                     self._last[hex_] = fix
                     accepted.append((self.session_id, *fix))
                 if accepted:
-                    with self._connect() as db:
+                    with closing(self._connect()) as db, db:
                         db.executemany("""INSERT OR IGNORE INTO fixes(
                            session_id,hex,observed_ms,lat,lon,alt_ft,
                            radius_km,speed_kt,heading_deg)
@@ -166,7 +167,7 @@ class RFHistoryStore:
 
     def status(self) -> dict:
         with self.lock:
-            with self._connect() as db:
+            with closing(self._connect()) as db, db:
                 sessions = [dict(id=x[0],started_ms=x[1],observations=x[2])
                             for x in db.execute(
                              """SELECT s.id,s.started_ms,COUNT(f.id) FROM sessions s
@@ -188,7 +189,7 @@ class RFHistoryStore:
             raise ValueError("Invalid History session or cursor.")
         if type(limit) is not int or not 1 <= limit <= 5000:
             raise ValueError("History page limit must be 1–5000.")
-        with self.lock, self._connect() as db:
+        with self.lock, closing(self._connect()) as db:
             rows = db.execute("""SELECT id,hex,observed_ms,lat,lon,alt_ft,
                                   radius_km,speed_kt,heading_deg
                                   FROM fixes WHERE session_id=? AND id>?
