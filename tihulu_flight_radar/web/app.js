@@ -939,8 +939,15 @@ function coverageResult(){
  if(!rfLocatorActive)return RF_LOCATOR_DISABLED;
  if(state.data!==coverageCacheRows||coverageCacheRevision!==rfHistoryRevision){
   coverageCacheRows=state.data;coverageCacheRevision=rfHistoryRevision;
-  coverageCacheResult=TihuluRFCoverage.compute(state.data,
+  const computed=TihuluRFCoverage.compute(state.data,
    $("rfRemember").checked?[...rfHistory.values()]:[]);
+  // Missing RF geometry is normal with few genuine antenna positions.
+  // Malformed "region" results must never reach any painting/status path.
+  coverageCacheResult=computed?.status==="region"&&
+   (!computed.region||!Number.isFinite(computed.region.lat)||
+    !Number.isFinite(computed.region.lon)||
+    !Number.isFinite(computed.region.extentKm))
+    ? {...computed,status:"unresolved",region:null}:computed;
  }
  return coverageCacheResult;
 }
@@ -1156,11 +1163,15 @@ function renderCoverageStatus(){
   insufficient:result.count+"/4 independently positioned local RF aircraft ("+(result.liveCount||0)+" live, "+(result.historyCount||0)+" stationary-history). Internet-only aircraft, missing radio positions and Mode S without coordinates cannot qualify.",
   no_overlap:"Radio-horizon model has no common overlap. Check altitude/age/source validity.",
   unresolved:"Possible region too thin or fragmented for current grid. No coordinate fix.",
-  region:"MULTI-AIRCRAFT RF MODEL ("+result.geometryStatus+") · "+result.count+
-  " distinct RF aircraft ("+result.liveCount+" live, "+result.historyCount+" stationary-history) · "+
-   (result.constraintsUsed||result.count)+" constraints applied · coarse extent ~"+
-    Math.round(result.region.extentKm)+" km. More planes may narrow this area, NOT establish GPS accuracy."
  };
+ // Construct the region label only when a real sampled area exists.
+ // Object literals evaluate ALL properties, including for "insufficient".
+ if(result.status==="region"&&result.region){
+  info.region="MULTI-AIRCRAFT RF MODEL ("+result.geometryStatus+") · "+result.count+
+   " distinct RF aircraft ("+result.liveCount+" live, "+result.historyCount+" stationary-history) · "+
+   (result.constraintsUsed||result.count)+" constraints applied · coarse extent ~"+
+   Math.round(result.region.extentKm)+" km. More planes may narrow this area, NOT establish GPS accuracy.";
+ }
  label.textContent=info[result.status]||"Insufficient evidence";
  const output=$("rfLocateStatus"),button=$("rfLocate");
  button.textContent=rfLocatorActive?"RF area · ON":"RF area · OFF";
@@ -1187,6 +1198,25 @@ function renderCoverageStatus(){
  }
  return result;
 }
+function bindRfCirclesMenu(){
+ const menu=$("rfCirclesMenu"),summary=menu.querySelector("summary");
+ const close=(restoreFocus=false)=>{
+  if(!menu.open)return;
+  menu.open=false;
+  if(restoreFocus)summary.focus();
+ };
+ $("rfCirclesDone").addEventListener("click",()=>close(true));
+ // Click works across Qt WebEngine, touch and normal browsers.
+ document.addEventListener("click",event=>{
+  if(menu.open&&!menu.contains(event.target))close();
+ });
+ document.addEventListener("keydown",event=>{
+  if(menu.open&&event.key==="Escape"){
+   event.preventDefault();close(true);
+  }
+ });
+}
+bindRfCirclesMenu();
 $("rfLocate").onclick=()=>{
  rfLocatorActive=!rfLocatorActive;
  rfLocatorFocused=!rfLocatorActive;
