@@ -218,7 +218,18 @@ function normalizeInternetPayload(raw,provider,lat,lon,radius,now=Date.now()/100
      flight_number:a.flight_number,flight_icao:a.flight_icao,
      flight_iata:a.flight_iata,
      airline_name:a.airline_name,airline_icao:a.airline_icao,
-     airline_iata:a.airline_iata
+     airline_iata:a.airline_iata,
+     // Airline-provided route and timestamp evidence stays separate from RF.
+     dep_iata:a.dep_iata,dep_icao:a.dep_icao,
+     arr_iata:a.arr_iata,arr_icao:a.arr_icao,
+     dep_time_ts:a.dep_time_ts,dep_estimated_ts:a.dep_estimated_ts,
+     dep_actual_ts:a.dep_actual_ts,
+     arr_time_ts:a.arr_time_ts,arr_estimated_ts:a.arr_estimated_ts,
+     arr_actual_ts:a.arr_actual_ts,
+     dep_time_utc:a.dep_time_utc,dep_estimated_utc:a.dep_estimated_utc,
+     dep_actual_utc:a.dep_actual_utc,
+     arr_time_utc:a.arr_time_utc,arr_estimated_utc:a.arr_estimated_utc,
+     arr_actual_utc:a.arr_actual_utc,status:a.status
     },
     airline_name:a.airline_name,airline_icao:a.airline_icao,airline_iata:a.airline_iata
    };
@@ -291,7 +302,7 @@ async function fetchInternetFeed(){
     Math.max(-90,state.queryLat-latD),Math.max(-180,state.queryLon-lonD),
     Math.min(90,state.queryLat+latD),Math.min(180,state.queryLon+lonD)
   ].map(x=>x.toFixed(3)).join(","));
-  u.searchParams.set("_fields","hex,flight_icao,flight_iata,flight_number,lat,lng,alt,dir,speed,updated,aircraft_icao,reg_number,airline_name,airline_icao,airline_iata");
+  u.searchParams.set("_fields","hex,flight_icao,flight_iata,flight_number,lat,lng,alt,dir,speed,updated,aircraft_icao,reg_number,airline_name,airline_icao,airline_iata,dep_iata,dep_icao,arr_iata,arr_icao,dep_time_ts,dep_estimated_ts,dep_actual_ts,arr_time_ts,arr_estimated_ts,arr_actual_ts,dep_time_utc,dep_estimated_utc,dep_actual_utc,arr_time_utc,arr_estimated_utc,arr_actual_utc,status");
  }else if(relay){
   // Do not send precise GPS coordinates through an unowned relay.
   const lat=(Math.round(state.queryLat*10)/10).toFixed(1);
