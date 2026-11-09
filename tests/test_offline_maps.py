@@ -24,6 +24,7 @@ class OfflineMapTests(unittest.TestCase):
                 # XYZ 1/0/0 is stored as MBTiles TMS y=1.
                 db.execute("INSERT INTO tiles VALUES (1,0,1,?)",
                            (b"\x89PNG\r\n\x1a\nvalid tile",))
+                db.commit()
                 db.commit()  # closing() closes without an implicit transaction commit
             with patch.object(offline_maps, "MAP_DIRECTORIES", (root,)):
                 hits = offline_maps.discover()
@@ -49,6 +50,7 @@ class OfflineMapTests(unittest.TestCase):
                 db.execute("CREATE TABLE tiles (zoom_level INTEGER, tile_column INTEGER,"
                            "tile_row INTEGER, tile_data BLOB)")
                 db.execute("INSERT INTO metadata VALUES ('format','pbf')")
+                db.commit()
             (root / "linked.mbtiles").symlink_to(vector)
             with patch.object(offline_maps, "MAP_DIRECTORIES", (root,)):
                 self.assertEqual(offline_maps.discover(), [])
