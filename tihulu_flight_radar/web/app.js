@@ -213,7 +213,14 @@ function normalizeInternetPayload(raw,provider,lat,lon,radius,now=Date.now()/100
     track:Number.isFinite(a.dir)?a.dir:null,
     seen:updateAge,seen_pos:updateAge,
     observation_age_unknown:!Number.isFinite(a.updated),
-    flight_source_fields:{aircraft_icao:a.aircraft_icao,registration:a.reg_number}
+    flight_source_fields:{
+     aircraft_icao:a.aircraft_icao,registration:a.reg_number,
+     flight_number:a.flight_number,flight_icao:a.flight_icao,
+     flight_iata:a.flight_iata,
+     airline_name:a.airline_name,airline_icao:a.airline_icao,
+     airline_iata:a.airline_iata
+    },
+    airline_name:a.airline_name,airline_icao:a.airline_icao,airline_iata:a.airline_iata
    };
   }).filter(Boolean);
   raw={generated_at:now,aircraft:rows,provider:"AirLabs",
@@ -284,7 +291,7 @@ async function fetchInternetFeed(){
     Math.max(-90,state.queryLat-latD),Math.max(-180,state.queryLon-lonD),
     Math.min(90,state.queryLat+latD),Math.min(180,state.queryLon+lonD)
   ].map(x=>x.toFixed(3)).join(","));
-  u.searchParams.set("_fields","hex,flight_icao,flight_iata,flight_number,lat,lng,alt,dir,speed,updated,aircraft_icao,reg_number");
+  u.searchParams.set("_fields","hex,flight_icao,flight_iata,flight_number,lat,lng,alt,dir,speed,updated,aircraft_icao,reg_number,airline_name,airline_icao,airline_iata");
  }else if(relay){
   // Do not send precise GPS coordinates through an unowned relay.
   const lat=(Math.round(state.queryLat*10)/10).toFixed(1);
@@ -370,6 +377,12 @@ function browserSourceResult(mode=String($("mode").value),internetError=null){
     exists.position_source="internet";
    }
    if(!exists.flight&&a.flight)exists.flight=a.flight;
+   // Preserve provider metadata without replacing genuine local RF position.
+   for(const field of ["airline_name","airline_icao","airline_iata","ownOp","operator","flight_iata","flight_icao","flight_number"]){
+    if(!exists[field]&&a[field])exists[field]=a[field];
+   }
+   if(a.flight_source_fields)
+    exists.flight_source_fields={...a.flight_source_fields,...(exists.flight_source_fields||{})};
    if(!Number.isFinite(exists.alt_baro)&&Number.isFinite(a.alt_baro))exists.alt_baro=a.alt_baro;
   }else{
    const row={...a,hex:id,sources:["internet"],
