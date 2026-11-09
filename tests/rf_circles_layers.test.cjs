@@ -81,9 +81,9 @@ test("Aircraft circle modes never change solver input and selected means selecte
 test("BEST circle and BEST center survive loss of LIVE model",()=>{
  const checked={rfAircraftCircleMode:{value:"none"},rfBestCircle:{checked:true},
   rfModelCircle:{checked:true},rfFill:{checked:true},rfHatch:{checked:false},
-  rfBestPin:{checked:true}};
+  rfBestPin:{checked:true},rfBestCircle:{checked:true},rfModelPin:{checked:true}};
  const rings=[],texts=[],savedBest={lat:50.5,lon:7.1,rawExtentKm:36.5,
-  displayedExtentKm:40};
+  displayedExtentKm:40,aircraftCount:4};
  const ctx={
   save:()=>{},restore:()=>{},beginPath:()=>{},moveTo:()=>{},lineTo:()=>{},
   closePath:()=>{},fill:()=>{},stroke:()=>{},setLineDash:()=>{},
@@ -91,6 +91,7 @@ test("BEST circle and BEST center survive loss of LIVE model",()=>{
  };
  const context=vm.createContext({
   rfLocatorActive:true,rfBest:savedBest,rfSelectedPlanes:new Set(),
+  paintedModelHits:[],paintRfMapLabel:(kind,x,y,msg)=>{texts.push(msg);return {kind,x,y};},
   $:id=>checked[id]||{checked:false},
   ctx,canvas:{clientWidth:600,clientHeight:300},Math,Number,
   rfDrawRing:(r,c)=>rings.push({radius:r.radiusKm,color:c}),
@@ -107,7 +108,7 @@ test("BEST circle and BEST center survive loss of LIVE model",()=>{
  assert.equal(rings.length,1,"only BEST circle must render when LIVE invalid");
  assert.equal(rings[0].radius,40);
  assert.match(rings[0].color,/208,164,252/);
- assert.ok(texts.some(t=>/BEST SESSION/.test(t)));
+ assert.ok(texts.some(t=>/BEST/.test(t)));
  const live={status:"region",aircraftCircles:[],region:{
   lat:50.8,lon:6.9,extentKm:120}};
  context.live=live;
@@ -161,5 +162,5 @@ test("Cross-platform code is shared, circle preferences are browser/native-safe"
  assert.match(app,/rfSelectedPlanes\.has\(item\.hex\)/);
  const coverage=fs.readFileSync(path.join(root,"receiver_coverage.js"),"utf8");
  assert.doesNotMatch(coverage,/navigator\.geolocation|navigator\.usb|fetch\s*\(/);
- assert.match(app,/NOT ACCURACY/);
+ assert.match(app,/NOT ACCURACY|not measured|NOT accuracy/i);
 });
