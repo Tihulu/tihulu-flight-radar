@@ -108,6 +108,39 @@ test("selected sidebar distinguishes genuine RF horizons from internet-only choi
  assert.deepEqual([...picked],["4ac660"]);
  assert.equal(saves,1);assert.equal(table,1);assert.equal(paints,1);
 });
+test("individual checkbox in All mode keeps explicit picks, not every automatic circle",()=>{
+ const picked=new Set(["a00001"]),rendered=new Set(["a00001","a00002"]);
+ const model={aircraftCircles:[
+  {hex:"a00001",flight:"LOCAL1",samples:1,circle:{lat:50,lon:7,radiusKm:100}},
+  {hex:"a00002",flight:"LOCAL2",samples:1,circle:{lat:51,lon:7,radiusKm:100}}
+ ]};
+ function element(){
+  return {children:[],checked:false,className:"",style:{},value:"",
+   setAttribute(){},addEventListener(name,cb){this[name]=cb;},
+   append(...nodes){this.children.push(...nodes);},
+   replaceChildren(){this.children=[];}};
+ }
+ const controls={rfAircraftLayers:element(),rfAircraftCircleMode:{value:"all"},
+  aircraftPopup:{hidden:true}};
+ const ctx=vm.createContext({
+  $:id=>controls[id],document:{createElement:element},
+  rfPickedPlanes:picked,rfSelectedPlanes:rendered,
+  rfPlaneColor:()=>"#00ffff",renderRfPickedPanel:()=>{},
+  persistRfViewPreferences:()=>{},paint:()=>{},
+  state:{selected:null}
+ });
+ vm.runInContext("let rfAutoSelectNewPlanes=true,rfAircraftListSignature='';\n"+
+  source("renderRfPlaneLayers"),ctx);
+ ctx.model=model;
+ vm.runInContext("renderRfPlaneLayers(model)",ctx);
+ const labels=controls.rfAircraftLayers.children;
+ assert.equal(labels.length,2);
+ const uncheckSecond=labels[1].children[0];
+ uncheckSecond.checked=false;uncheckSecond.change();
+ assert.equal(controls.rfAircraftCircleMode.value,"selected");
+ assert.deepEqual([...rendered],["a00001"]);
+ assert.deepEqual([...picked],["a00001"]);
+});
 test("Circles popup is above the altitude legend and sidebar includes selected UI",()=>{
  assert.match(css,/\.map-panel>\.mapbar\{position:relative;z-index:15/);
  assert.match(css,/\.map-panel>\.aircraft-legend\{position:relative;z-index:1/);
