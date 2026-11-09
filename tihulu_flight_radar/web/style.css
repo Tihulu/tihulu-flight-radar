@@ -339,3 +339,37 @@ html.native #receiverStatus[data-pair-state="failed"]{color:#ffbc99}
 .aircraft-row-info:hover,.aircraft-row-info:focus-visible{background:#24647a!important;
  border-color:#9adfed!important;outline:2px solid #6ec9e2;outline-offset:2px}
 #popupAirline,#popupFlightNumber{font-size:12px;line-height:1.5;overflow-wrap:anywhere}
+
+/* One control surface for independent RF overlays in Qt/PWA/desktop/web. */
+.maptools .rf-circles-menu{position:relative;flex:0 0 auto;z-index:4}
+.rf-circles-menu>summary{display:flex;align-items:center;gap:8px;
+ list-style:none;background:#243b55;border:1px solid #527e9b;
+ color:#e9f8ff;border-radius:8px;padding:7px 10px;cursor:pointer;
+ font-size:12px;min-height:33px;user-select:none;white-space:nowrap}
+.rf-circles-menu>summary::-webkit-details-marker{display:none}
+.rf-circles-menu>summary:hover,.rf-circles-menu[open]>summary{background:#315472;
+ border-color:#6ebed9}
+.rf-circles-menu>summary:focus-visible{outline:2px solid #7dcaee;outline-offset:2px}
+.rf-circles-dropdown{position:absolute;z-index:20;top:calc(100% + 6px);
+ left:0;width:min(324px,calc(100vw - 32px));padding:12px;
+ border:1px solid #5a85a4;border-radius:11px;background:#142a3f;
+ box-shadow:0 12px 25px rgba(0,0,0,.48);display:flex;
+ flex-direction:column;gap:9px}
+.rf-circles-dropdown>strong{font-size:12px;color:#def3ff}
+.rf-circles-dropdown>label{display:flex;flex-wrap:wrap;align-items:center;
+ gap:6px;padding:7px 9px;background:#203b53;border:1px solid #395c78;
+ border-radius:8px;color:#e0f0fd;font-size:12px;cursor:pointer;min-width:0}
+.rf-circles-dropdown>label input[type=checkbox]{accent-color:#67dfe9;flex:none}
+.rf-circles-dropdown>label small{display:block;flex:1 1 100%;
+ margin-left:23px;font-size:10px;line-height:1.4;color:#b8cee1}
+.rf-circles-dropdown>.rf-circles-live{border-left:3px solid #58d7e9}
+.rf-circles-dropdown>.rf-circles-best{border-left:3px solid #cda6fc}
+.rf-circles-dropdown>.rf-circles-best input[type=checkbox]{accent-color:#cda6fc}
+.rf-circles-dropdown>.rf-circles-aircraft{display:flex;flex-direction:column;
+ align-items:stretch;gap:5px}
+.rf-circles-aircraft select{font-size:12px;width:100%;max-width:100%}
+.rf-circles-footnote{font-size:10px;line-height:1.55;color:#b4cada}
+@media(max-width:620px){
+ .rf-circles-menu{flex:0 0 auto}
+ .rf-circles-dropdown{width:min(310px,calc(100vw - 30px));left:0}
+}
