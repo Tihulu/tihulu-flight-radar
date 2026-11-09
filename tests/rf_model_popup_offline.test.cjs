@@ -88,8 +88,9 @@ test("model marker respects visibility and right card has details",()=>{
   "rfPopupRadius","rfPopupDiameter","rfPopupAircraft",
   "rfPopupCoordinates","rfPopupConstraints","rfPopupFocus"])
   assert.match(html,new RegExp('id="'+id+'"'));
- assert.match(app,/!$("rfBestCircle").checked||!rfBest/);
- assert.match(app,/!$("rfModelPin").checked||!$("rfModelCircle").checked/);
+ assert.match(app,/!$("rfBestPin").checked||!rfBest/);
+ assert.match(app,/!$("rfModelPin").checked\)return/);
+ assert.doesNotMatch(app,/!$("rfBestPin").checked||!$("rfBestCircle").checked/);
  assert.match(app,/openRfModelPopup(modelKind)/);
  assert.match(app,/toggleAircraftOnMap(row)/);
  assert.match(html,/id="placeAddressOnline"/);
