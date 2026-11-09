@@ -1929,7 +1929,7 @@ canvas.addEventListener("pointerup",e=>{
 canvas.addEventListener("click",e=>{
  // Qt WebEngine and some touch/mouse integrations may deliver click but
  // not a matching pointerup after capture. This is a real fallback path.
- if(e.detail===0)return; // keyboard navigation uses the aircraft list
+ // Native Qt may synthesize click with detail=0; accept it too.
  if(lastCanvasAircraftOpen&&Date.now()-lastCanvasAircraftOpen.at<700&&
     Math.hypot(e.clientX-lastCanvasAircraftOpen.x,
                e.clientY-lastCanvasAircraftOpen.y)<12)return;
