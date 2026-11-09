@@ -150,7 +150,7 @@ test("RF ON/OFF is sole engine toggle, not Follow or Circles or Gaussian",()=>{
  assert.equal(persisted,2);
  assert.equal(painted,2);
  assert.match(app,/if\(!rfLocatorActive\|\|!\$\("rfRemember"\)\.checked\)return/);
- assert.match(app,/if\(rfLocatorActive\)\{\s*updateRfBest\(model\)/);
+ assert.match(app,/if\(rfLocatorActive\)updateRfBest\(legacy\)/);
  assert.doesNotMatch(app, /rfFollowCenter=\$\("rfFollow"\)\.checked;\s*if\(rfFollowCenter\)\{rfLocatorActive=true/);
 });
 test("Cross-platform code is shared, circle preferences are browser/native-safe",()=>{
