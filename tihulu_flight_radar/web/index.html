@@ -184,6 +184,20 @@
       <button id="rfPopupCopy" type="button">Copy coordinates</button>
      </div>
     </section>
+   <details class="offline-map-panel" id="offlineMapPanel">
+    <summary>Offline map · raster MBTiles</summary>
+    <p id="offlineMapStatus" class="muted" role="status">Native desktop: scanning local map folders…</p>
+    <div class="offline-map-controls">
+     <label>Map archive <select id="offlineMapSource" aria-label="Select locally installed raster MBTiles"><option value="">Automatic local map detection</option></select></label>
+     <button id="offlineMapScan" type="button">Scan installed maps</button>
+     <label class="offline-map-file">Add .mbtiles file
+      <input id="offlineMapFile" type="file" accept=".mbtiles">
+     </label>
+     <button id="offlineMapUpload" type="button">Import selected map</button>
+     <a href="https://docs.protomaps.com/guide/getting-started" target="_blank" rel="noopener noreferrer">Find offline map providers</a>
+    </div>
+    <small>Native desktop uses existing raster MBTiles from ~/Maps, ~/Downloads or ~/.local/share/tihulu-flight-radar/maps. A file picker can import maps up to 1 GiB. Only raster PNG/JPG/WebP MBTiles are currently supported; PMTiles vector files need conversion. No automated scraping of volunteer OpenStreetMap tile servers.</small>
+   </details>
    <div class="mapfooter"><span id="mapLabel">Germany default view · no receiver position assumed</span><span id="rfMapCoordinates" class="rf-map-coordinates" aria-live="polite">RF model center: waiting for 4+ local RF aircraft</span><span><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a> · <span id="sourceCredits">Source attribution shown after connection</span></span></div>
   </section>
   <aside class="side">
