@@ -15,7 +15,7 @@ MAP_ROOT = Path.home() / ".local/share/tihulu-flight-radar/maps"
 MAP_DIRECTORIES = (MAP_ROOT, Path.home() / "Maps", Path.home() / "Downloads")
 MAX_MAP_BYTES = 1_073_741_824
 MAX_TILE_BYTES = 2_097_152
-SAFE_NAME = re.compile(r"^[\w ()\[\].-]{1,120}\.mbtiles$", re.ASCII | re.IGNORECASE)
+SAFE_NAME = re.compile(r"^[\w ()\[\].-]{1,120}\.mbtiles$", re.IGNORECASE)
 FORMAT_MIME = {"png": "image/png", "jpg": "image/jpeg",
                "jpeg": "image/jpeg", "webp": "image/webp"}
 
