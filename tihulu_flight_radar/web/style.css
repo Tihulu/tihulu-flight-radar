@@ -190,7 +190,7 @@ body.tar-open{overflow:hidden}
 /* Shared web/Qt aircraft inspection: anchored nonmodal details. */
 .map-panel{position:relative}
 .aircraft-popup[hidden]{display:none!important}
-.aircraft-popup{position:absolute;z-index:5;width:min(328px,calc(100% - 16px));
+.aircraft-popup{position:fixed;z-index:20010;width:min(328px,calc(100vw - 16px));
  max-height:min(74vh,510px);overflow:auto;padding:13px;border:1px solid #5a768c;
  border-radius:13px;background:#152638;box-shadow:0 14px 45px #0009}
 .aircraft-popup-head{display:flex;align-items:flex-start;justify-content:space-between;gap:9px}
