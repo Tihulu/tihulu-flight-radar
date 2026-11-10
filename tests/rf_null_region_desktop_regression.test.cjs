@@ -125,5 +125,5 @@ test("changed frontend assets invalidate the previous PWA shell",()=>{
  const sw=fs.readFileSync(path.join(root,"sw.js"),"utf8");
  assert.match(html,/id="rfCirclesDone"/);
  assert.match(css,/.rf-circles-done/);
- assert.match(sw,/tihulu-flight-radar-shell-v31/);
+ assert.match(sw,/tihulu-flight-radar-shell-v32/);
 });
