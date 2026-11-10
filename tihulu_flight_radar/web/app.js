@@ -1931,12 +1931,14 @@ function renderTable(){
   ].entries()){
    const td=document.createElement("td");
    td.textContent=String(value);
+   td.dataset.label=["Flight / ICAO","Altitude","Speed","Source"][index];
    if(index===3)td.className="tag "+category(a);
    if(index===1)td.style.color=altitudeColor(a);
    tr.append(td);
   }
   // Real online route/time metadata and local SDR observations, no guessing.
   const routeCell=document.createElement("td");routeCell.className="journey-table";
+  routeCell.dataset.label="From → To / times";
   const journey=typeof window!=="undefined"?window.TihuluJourneyUI?.row(a):null;
   const routeTitle=document.createElement("strong");
   routeTitle.textContent=journey?.route||"Route unknown";
@@ -1944,7 +1946,7 @@ function renderTable(){
   routeTimes.textContent=journey?.time||"Timetable unavailable";
   routeCell.append(routeTitle,routeTimes);tr.append(routeCell);
   // Accessible, explicit fallback if a native Qt canvas click is lost.
-  const infoCell=document.createElement("td");
+  const infoCell=document.createElement("td");infoCell.dataset.label="Actions";
   const info=document.createElement("button");
   info.type="button";info.className="aircraft-row-info";
   info.textContent="Info";info.setAttribute("aria-label",
