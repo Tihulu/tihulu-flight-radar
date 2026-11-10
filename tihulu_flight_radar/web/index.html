@@ -104,10 +104,20 @@
        <details id="rfCirclesMenu" class="rf-circles-menu">
         <summary title="Choose visible model and aircraft circles independently of the RF calculation">Circles <span aria-hidden="true">▾</span></summary>
         <div class="rf-circles-dropdown" role="group" aria-label="RF circle visibility settings">
-         <strong>RF map layers · display only</strong>
-         <label class="rf-circles-live"><input id="rfModelCircle" type="checkbox" checked> Selected model circle <small>Available only for geometric feasible areas</small></label>
-         <label class="rf-circles-best"><input id="rfBestCircle" type="checkbox" checked> BEST Fit circle <small>Tightest session spread · purple</small></label>
-         <label><input id="rfFill" type="checkbox" checked> Selected model feasible area <small>Geometric region only; weighted is a point diagnostic</small></label>
+         <strong>RF model layers · select any combination</strong>
+         <small id="rfCircleLayerStatus" class="rf-circles-footnote" role="status">Choose multiple models. Each enabled layer is evaluated independently; missing records are never replaced with fake circles.</small>
+         <label class="rf-circles-live"><input id="rfLayerLive10" type="checkbox" checked> LIVE · 10 min <small>Cyan · most recent genuine local RF observations</small></label>
+         <label class="rf-circles-xhour"><input id="rfLayerLiveX" type="checkbox"> X-hour LIVE <small>Blue · adjustable X-hour window (default 2 h)</small></label>
+         <label class="rf-circles-best"><input id="rfBestCircle" type="checkbox" checked> BEST Fit <small>Purple · saved narrowest session model</small></label>
+         <label class="rf-circles-history"><input id="rfLayerHistory" type="checkbox"> HISTORY <small>Green · all recorded RF constraints</small></label>
+         <label class="rf-circles-weighted"><input id="rfLayerHistoryBest" type="checkbox"> HISTORY BEST <small>Amber · weighted center ONLY; no manufactured radius</small></label>
+         <div class="rf-layer-actions">
+          <button id="rfLayerAll" type="button">Select all</button>
+          <button id="rfLayerNone" type="button">Hide all</button>
+          <button id="rfLayerRefresh" type="button">Recalculate layers</button>
+         </div>
+         <input id="rfModelCircle" type="checkbox" checked hidden aria-hidden="true">
+         <label><input id="rfFill" type="checkbox" checked> Active model feasible area <small>Only the active geometric model, not weighted history</small></label>
          <label class="rf-circles-aircraft">Aircraft horizon circles
           <select id="rfAircraftCircleMode" aria-label="Aircraft RF horizon circle visibility">
            <option value="none" selected>Hidden (default)</option>
@@ -115,7 +125,7 @@
            <option value="all">All genuine RF aircraft</option>
           </select>
          </label>
-         <small class="rf-circles-footnote">All circles are modeled geometric bounds, NOT measured GPS error or calibrated confidence. LIVE and BEST are independent.</small>
+         <small class="rf-circles-footnote">Multiple model overlays may be visible simultaneously. RF model spread is NOT GPS accuracy. HISTORY BEST shows an optimized point, never an invented circle.</small>
          <button id="rfCirclesDone" class="rf-circles-done" type="button">Done</button>
         </div>
        </details>
@@ -251,7 +261,7 @@
       <button id="rfRecalculate" type="button">Recalculate now</button>
      </div>
      <p id="rfModeCalculation" class="muted" role="status">Waiting for actual RF observations.</p>
-     <label class="rf-model-compare"><input id="rfCompareModels" type="checkbox"> Compare previously calculated models <small>(thin colored circles, active model stays prominent)</small></label>
+     <label class="rf-model-compare" hidden><input id="rfCompareModels" type="checkbox"> Legacy comparison setting (superseded by independent Circles layers)</label>
      <details class="rf-archive-controls" open>
       <summary>History Recorder · separate persistent RF dataset</summary>
       <p class="muted">Opt-in only. No Internet aircraft, audio, IQ or full aircraft JSON. Receiver must stay in one physical location within each session. No automatic data deletion.</p>
