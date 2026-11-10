@@ -111,6 +111,7 @@ const TihuluFlightJourney=(()=>{
   return {...provider,origin:provider.origin||lookedUp.origin,
    destination:provider.destination||lookedUp.destination,
    midpoint:provider.midpoint||lookedUp.midpoint,
+   times:{...(lookedUp.times||{}),...(provider.times||{})},
    source:provider.origin&&provider.destination?provider.source:
     provider.source+" + "+lookedUp.source};
  }
