@@ -95,6 +95,7 @@ test("BEST circle and BEST center survive loss of LIVE model",()=>{
   $:id=>checked[id]||{checked:false},
   ctx,canvas:{clientWidth:600,clientHeight:300},Math,Number,
   rfDrawRing:(r,c)=>rings.push({radius:r.radiusKm,color:c}),
+  rfHexToRgba:(hex,alpha)=>hex,
   rfPlaneColor:()=>"#aaaaff",
   rfDrawGaussianBand:()=>{throw Error("Gaussian should not draw in NONE mode");},
   rfFeasibleHull:()=>[],rfMapXy:()=>[120,80],xy:()=>[120,80],
