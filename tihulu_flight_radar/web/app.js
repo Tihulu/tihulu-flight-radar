@@ -1407,6 +1407,8 @@ function paintRfLocator(result){
  const colors={live10:"#89edfa",liveX:"#80b2ff",best:"#d8b8ff",
   history:"#79e0b1",historyBest:"#edbc73"};
  const selected=(typeof window!=="undefined"&&window.TihuluRFV2?.getMode())||"live10";
+ if(selected==="historyBest"&&window.TihuluRFV2?.layerEnabled&&
+    !window.TihuluRFV2.layerEnabled("historyBest"))return;
  ctx.save();ctx.fillStyle="rgba(8,34,45,.98)";
  ctx.strokeStyle=colors[selected]||"#89edfa";
  ctx.lineWidth=2.5;ctx.setLineDash([]);
@@ -2396,13 +2398,22 @@ function paintRfCoverage(result){
  }
  if(result.status==="region"&&rfLocatorActive){
   const r=result.region;
-  const hull=rfFeasibleHull(result).map(rfMapXy);
+  const selectedMode=typeof window!=="undefined"?
+   window.TihuluRFV2?.getMode():null;
+  const activeLayerVisible=typeof window!=="undefined"&&
+   window.TihuluRFV2?.layerEnabled?
+    window.TihuluRFV2.layerEnabled(selectedMode):
+    $("rfModelCircle").checked;
+  const accents={live10:"#55d9ea",liveX:"#80b2ff",
+   best:"#d8b8ff",history:"#79e0b1",historyBest:"#edbc73"};
+  const accent=accents[selectedMode]||"#55d9ea";
+  const hull=activeLayerVisible?rfFeasibleHull(result).map(rfMapXy):[];
   if(hull.length>=3){
    ctx.beginPath();
    hull.forEach((p,i)=>{if(i===0)ctx.moveTo(p[0],p[1]);else ctx.lineTo(p[0],p[1])});
    ctx.closePath();
    if($("rfFill").checked){
-    ctx.fillStyle="rgba(30,178,205,.17)";ctx.fill();
+    ctx.fillStyle=rfHexToRgba(accent,.17);ctx.fill();
    }
    if($("rfHatch").checked){
     ctx.save();ctx.clip();
@@ -2410,7 +2421,7 @@ function paintRfCoverage(result){
     const left=Math.max(-100,Math.min(...xs)),right=Math.min(canvas.clientWidth+100,Math.max(...xs));
     const top=Math.max(-100,Math.min(...ys)),bottom=Math.min(canvas.clientHeight+100,Math.max(...ys));
     const dy=bottom-top;
-    ctx.strokeStyle="rgba(100,225,238,.56)";ctx.lineWidth=1.2;
+    ctx.strokeStyle=rfHexToRgba(accent,.56);ctx.lineWidth=1.2;
     for(let offset=left-dy,i=0;offset<=right+dy&&i<350;offset+=12,i++){
      ctx.beginPath();ctx.moveTo(offset,top);ctx.lineTo(offset+dy,bottom);ctx.stroke();
     }
@@ -2422,21 +2433,15 @@ function paintRfCoverage(result){
     ctx.beginPath();
     hull.forEach((p,i)=>{if(i===0)ctx.moveTo(p[0],p[1]);else ctx.lineTo(p[0],p[1])});
     ctx.closePath();
-    ctx.strokeStyle="rgba(104,230,238,.88)";ctx.lineWidth=2.2;ctx.stroke();
+    ctx.strokeStyle=rfHexToRgba(accent,.88);ctx.lineWidth=2.2;ctx.stroke();
    }
   }
-  const selectedMode=typeof window!=="undefined"?
-   window.TihuluRFV2?.getMode():null;
-  const activeLayerVisible=typeof window!=="undefined"&&
-   window.TihuluRFV2?.layerEnabled?
-    window.TihuluRFV2.layerEnabled(selectedMode):
-    $("rfModelCircle").checked;
   if(activeLayerVisible&&selectedMode!=="best"&&
      Number.isFinite(r.extentKm)&&r.extentKm>0){
    // Approximate maximum sampled distance from the *modeled* centroid.
    // This is deliberately NOT called a confidence/error radius.
    rfDrawRing({lat:r.lat,lon:r.lon,radiusKm:r.extentKm},
-    "rgba(85,217,234,.95)",[10,6],2.3);
+    rfHexToRgba(accent,.95),[10,6],2.3);
    // The clickable, high-contrast LIVE pin carries the short label.
    // Circle-only view must not draw a second unreadable text overlay.
   }
