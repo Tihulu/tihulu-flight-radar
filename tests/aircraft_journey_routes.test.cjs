@@ -54,7 +54,7 @@ test("AirLabs fields use UTC/UNIX times without interpreting local airport clock
   "local clock strings without date/timezone must not be treated as UTC");
  const js=fs.readFileSync(path.join(root,"app.js"),"utf8");
  assert.match(js,/dep_iata:a\.dep_iata,dep_icao:a\.dep_icao/);
- assert.match(js,/arr_time_ts,arr_estimated_ts,arr_actual_ts/);
+ assert.match(js,/arr_time_ts:a\.arr_time_ts,arr_estimated_ts:a\.arr_estimated_ts/);
 });
 test("explicit local radio ground-to-air state transition is observed and never an actual gate time",()=>{
  const epoch=Date.now();
