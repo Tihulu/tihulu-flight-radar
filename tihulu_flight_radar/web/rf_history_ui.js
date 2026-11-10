@@ -7,15 +7,79 @@
  const labels={live10:"LIVE · 10 min",liveX:"X-hour LIVE",best:"BEST Fit · session",
   history:"HISTORY · all",historyBest:"HISTORY BEST · weighted"};
  let mode="live10",latest=null,latestMode=null,calculated=0;
- const modelCache=new Map();
+ const modelCache=new Map(),modelInfo=new Map();
+ const layerCheckboxes={live10:"rfLayerLive10",liveX:"rfLayerLiveX",
+  best:"rfBestCircle",history:"rfLayerHistory",
+  historyBest:"rfLayerHistoryBest"};
+ const layerOrder=["live10","liveX","best","history","historyBest"];
+ const taskQueue=[];
+ let activeTask=null;
+ const enabled=id=>!!$(layerCheckboxes[id])?.checked;
+ const keyFor=id=>id==="liveX"?"liveX:"+$("rfHours").value:
+  id==="history"||id==="historyBest"?
+   id+":session:"+$("rfHistorySession").value:id;
+ const interval=()=>$("rfHistorySpeed").value==="performance"?15000:60000;
+ function layerState(){
+  const on=layerOrder.filter(enabled);
+  const calculated=on.filter(id=>id==="best"?
+   !!rfBest:!!modelCache.get(id)&&modelInfo.get(id)?.key===keyFor(id)&&
+    ["region","weighted"].includes(modelCache.get(id)?.status));
+  $("rfCircleLayerStatus").textContent=
+   on.length+" selected · "+calculated.length+" model(s) available"+
+   (activeTask?" · calculating "+(labels[activeTask]||activeTask):"")+
+   (on.some(id=>id==="historyBest")?
+    " · HISTORY BEST is a point only, NOT a radius":"");
+ }
+ function stopTasks(){
+  taskQueue.length=0;activeTask=null;client.cancel();
+ }
+ function pump(){
+  if(!rfLocatorActive||activeTask||client.state().calculating)return;
+  const next=taskQueue.shift();
+  if(!next){layerState();return;}
+  activeTask=next;
+  client.settings(next,$("rfHours").value,$("rfHistorySpeed").value);
+  layerState();
+  void client.calculate(next,Number($("rfHours").value),{force:true})
+   .catch(error=>{
+    activeTask=null;
+    $("rfModeCalculation").textContent="RF layer: "+String(error.message||error);
+    pump();
+   });
+ }
+ function enqueue(id,force=false){
+  if(!rfLocatorActive||id==="best"||!layerOrder.includes(id))return;
+  const info=modelInfo.get(id),key=keyFor(id);
+  if(!force&&info?.key===key&&
+      Date.now()-info.at<interval())return;
+  if(activeTask===id||taskQueue.includes(id))return;
+  taskQueue.push(id);pump();
+ }
+ function calculateVisible(force=false){
+  if(!rfLocatorActive)return;
+  // Active model is computed even if the corresponding map circle is hidden;
+  // display-only layer toggles never change what the solver measures.
+  enqueue(mode,force);
+  for(const id of layerOrder)
+   if(id!==mode&&enabled(id))enqueue(id,force);
+  layerState();
+ }
  const client=TihuluRFHistoryClient.create({
   api:(url,options)=>api(url,options),
   verified:(row,now)=>TihuluRFCoverage.recordedCircle(row,now),
   formatStatus:msg=>{$("rfModeCalculation").textContent=msg;},
   onResult:(kind,result,meta)=>{
-   if(kind!==mode)return;
-   latest=result;latestMode=kind;calculated=meta.at;
-   modelCache.set(kind,result);show(result);paint();
+   modelCache.set(kind,result);
+   modelInfo.set(kind,{at:meta.at,key:keyFor(kind)});
+   if(kind===mode){
+    latest=result;latestMode=kind;calculated=meta.at;show(result);
+   }
+   paint();
+  },
+  onSettled:(kind,ok)=>{
+   if(activeTask===kind)activeTask=null;
+   if(!ok)modelInfo.set(kind,{at:Date.now(),key:keyFor(kind)});
+   layerState();pump();
   }
  });
  function display(legacy){
@@ -83,80 +147,114 @@
  }
  function calculate(force=false){
   if(!rfLocatorActive)return;
-  if(mode==="best"){show(display());paint();return;}
-  client.settings(mode,$("rfHours").value,$("rfHistorySpeed").value);
-  void client.calculate(mode,Number($("rfHours").value),{force});
+  if(mode==="best"){show(display());paint();}
+  else enqueue(mode,force);
+  calculateVisible(force);
  }
  function switchMode(){
-  mode=$("rfMode").value;
-  latest=null;latestMode=null;calculated=0;
-  client.cancel();
-  show(display());
-  calculate(true);paint();
+  mode=$("rfMode").value;stopTasks();
+  const cached=modelCache.get(mode),info=modelInfo.get(mode);
+  latest=info?.key===keyFor(mode)?cached:null;
+  latestMode=latest?mode:null;calculated=info?.at||0;
+  show(display());calculate(true);paint();
  }
  $("rfMode").addEventListener("change",switchMode);
  $("rfHours").addEventListener("change",()=>{
-  if(mode==="liveX"){client.cancel();latest=null;latestMode=null;calculate(true);}
-  show(display());paint();
+  stopTasks();modelCache.delete("liveX");modelInfo.delete("liveX");
+  if(mode==="liveX"){latest=null;latestMode=null;}
+  show(display());calculateVisible(true);paint();
  });
  $("rfHistorySpeed").addEventListener("change",()=>{
-  client.settings(mode,$("rfHours").value,$("rfHistorySpeed").value);
+  if(!activeTask)
+   client.settings(mode,$("rfHours").value,$("rfHistorySpeed").value);
   $("rfModeCalculation").textContent=
    "Processing profile: "+$("rfHistorySpeed").selectedOptions[0].textContent;
  });
  $("rfRecalculate").addEventListener("click",()=>{
-  client.cancel();calculate(true);
+  stopTasks();calculateVisible(true);
+ });
+ for(const id of layerOrder){
+  $(layerCheckboxes[id]).addEventListener("change",()=>{
+   if(id!=="best"&&enabled(id))enqueue(id,false);
+   layerState();paint();
+  });
+ }
+ $("rfLayerAll").addEventListener("click",()=>{
+  for(const id of layerOrder)$(layerCheckboxes[id]).checked=true;
+  persistRfViewPreferences();calculateVisible(false);paint();
+ });
+ $("rfLayerNone").addEventListener("click",()=>{
+  for(const id of layerOrder)$(layerCheckboxes[id]).checked=false;
+  persistRfViewPreferences();layerState();paint();
+ });
+ $("rfLayerRefresh").addEventListener("click",()=>{
+  stopTasks();calculateVisible(true);paint();
  });
  $("rfRecorderToggle").addEventListener("click",async()=>{
   const button=$("rfRecorderToggle");button.disabled=true;
   try{
    const stat=await client.statusNow();
    archiveStatus(await client.recordAction(stat.recording?"pause":"start"));
-   if(mode==="history"||mode==="historyBest"){
-    client.cancel();latest=null;latestMode=null;calculate(true);
+   if(mode==="history"||mode==="historyBest"||
+      enabled("history")||enabled("historyBest")){
+    stopTasks();modelCache.delete("history");modelCache.delete("historyBest");
+    modelInfo.delete("history");modelInfo.delete("historyBest");
+    latest=null;latestMode=null;calculateVisible(true);
    }
   }catch(err){$("rfArchiveStatus").textContent="Recorder: "+String(err.message||err);}
   finally{button.disabled=false;}
  });
  $("rfHistorySession").addEventListener("change",()=>{
   try{
-   client.selectSession(Number($("rfHistorySession").value));
+   stopTasks();client.selectSession(Number($("rfHistorySession").value));
    modelCache.delete("history");modelCache.delete("historyBest");
+   modelInfo.delete("history");modelInfo.delete("historyBest");
    $("rfCompareModels").checked=false;
-   latest=null;latestMode=null;
-   if(mode==="history"||mode==="historyBest")calculate(true);
-   show(display());paint();
+   if(mode==="history"||mode==="historyBest"){latest=null;latestMode=null;}
+   calculateVisible(true);show(display());paint();
   }catch(err){$("rfArchiveStatus").textContent="Session selection: "+err.message;}
  });
  $("rfCompareModels").addEventListener("change",()=>paint());
  $("rfNewSession").addEventListener("click",async()=>{
   if(!window.confirm("Start a NEW physical receiver History session? Old RF records remain stored but will not be mixed with the new antenna location."))return;
   try{archiveStatus(await client.recordAction("new-session"));
-   client.selectSession(0);client.resetRecent();
+   stopTasks();client.selectSession(0);client.resetRecent();
    // Prevent old antenna geometry and previous BEST from leaking into a
    // different physical receiver location after an explicit new session.
    rfHistory.clear();rfHistoryRevision++;clearRfBest();
-   modelCache.clear();$("rfCompareModels").checked=false;
+   modelCache.clear();modelInfo.clear();
+   $("rfCompareModels").checked=false;
    $("rfHistorySession").value="0";
-   latest=null;latestMode=null;calculate(true);
+   latest=null;latestMode=null;calculateVisible(true);
   }catch(err){$("rfArchiveStatus").textContent="New session: "+String(err.message||err);}
  });
  async function ingest(rows){
   await client.ingest(rows);
-  if(rfLocatorActive&&mode!=="best"&&client.shouldRefresh())calculate();
+  if(rfLocatorActive&&$("rfHistorySpeed").value!=="manual")
+   calculateVisible(false);
  }
  function tick(){
   if(document.hidden||!state.connected||!rfLocatorActive)return;
-  if(mode!=="best"&&client.shouldRefresh())calculate();
+  if($("rfHistorySpeed").value!=="manual")calculateVisible(false);
  }
  function comparisons(){
-  if(!$("rfCompareModels").checked)return [];
-  return [...modelCache.entries()].filter(([id,r])=>
-   id!==mode&&r?.status==="region"&&Number.isFinite(r.region?.extentKm))
-   .map(([id,result])=>({id,result}));
+  return layerOrder.filter(id=>enabled(id)&&id!=="best"&&id!==mode)
+   .flatMap(id=>{
+    const result=modelCache.get(id),info=modelInfo.get(id);
+    return info?.key===keyFor(id)&&
+     ["region","weighted"].includes(result?.status)&&result.region?
+      [{id,result}]:[];
+   });
  }
- window.TihuluRFV2={display,show,ingest,tick,comparisons,getMode:()=>mode,client};
- show(display());
+ function layerModel(id){
+  if(id==="best")return rfBest;
+  const info=modelInfo.get(id);
+  return info?.key===keyFor(id)?modelCache.get(id):null;
+ }
+ window.TihuluRFV2={display,show,ingest,tick,comparisons,layerModel,
+  layerEnabled:enabled,getMode:()=>mode,client};
+ show(display());layerState();
+ calculateVisible(false);
  void client.statusNow().then(archiveStatus).catch(err=>{
   $("rfArchiveStatus").textContent="Recorder not yet connected: "+err.message;
  });
