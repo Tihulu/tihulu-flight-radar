@@ -585,3 +585,27 @@ html:not(.native) .offline-map-controls{display:none}
 /* A receiver observation must stay visually distinct from online timetable. */
 .tablewrap .journey-radio-time{color:#7fdec5;font-weight:600;
  margin-top:5px;padding-top:3px;border-top:1px dashed #37635b}
+
+
+/* Circles was clipped by .map-panel{overflow:hidden}, especially Qt/WebEngine.
+   An opened menu is portaled to document.body and positioned inside the
+   actual viewport. No overlay may lie behind the receiver sidebar. */
+.rf-circles-dropdown.rf-circles-portaled{position:fixed!important;left:8px;
+ top:8px;right:auto;bottom:auto;z-index:31000!important;
+ width:min(340px,calc(100vw - 16px));max-height:calc(100dvh - 16px);
+ padding:11px;overscroll-behavior:contain;overflow-y:auto;
+ box-shadow:0 16px 48px rgba(0,0,0,.72);
+ scrollbar-width:thin}
+.rf-circles-dropdown>label.rf-circles-xhour{border-left:3px solid #85b3ff}
+.rf-circles-dropdown>label.rf-circles-history{border-left:3px solid #63dcac}
+.rf-circles-dropdown>label.rf-circles-weighted{border-left:3px solid #edbd71}
+.rf-circles-dropdown>label.rf-circles-xhour input{accent-color:#85b3ff}
+.rf-circles-dropdown>label.rf-circles-history input{accent-color:#63dcac}
+.rf-circles-dropdown>label.rf-circles-weighted input{accent-color:#edbd71}
+.rf-circles-dropdown .rf-layer-actions{display:grid;
+ grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin:4px 0}
+.rf-circles-dropdown .rf-layer-actions button{font-size:11px;padding:8px 3px;
+ white-space:normal;line-height:1.2;text-align:center}
+.rf-circles-dropdown input[hidden],.rf-model-compare[hidden]{display:none!important}
+@media(max-width:420px){.rf-circles-dropdown.rf-circles-portaled{
+ width:calc(100vw - 16px)}}
