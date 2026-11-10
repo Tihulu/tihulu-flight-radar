@@ -506,3 +506,78 @@ html:not(.native) .offline-map-controls{display:none}
 .aircraft-table-title{flex-wrap:wrap}
 @media(max-width:620px){.aircraft-journey{margin:7px 0;padding:8px}
  .aircraft-popup{max-height:80vh}}
+
+
+/* Readable aircraft details: the old fixed 360px sidebar forced a clipped
+ * six-column table and a horizontal scrollbar. The map now shares width
+ * with an adjustable ~580px information pane. */
+:root{--flight-side-width:580px}
+.layout{grid-template-columns:minmax(0,1fr) 10px minmax(0,var(--flight-side-width));
+ gap:7px}
+.aircraft-side-splitter{width:10px;min-width:10px;border-radius:8px;
+ align-self:stretch;position:relative;cursor:col-resize;touch-action:none;
+ background:linear-gradient(90deg,transparent 0 3px,#33586e 3px 7px,transparent 7px)}
+.aircraft-side-splitter:hover,.aircraft-side-splitter:focus-visible{
+ background:linear-gradient(90deg,transparent 0 2px,#7ad5ed 2px 8px,transparent 8px);
+ outline:2px solid #2b5973;outline-offset:1px}
+.aircraft-side-splitter:active{background:#346c87}
+.aircraft-load-buttons{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.aircraft-load-buttons button{font-size:11px;padding:7px 9px}
+#aircraftRadioLoad{border-color:#419884;background:#1a4a47;color:#d1faed}
+#aircraftRadioLoad:hover{background:#23665a}
+.aircraft-table-title{gap:10px;align-items:center;flex-wrap:wrap}
+.aircraft-table-title h2{margin:6px 0!important;flex:0 0 auto}
+.aircraft-table-title label{margin-left:auto}
+.aircraft-load-status{font-size:11px;color:#a5c8d6;line-height:1.4;
+ border-bottom:1px solid #3b5368;margin:3px 0 10px;padding:0 0 7px}
+.tablewrap{max-height:min(55vh,580px);overscroll-behavior:contain;
+ scrollbar-gutter:stable;overflow-y:auto;overflow-x:hidden}
+.tablewrap table{table-layout:auto}
+.tablewrap th,.tablewrap td{vertical-align:top;overflow-wrap:anywhere}
+.tablewrap .journey-table{min-width:125px}
+.side{scrollbar-gutter:stable}
+.radar-expanded .layout{grid-template-columns:minmax(0,1fr) 10px minmax(0,var(--flight-side-width));gap:7px}
+.radar-expanded .tablewrap{max-height:min(47vh,490px)}
+@container (max-width:680px){
+ .tablewrap{overflow-x:hidden}
+ .tablewrap table,.tablewrap tbody{display:block;width:100%;min-width:0}
+ .tablewrap thead{display:none}
+ .tablewrap tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  gap:5px 9px;margin:0 0 9px;padding:10px 11px;
+  border:1px solid #3c576a;border-radius:10px;background:#142b3e}
+ .tablewrap tr.selected{background:#244555;border-color:#66ccd6}
+ .tablewrap td{display:block;min-width:0;border:none;padding:2px 3px;
+  white-space:normal;overflow-wrap:anywhere;line-height:1.45}
+ .tablewrap td::before{content:attr(data-label);display:block;font-size:10px;
+  margin-bottom:3px;font-weight:650;color:#96bfd6}
+ .tablewrap td:nth-child(1){grid-column:1;grid-row:1}
+ .tablewrap td:nth-child(4){grid-column:2;grid-row:1}
+ .tablewrap td:nth-child(2){grid-column:1;grid-row:2}
+ .tablewrap td:nth-child(3){grid-column:2;grid-row:2}
+ .tablewrap td:nth-child(5){grid-column:1/-1;grid-row:3;
+  border-top:1px solid #36596d;margin-top:4px;padding-top:7px}
+ .tablewrap td:nth-child(6){grid-column:1/-1;grid-row:4}
+ .tablewrap td:nth-child(6) button{width:100%;padding:7px 10px}
+ .tablewrap .journey-table{min-width:0}
+ .tablewrap .journey-table strong{font-size:12px;line-height:1.35}
+ .tablewrap .journey-table small{font-size:10px;line-height:1.45}
+}
+@media(max-width:1150px){
+ .layout{grid-template-columns:minmax(0,1fr)}
+ .aircraft-side-splitter{display:none}
+ .side{max-height:none}
+ .tablewrap{max-height:60vh}
+}
+@media(max-width:800px){
+ .radar-expanded .layout{grid-template-columns:minmax(0,1fr);
+  grid-template-rows:minmax(0,1fr) minmax(300px,44dvh)}
+ .radar-expanded .side{height:auto;max-height:none;min-height:0}
+ .radar-expanded .aircraft-side-splitter{display:none}
+ .radar-expanded .tablewrap{max-height:36dvh}
+}
+@media(max-width:430px){
+ .aircraft-load-buttons{width:100%}
+ .aircraft-load-buttons button{flex:1 1 0;padding:8px 5px}
+ .aircraft-table-title label{margin-left:0}
+ .tablewrap{scrollbar-gutter:auto}
+}
