@@ -216,14 +216,21 @@
    </details>
    <div class="mapfooter"><span id="mapLabel">Germany default view · no receiver position assumed</span><span id="rfMapCoordinates" class="rf-map-coordinates" aria-live="polite">RF model center: waiting for 4+ local RF aircraft</span><span><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a> · <span id="sourceCredits">Source attribution shown after connection</span></span></div>
   </section>
+  <div id="aircraftSideSplitter" class="aircraft-side-splitter" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Resize aircraft and receiver panel" aria-valuemin="380" aria-valuemax="800" aria-valuenow="580" title="Drag left/right to resize panel · double click to reset"></div>
   <aside class="side">
    <h2>Receiver</h2>
    <p id="receiverStatus" class="muted">WebUSB can receive directly in supported browsers. A paired bridge is optional.</p>
    <div class="buttons"><button id="start">Start</button><button id="stop">Stop</button><button id="restart">Restart</button></div>
    <h2>Sources</h2><p id="feedStatus" class="muted">No source connected.</p>
-   <div class="aircraft-table-title"><h2>Aircraft <span id="visibleCount" class="muted">0</span></h2><button id="aircraftRoutesLoad" type="button" title="Fetch routes for up to 30 visible callsigns, only when requested.">Load routes · Internet</button>
+   <div class="aircraft-table-title">
+    <h2>Aircraft <span id="visibleCount" class="muted">0</span></h2>
+    <div class="aircraft-load-buttons">
+     <button id="aircraftRadioLoad" type="button" title="Refresh real local readsb / WebUSB antenna observations; never guess departure airport or flight timetable">Load · Radio</button>
+     <button id="aircraftRoutesLoad" type="button" title="Fetch callsign route data for up to 30 visible aircraft on request">Load · Internet</button>
+    </div>
     <label for="unitSystem">Units <select id="unitSystem" aria-label="Flight information units"><option value="aviation">Aviation · ft / kt</option><option value="metric">Metric · m / km/h</option></select></label>
    </div>
+   <p id="aircraftLoadStatus" class="aircraft-load-status" role="status" aria-live="polite">Radio: first/last heard and possible ground↔air transitions · Internet: airports and provider times. Both on demand.</p>
    <div class="tablewrap"><table><thead><tr><th>Flight / ICAO</th><th id="altitudeColumn">Altitude (ft)</th><th id="speedColumn">Speed (kt)</th><th>Source</th><th>From → To / times</th><th>Info</th></tr></thead><tbody id="aircraftRows"></tbody></table></div>
    <section class="rf-picked-panel" aria-label="Persistent selected aircraft">
     <div class="rf-picked-head"><strong>Selected aircraft <span id="rfPickedCount">0</span></strong><button id="rfPickedClear" type="button">Clear selected</button></div>
