@@ -25,7 +25,7 @@ const TihuluRFHistoryClient=(()=>{
    req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);
   });
  }
- function client({api,verified,formatStatus,onResult}){
+ function client({api,verified,formatStatus,onResult,onSettled}){
   let db=null,enabled=false,session=0,viewSession=0,status={},recent=[],last=new Map();
   const newestDirectRf=new Map();
   let startedHere=false;
@@ -197,7 +197,11 @@ const TihuluRFHistoryClient=(()=>{
       notify("History "+d.phase+" · "+d.processed.toLocaleString()+" / "+
        d.total.toLocaleString()+" observations");
      }
-     if(d.type==="error"){calculating=false;notify("RF solver: "+d.error);}
+     if(d.type==="error"){
+      calculating=false;notify("RF solver: "+d.error);
+      w.terminate();if(worker===w)worker=null;
+      onSettled?.(mode,false);
+     }
      if(d.type==="result"){
       calculating=false;currentResult=d.result;lastCalculation=Date.now();
       if(mode==="history"||mode==="historyBest"){
@@ -208,9 +212,14 @@ const TihuluRFHistoryClient=(()=>{
        d.result.status+(d.result.status==="weighted"
        ?" · weighted diagnostic, NOT GPS":""));
       w.terminate();if(worker===w)worker=null;
+      onSettled?.(mode,true);
      }
     };
-    w.onerror=e=>{calculating=false;notify("History worker error: "+e.message);};
+    w.onerror=e=>{
+     calculating=false;notify("History worker error: "+e.message);
+     w.terminate();if(worker===w)worker=null;
+     onSettled?.(mode,false);
+    };
     w.postMessage({type:"clear",job:task});
     const send=rows=>{
      if(job!==task)return;
@@ -242,7 +251,11 @@ const TihuluRFHistoryClient=(()=>{
     if(job===task)w.postMessage({
      type:"solve",job:task,mode,hours,nowMs:Date.now()});
    }catch(error){
-    if(job===task){cancel();notify("History unavailable: "+String(error.message||error));}
+    if(job===task){
+     const failedMode=mode;cancel();
+     notify("History unavailable: "+String(error.message||error));
+     onSettled?.(failedMode,false);
+    }
    }
   }
   function settings(nextMode,nextHours,nextProfile){
