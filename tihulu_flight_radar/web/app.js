@@ -876,6 +876,7 @@ const rfPickedPlanes=new Set();
 let rfAutoSelectNewPlanes=false; // user can always uncheck an individual plane
 let rfAircraftListSignature="";
 const RF_VIEW_CHECKBOXES=["rfFill","rfHatch","rfModelCircle","rfBestCircle",
+ "rfLayerLive10","rfLayerLiveX","rfLayerHistory","rfLayerHistoryBest",
  "rfModelPin","rfBestPin","rfGaussianBand"];
 function restoreRfViewPreferences(){
  try{
