@@ -7,7 +7,7 @@
  const $=id=>document.getElementById(id);
  const F=TihuluFlightJourney,cache=new Map(),pending=new Map();
  const flightDetails=new Map(),flightPending=new Map();
- let batchSerial=0;
+ let batchSerial=0,radioLoaded=false,radioLoadedAt=0;
  const MAX_AGE=30*60*1000;
  function cached(call){
   const row=cache.get(call);
@@ -61,12 +61,15 @@
  }
  function row(a){
   const j=flight(a),radio=F.radioInfo(a);
-  let time=F.timeSummary(j);
-  if(time==="Timetable unavailable"&&radio?.departure)
-   time="RF ground → air "+F.formatTime(radio.departure);
-  if(time==="Timetable unavailable"&&radio?.arrival)
-   time="RF air → ground "+F.formatTime(radio.arrival);
-  return {route:F.shortRoute(j),time};
+  const time=F.timeSummary(j);
+  // The Radio button reveals receiver observation times separately from
+  // confirmed provider schedules. Neither is a runway/gate timestamp.
+  const lastRadio=radioLoaded&&radio&&radioLoadedAt&&
+   radio.lastAt<=Date.now()+12000?
+   radio.arrival?"R · air → ground "+F.formatTime(radio.arrival):
+   radio.departure?"R · ground → air "+F.formatTime(radio.departure):
+   "R · heard "+F.formatTime(radio.lastAt):null;
+  return {route:F.shortRoute(j),time,radio:lastRadio};
  }
  async function resolve(a,{force=false}={}){
   const call=F.callsign(a);
@@ -182,6 +185,58 @@
   const current=state.data.find(a=>a.hex===state.selected);
   if(current)render(current);
  }
+ async function radioSnapshot(){
+  // This intentionally does NOT turn on a receiver or replace map sources.
+  // In native/paired mode we request genuine readsb-only aircraft from the
+  // already-connected private bridge. No Internet merging is permitted.
+  if(state.connectionKind==="bridge"&&state.base&&state.token){
+   const query=new URLSearchParams({
+    mode:"antenna",lat:String(state.queryLat),lon:String(state.queryLon),
+    radius:String(state.queryRadius)});
+   const payload=await api("/api/aircraft?"+query);
+   const status=payload.sources?.antenna?.state||"unknown";
+   const rows=(Array.isArray(payload.aircraft)?payload.aircraft:[])
+    .filter(r=>Array.isArray(r.sources)&&r.sources.includes("antenna")&&
+     r.observations?.antenna&&Number.isFinite(r.observations.antenna.seen)&&
+     r.observations.antenna.seen<=12);
+   return {rows,status};
+  }
+  // WebUSB is already controlled elsewhere; never auto-claim SDR hardware.
+  if(state.connectionKind==="usb"){
+   const age=Date.now()-(state.usbSnapshot?.updatedAt||0);
+   if(age>45000)return {rows:[],status:"USB receiver has no fresh frames"};
+   const rows=(state.usbSnapshot.aircraft||[]).filter(
+    r=>Number.isFinite(r.seen)&&r.seen>=0&&r.seen<=12).map(r=>({
+     ...r,sources:["antenna"],observations:{antenna:{...r}}
+    }));
+   return {rows,status:"WebUSB local receiver"};
+  }
+  return {rows:[],status:"No active local SDR receiver; Internet aircraft cannot supply RF observations"};
+ }
+ $("aircraftRadioLoad").addEventListener("click",async()=>{
+  const button=$("aircraftRadioLoad");button.disabled=true;
+  const statusEl=$("aircraftLoadStatus");
+  statusEl.textContent="Loading fresh local antenna observations only…";
+  try{
+   const data=await radioSnapshot();
+   F.observeRadio(data.rows);
+   radioLoaded=true;radioLoadedAt=Date.now();
+   renderTable();
+   const n=data.rows.length,tracked=data.rows.filter(a=>F.radioInfo(a)).length;
+   const transitions=data.rows.filter(a=>{
+    const info=F.radioInfo(a);return !!(info?.departure||info?.arrival);
+   }).length;
+   statusEl.textContent=n?
+    "Radio refreshed: "+n+" genuine local aircraft; "+tracked+
+    " tracked · "+transitions+" observed ground/air transitions. "+
+    "Displayed times are RF observations, NOT flight schedules.":
+    "Radio: "+data.status+". No airport or departure time was inferred.";
+   button.textContent="Refresh · Radio";
+  }catch(error){
+   statusEl.textContent="Radio load failed: "+String(error?.message||error).slice(0,130)+
+    " · existing observations retained.";
+  }finally{button.disabled=false;}
+ });
  $("popupJourneyRefresh").addEventListener("click",()=>{
   const found=state.data.find(a=>a.hex===state.selected);
   if(!found)return;
