@@ -1248,21 +1248,60 @@ function renderCoverageStatus(){
 }
 function bindRfCirclesMenu(){
  const menu=$("rfCirclesMenu"),summary=menu.querySelector("summary");
+ const dropdown=menu.querySelector(".rf-circles-dropdown");
+ // map-panel overflow:hidden was cropping the old absolute dropdown and
+ // placing it behind the right sidebar. Portal only while menu is open.
+ const restore=()=>{
+  if(dropdown.parentElement!==menu)menu.appendChild(dropdown);
+  dropdown.classList.remove("rf-circles-portaled");
+  dropdown.style.left="";dropdown.style.top="";
+  dropdown.style.width="";dropdown.style.maxHeight="";
+ };
+ const position=()=>{
+  if(!menu.open)return;
+  if(dropdown.parentElement!==document.body)document.body.appendChild(dropdown);
+  dropdown.classList.add("rf-circles-portaled");
+  const anchor=summary.getBoundingClientRect();
+  const vw=Math.max(260,document.documentElement.clientWidth||window.innerWidth);
+  const vh=Math.max(200,window.visualViewport?.height||window.innerHeight);
+  const width=Math.min(340,vw-16);
+  dropdown.style.width=width+"px";
+  const height=Math.min(545,vh-16,Math.max(200,dropdown.scrollHeight));
+  const below=vh-anchor.bottom-8,above=anchor.top-8;
+  let top;
+  if(below>=Math.min(260,height)||below>=above){
+   top=Math.min(vh-height-8,anchor.bottom+6);
+  }else{
+   top=Math.max(8,anchor.top-height-6);
+  }
+  top=Math.max(8,Math.min(vh-100,top));
+  dropdown.style.left=Math.max(8,Math.min(vw-width-8,anchor.left))+"px";
+  dropdown.style.top=top+"px";
+  dropdown.style.maxHeight=Math.max(90,Math.min(545,vh-top-8))+"px";
+ };
  const close=(restoreFocus=false)=>{
   if(!menu.open)return;
-  menu.open=false;
+  menu.open=false;restore();
   if(restoreFocus)summary.focus();
  };
+ menu.addEventListener("toggle",()=>{
+  if(menu.open)position();else restore();
+ });
  $("rfCirclesDone").addEventListener("click",()=>close(true));
- // Click works across Qt WebEngine, touch and normal browsers.
- document.addEventListener("click",event=>{
-  if(menu.open&&!menu.contains(event.target))close();
+ // Menus and portal share the same logical interaction boundary.
+ document.addEventListener("pointerdown",event=>{
+  if(menu.open&&!menu.contains(event.target)&&!dropdown.contains(event.target))
+   close();
  });
  document.addEventListener("keydown",event=>{
   if(menu.open&&event.key==="Escape"){
    event.preventDefault();close(true);
   }
  });
+ window.addEventListener("resize",position);
+ window.addEventListener("scroll",event=>{
+  if(event.target!==dropdown)position();
+ },true);
 }
 bindRfCirclesMenu();
 $("rfLocate").onclick=()=>{
