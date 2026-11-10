@@ -1425,6 +1425,17 @@ function paintRfLocator(result){
 let rfOpenModelKind=null;
 function rfModelCardData(kind,live=coverageResult()){
  if(!rfLocatorActive)return null;
+ if(kind.startsWith("layer:")){
+  const modelId=kind.slice(6),layer=window.TihuluRFV2?.layerModel(modelId);
+  if(!["region","weighted"].includes(layer?.status)||!layer.region)return null;
+  const r=layer.region;
+  return {kind,modelId,lat:r.lat,lon:r.lon,
+   radiusKm:Number.isFinite(r.extentKm)?r.extentKm:null,
+   rawKm:Number.isFinite(r.rawExtentKm)?r.rawExtentKm:null,
+   count:layer.count,liveCount:layer.liveCount,historyCount:layer.historyCount,
+   constraints:layer.constraintsUsed,samples:r.sampleCount??r.possibleSamples?.length??null,
+   geometry:layer.geometryStatus,updatedAtMs:Date.now(),liveResult:layer};
+ }
  if(kind==="live"){
   live=window.TihuluRFV2?.display(live)||live;
   if(!["region","weighted"].includes(live?.status)||!live.region)return null;
@@ -1508,7 +1519,7 @@ function drawRfModelMiniMap(model){
   const v=k*w/4;c.beginPath();c.moveTo(v,0);c.lineTo(v,h);
   c.moveTo(0,v);c.lineTo(w,v);c.stroke();
  }
- if(model.kind==="live"&&model.liveResult?.status==="region"){
+ if(model.liveResult?.status==="region"){
   const hull=rfFeasibleHull(model.liveResult);
   if(hull.length>=3){
    c.beginPath();
@@ -1557,12 +1568,14 @@ function renderRfModelPopup(kind,model=rfModelCardData(kind)){
  if(!model)return false;
  const popup=$("rfModelPopup");
  if(popup.parentElement!==document.body)document.body.appendChild(popup);
- popup.classList.toggle("best",kind==="best");
- const activeMode=window.TihuluRFV2?.getMode()||"live10";
+ popup.classList.toggle("best",kind==="best"||kind==="layer:best");
+ const activeMode=kind.startsWith("layer:")?kind.slice(6):
+  (window.TihuluRFV2?.getMode()||"live10");
  const titles={live10:"LIVE · 10 min",liveX:"X-hour LIVE",
   best:"BEST Fit · session",history:"HISTORY",
   historyBest:"HISTORY BEST · weighted"};
- $("rfPopupTitle").textContent=kind==="best"?"BEST SESSION Fit":titles[activeMode];
+ $("rfPopupTitle").textContent=kind==="best"?"BEST SESSION Fit":
+  titles[activeMode]||"RF model";
  $("rfPopupSub").textContent=kind==="best"?
   "Tightest legacy session model · NOT GPS":
   activeMode==="historyBest"?"Weighted radio-horizon violations · not a range":
@@ -1586,7 +1599,7 @@ function renderRfModelPopup(kind,model=rfModelCardData(kind)){
  $("rfPopupNote").textContent=
   "Modeled spread (unrounded): "+
   (Number.isFinite(model.rawKm)?"~"+model.rawKm.toFixed(1)+" km":"not defined") +
-  " km · sampled cells: "+(model.samples??"not recorded")+
+  " · sampled cells: "+(model.samples??"not recorded")+
   " · model observation: "+timestamp+
   ". Circle contains a sampled possible-area model, NOT measured range, "+
   "statistical confidence or real receiver accuracy. BEST retains the "+
