@@ -234,5 +234,51 @@ export function initFlightLocationUI({onChoose,getCurrent}){
   }catch(err){if(err.name!=="AbortError")say("Online search unavailable: "+err.message);}
   finally{clearTimeout(timeout);btn.disabled=false;}
  });
+ let lastAddressRequest=0;
+ $("placeAddressOnline").addEventListener("click",async()=>{
+  const typed=query.value.trim();
+  if(typed.length<3||typed.length>180){
+   say("Enter a street, district, landmark or address (3–180 characters).");return;
+  }
+  if(Date.now()-lastAddressRequest<1200){
+   say("Please avoid rapid repeated searches of the public Photon server.");return;
+  }
+  lastAddressRequest=Date.now();
+  const token=++requestId,button=$("placeAddressOnline");
+  button.disabled=true;
+  say("Searching Photon/OSM on demand: your entered address is sent to photon.komoot.io.");
+  const abort=new AbortController(),timeout=setTimeout(()=>abort.abort(),9000);
+  try{
+   const url=new URL("https://photon.komoot.io/api/");
+   url.searchParams.set("q",typed);url.searchParams.set("limit","10");
+   url.searchParams.set("lang","en");
+   const res=await fetch(url,{mode:"cors",credentials:"omit",
+    cache:"no-store",signal:abort.signal});
+   if(!res.ok)throw Error("HTTP "+res.status);
+   const body=await res.json();
+   if(!Array.isArray(body?.features))throw Error("Invalid Photon search response.");
+   const rows=body.features.slice(0,10).map(feature=>{
+    const p=feature?.properties||{},coords=feature?.geometry?.coordinates;
+    const a=Number(coords?.[1]),b=Number(coords?.[0]);
+    if(!validStationCoordinates(a,b))return null;
+    const countryCode=String(p.countrycode||"").toUpperCase();
+    if(country.value!=="all"&&countryCode!==country.value)return null;
+    const address=[p.name,p.street,p.housenumber,p.city||p.town||p.village,
+      p.postcode].filter(v=>typeof v==="string"||typeof v==="number")
+     .map(String).filter(Boolean);
+    return {name:[...new Set(address)].join(", ").slice(0,160)||
+      "Unknown Photon place",region:String(p.state||p.county||"").slice(0,80),
+     country:countryCode,lat:a,lon:b,provider:"photon"};
+   }).filter(Boolean);
+   if(requestId!==token||root.hidden)return;
+   listSuggestions(rows);
+   say(rows.length?rows.length+" Photon/OSM address results. Select a "+
+    "result to use its coordinates as the map search center. The antenna "+
+    "location is unchanged.":"No matching address found; try another spelling.");
+  }catch(err){
+   if(err.name!=="AbortError")say("Address search unavailable: "+err.message+
+    ". Offline towns and manual coordinates remain usable.");
+  }finally{clearTimeout(timeout);button.disabled=false;}
+ });
  return {open:showPicker,close,loadPlaces,readSavedPlace};
 }

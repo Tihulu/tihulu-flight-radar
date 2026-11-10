@@ -9,7 +9,10 @@ import argparse
 import json
 import math
 import mimetypes
+import os
+import re
 import secrets
+import tempfile
 import threading
 import time
 from http import HTTPStatus
@@ -21,7 +24,11 @@ from urllib.request import ProxyHandler, Request, build_opener
 
 from .network_sources import MultiNetworkProvider, parse_provider_selection
 from .control import ReceiverController
+from .rf_history_store import RFHistoryStore
+from .flight_route_lookup import CallsignRouteLookup
 from .core import DataError, position_is_fresh, recently_seen
+from .offline_maps import (MAP_ROOT, MAX_MAP_BYTES, SAFE_NAME, discover,
+                           metadata as map_metadata, read_tile, select as select_offline_map)
 
 GERMANY = (51.1657, 10.4515)
 MAX_BODY = 2048
@@ -268,6 +275,10 @@ class Bridge:
         self.multi_online = MultiNetworkProvider()
         self.last_start_error: str | None = None
         self._place_lock = threading.Lock()
+        self.offline_map_name: str | None = None
+        self.offline_map_path: Path | None = None
+        self.rf_history = RFHistoryStore()
+        self.flight_routes = CallsignRouteLookup()
         # Native Qt uses an ephemeral loopback port; browser localStorage
         # changes origin on each launch. This owner-only settings file retains
         # the selected SEARCH region across ports, OS restarts and platforms.
@@ -314,6 +325,9 @@ class Bridge:
                 with self.receiver_lock:
                     data = self.receiver.snapshot()
                 local = [a for a in data.get("aircraft", []) if isinstance(a, dict) and recently_seen(a)]
+                # Only receiver-origin rows, never merged Internet positions.
+                if self.rf_history.enabled:
+                    self.rf_history.append(local)
                 count = data.get("messages")
                 # A live readsb process writing aircraft.json may be decoding
                 # zero radio frames. Keep this distinct from "receiving".
@@ -459,7 +473,7 @@ def make_handler(bridge: Bridge, port: int):
                 return
             self.send_response(HTTPStatus.NO_CONTENT)
             self.send_header("Access-Control-Allow-Origin", origin)
-            self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type")
+            self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Tihulu-Map-Name")
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
             self.send_header("Access-Control-Max-Age", "600")
             self.end_headers()
@@ -468,7 +482,7 @@ def make_handler(bridge: Bridge, port: int):
             if not self._guard():
                 return
             path = urlsplit(self.path)
-            if path.path in ("/", "/index.html", "/install.html", "/app.js", "/style.css", "/manifest.webmanifest", "/icon.svg", "/sw.js", "/multi_sources.js", "/receiver_coverage.js", "/rf_timing_lab.js", "/flight_location_ui.mjs", "/location_search.mjs", "/cities-de-tr.json", "/CITY_DATA_LICENSE.md", "/browser_usb.mjs", "/adsb_worker.mjs", "/usb_tools.mjs"):
+            if path.path in ("/", "/index.html", "/install.html", "/app.js", "/style.css", "/manifest.webmanifest", "/icon.svg", "/sw.js", "/multi_sources.js", "/receiver_coverage.js", "/flight_journey.js", "/flight_journey_ui.js", "/aircraft_panel_resize.js", "/rf_history_models.js", "/rf_history_worker.js", "/rf_history_client.js", "/rf_history_ui.js", "/map_motion.js", "/rf_timing_lab.js", "/flight_location_ui.mjs", "/location_search.mjs", "/cities-de-tr.json", "/CITY_DATA_LICENSE.md", "/browser_usb.mjs", "/adsb_worker.mjs", "/usb_tools.mjs"):
                 name = "index.html" if path.path == "/" else path.path[1:]
                 file = STATIC_DIR / name
                 if not file.is_file():
@@ -483,6 +497,38 @@ def make_handler(bridge: Bridge, port: int):
                         "application/manifest+json" if name.endswith(".webmanifest") else
                         "image/svg+xml")
                 self._headers(HTTPStatus.OK, mime + "; charset=utf-8", len(raw))
+                self.wfile.write(raw)
+                return
+            if path.path == "/offline-map/status":
+                archives = discover()
+                active = select_offline_map(bridge.offline_map_name)
+                bridge.offline_map_path = active[0] if active else None
+                self._send(HTTPStatus.OK, {
+                    "available": bool(archives),
+                    "active": active[1]["name"] if active else None,
+                    "archives": [m for _, m in archives],
+                    "directory": str(MAP_ROOT),
+                    "format": "raster MBTiles (PNG/JPEG/WebP)",
+                    "note": "Use licensed offline map packages. No OSM tile bulk downloads."})
+                return
+            if path.path.startswith("/offline-tiles/"):
+                match = re.fullmatch(r"/offline-tiles/(\d{1,2})/(\d{1,8})/(\d{1,8})\.png", path.path)
+                # Do not rescan every directory and open every MBTiles
+                # metadata table on each individual map tile request.
+                selected = bridge.offline_map_path
+                if selected is None or not selected.is_file():
+                    active = select_offline_map(bridge.offline_map_name)
+                    selected = active[0] if active else None
+                    bridge.offline_map_path = selected
+                if not match or selected is None:
+                    self._send(HTTPStatus.NOT_FOUND, {"error": "Offline map unavailable."})
+                    return
+                tile = read_tile(selected, *(int(x) for x in match.groups()))
+                if not tile:
+                    self._send(HTTPStatus.NOT_FOUND, {"error": "No offline tile in this archive."})
+                    return
+                raw,mime = tile
+                self._headers(HTTPStatus.OK, mime, len(raw))
                 self.wfile.write(raw)
                 return
             if path.path == "/tar1090":
@@ -518,8 +564,30 @@ def make_handler(bridge: Bridge, port: int):
             if path.path == "/api/tar-status":
                 self._send(HTTPStatus.OK, bridge.tar1090_status())
                 return
+            if path.path == "/api/flight-route":
+                # Explicit selected-aircraft enrichment, fixed upstream host,
+                # bounded response. Never treat route lookup as a timetable.
+                call = parse_qs(path.query).get("callsign", [""])[0]
+                try:
+                    self._send(HTTPStatus.OK, bridge.flight_routes.query(call))
+                except ValueError as exc:
+                    self._send(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+                return
             if path.path == "/api/search-location":
                 self._send(HTTPStatus.OK, {"place": bridge.get_saved_search_place()})
+                return
+            if path.path == "/api/rf-history/status":
+                self._send(HTTPStatus.OK, bridge.rf_history.status())
+                return
+            if path.path == "/api/rf-history/records":
+                try:
+                    query = parse_qs(path.query)
+                    sid = int(query.get("session", ["0"])[0])
+                    after = int(query.get("after", ["0"])[0])
+                    limit = int(query.get("limit", ["5000"])[0])
+                    self._send(HTTPStatus.OK, bridge.rf_history.page(sid, after, limit))
+                except (ValueError, OverflowError) as exc:
+                    self._send(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
                 return
             if path.path != "/api/aircraft":
                 self._send(HTTPStatus.NOT_FOUND, {"error": "Not found."})
@@ -543,7 +611,9 @@ def make_handler(bridge: Bridge, port: int):
             if not self._guard():
                 return
             endpoint = urlsplit(self.path).path
-            if endpoint not in ("/api/control", "/api/search-location"):
+            if endpoint not in ("/api/control", "/api/search-location",
+                                "/api/offline-map/select", "/api/offline-map/import",
+                                "/api/rf-history/config"):
                 self._send(HTTPStatus.NOT_FOUND, {"error": "Not found."})
                 return
             if not self._authorized():
@@ -551,9 +621,57 @@ def make_handler(bridge: Bridge, port: int):
                 return
             try:
                 n = int(self.headers.get("Content-Length", "0"))
+                if endpoint == "/api/offline-map/import":
+                    # Explicit user-chosen raster MBTiles file. Stream to a
+                    # private temporary file instead of buffering gigabytes.
+                    name = unquote(self.headers.get("X-Tihulu-Map-Name", ""))
+                    if (not SAFE_NAME.fullmatch(name) or
+                            not 0 < n <= MAX_MAP_BYTES or
+                            self.headers.get("Content-Type") != "application/octet-stream"):
+                        raise DataError("Import a valid raster .mbtiles archive (maximum 1 GiB).")
+                    MAP_ROOT.mkdir(parents=True, exist_ok=True, mode=0o700)
+                    fd,temp_name = tempfile.mkstemp(prefix=".import-", suffix=".mbtiles",
+                                                   dir=MAP_ROOT)
+                    temp = Path(temp_name)
+                    try:
+                        with os.fdopen(fd, "wb") as output:
+                            remaining = n
+                            while remaining:
+                                chunk = self.rfile.read(min(1_048_576, remaining))
+                                if not chunk:
+                                    raise DataError("Incomplete map upload.")
+                                output.write(chunk)
+                                remaining -= len(chunk)
+                        info = map_metadata(temp)
+                        if not info:
+                            raise DataError("Only raster MBTiles with valid tile data schema and PNG/JPEG/WebP format are supported.")
+                        dest = MAP_ROOT / name
+                        if dest.exists():
+                            raise DataError("A map with this filename already exists; rename the imported file.")
+                        temp.replace(dest)
+                        bridge.offline_map_name = name
+                        bridge.offline_map_path = dest
+                        self._send(HTTPStatus.OK, {"imported": name, "map": info})
+                        return
+                    finally:
+                        temp.unlink(missing_ok=True)
                 if not 1 <= n <= MAX_BODY:
                     raise DataError("Invalid request length.")
                 body = json.loads(self.rfile.read(n))
+                if endpoint == "/api/offline-map/select":
+                    name = body.get("name") if isinstance(body, dict) else None
+                    active = select_offline_map(name)
+                    if name is not None and (not isinstance(name, str) or not active):
+                        raise DataError("Offline map archive not found.")
+                    bridge.offline_map_name = name
+                    bridge.offline_map_path = active[0] if active else None
+                    self._send(HTTPStatus.OK, {"active": active[1]["name"] if active else None})
+                    return
+                if endpoint == "/api/rf-history/config":
+                    if not isinstance(body, dict) or not isinstance(body.get("action"), str):
+                        raise DataError("Invalid History action.")
+                    self._send(HTTPStatus.OK, bridge.rf_history.config(body["action"]))
+                    return
                 if endpoint == "/api/search-location":
                     self._send(HTTPStatus.OK, {"place": bridge.save_search_place(body)})
                     return
