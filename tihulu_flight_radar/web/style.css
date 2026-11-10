@@ -535,7 +535,7 @@ html:not(.native) .offline-map-controls{display:none}
 .tablewrap table{table-layout:auto}
 .tablewrap th,.tablewrap td{vertical-align:top;overflow-wrap:anywhere}
 .tablewrap .journey-table{min-width:125px}
-.side{scrollbar-gutter:stable}
+.side{scrollbar-gutter:stable;container-type:inline-size;container-name:aircraft-side}
 .radar-expanded .layout{grid-template-columns:minmax(0,1fr) 10px minmax(0,var(--flight-side-width));gap:7px}
 .radar-expanded .tablewrap{max-height:min(47vh,490px)}
 @container (max-width:680px){
