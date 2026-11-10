@@ -6,6 +6,7 @@
 (()=>{
  const $=id=>document.getElementById(id);
  const F=TihuluFlightJourney,cache=new Map(),pending=new Map();
+ const flightDetails=new Map(),flightPending=new Map();
  let batchSerial=0;
  const MAX_AGE=30*60*1000;
  function cached(call){
@@ -15,7 +16,9 @@
  function flight(a){
   const call=F.callsign(a),provider=F.fromProvider(a);
   const route=cached(call)?.route||null;
-  return F.combine(provider,route);
+  const detail=flightDetails.get(call);
+  const fresh=detail&&Date.now()-detail.at<MAX_AGE?detail.journey:null;
+  return F.combine(fresh,F.combine(provider,route));
  }
  function bestTime(t,phase){
   for(const kind of ["Actual","Estimated","Scheduled"]){
@@ -119,8 +122,59 @@
   pending.set(call,task);
   return task;
  }
+ async function loadAirLabsDetail(a,{force=false}={}){
+  const call=F.callsign(a);
+  if(!call||state.onlineProvider!=="airlabs"||navigator.onLine===false)return null;
+  const key=String($("airlabsKey")?.value||"").trim();
+  if(!key)return null; // Only user-provided personal API key, session-only.
+  const existing=flightDetails.get(call);
+  if(!force&&existing&&Date.now()-existing.at<MAX_AGE)return existing.journey;
+  if(flightPending.has(call))return flightPending.get(call);
+  const work=(async()=>{
+   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),6000);
+   try{
+    const url=new URL("https://airlabs.co/api/v9/flight");
+    url.searchParams.set("flight_icao",call);
+    url.searchParams.set("api_key",key);
+    const response=await fetch(url,{mode:"cors",credentials:"omit",
+     cache:"no-store",signal:controller.signal});
+    if(!response.ok)throw Error("AirLabs HTTP "+response.status);
+    const raw=await response.text();
+    if(raw.length>65536)throw Error("AirLabs detail too large");
+    const body=JSON.parse(raw);
+    if(body?.error)throw Error("AirLabs returned no usable flight data");
+    const item=body?.response;
+    if(!item||typeof item!=="object"||
+       String(item.flight_icao||"").trim().toUpperCase()!==call)return null;
+    // /flight returns the closest flight of that number, potentially on a
+    // DIFFERENT date. Only accept clearly matching current-day timestamps.
+    const stamps=[item.dep_time_ts,item.dep_actual_ts,item.arr_time_ts,
+     item.arr_actual_ts,item.dep_estimated_ts,item.arr_estimated_ts]
+     .map(F.epoch).filter(Number.isFinite);
+    if(!stamps.some(v=>Math.abs(Date.now()-v)<=48*3600000))return null;
+    const journey=F.fromProvider({sources:["internet"],
+     flight:call,flight_source_fields:item});
+    if(!journey)return null;
+    journey.source="AirLabs flight detail · callsign+date matched · API-key";
+    flightDetails.set(call,{journey,at:Date.now()});
+    if(flightDetails.size>100)flightDetails.delete(flightDetails.keys().next().value);
+    if(state.selected===String(a.hex||"").toLowerCase()&&
+       !$("aircraftPopup").hidden){
+     const now=state.data.find(v=>v.hex===state.selected);
+     if(now)render(now);
+    }
+    renderTable();
+    return journey;
+   }catch{
+    return null; // Offline/quota/errors cannot invent an airline schedule.
+   }finally{clearTimeout(timer);flightPending.delete(call);}
+  })();
+  flightPending.set(call,work);
+  return work;
+ }
  function selected(a){
-  render(a);if(F.callsign(a))void resolve(a);
+  render(a);
+  if(F.callsign(a))void resolve(a).then(()=>loadAirLabsDetail(a));
  }
  function observe(rows){
   F.observeRadio(rows);
@@ -132,7 +186,7 @@
   const found=state.data.find(a=>a.hex===state.selected);
   if(!found)return;
   $("popupJourneySource").textContent="Checking online callsign route…";
-  void resolve(found,{force:true});
+  void resolve(found,{force:true}).then(()=>loadAirLabsDetail(found,{force:true}));
  });
  $("aircraftRoutesLoad").addEventListener("click",async()=>{
   const button=$("aircraftRoutesLoad");button.disabled=true;
