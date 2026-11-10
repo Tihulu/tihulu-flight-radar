@@ -302,7 +302,7 @@ async function fetchInternetFeed(){
     Math.max(-90,state.queryLat-latD),Math.max(-180,state.queryLon-lonD),
     Math.min(90,state.queryLat+latD),Math.min(180,state.queryLon+lonD)
   ].map(x=>x.toFixed(3)).join(","));
-  u.searchParams.set("_fields","hex,flight_icao,flight_iata,flight_number,lat,lng,alt,dir,speed,updated,aircraft_icao,reg_number,airline_name,airline_icao,airline_iata,dep_iata,dep_icao,arr_iata,arr_icao,dep_time_ts,dep_estimated_ts,dep_actual_ts,arr_time_ts,arr_estimated_ts,arr_actual_ts,dep_time_utc,dep_estimated_utc,dep_actual_utc,arr_time_utc,arr_estimated_utc,arr_actual_utc,status");
+  u.searchParams.set("_fields","hex,flight_icao,flight_iata,flight_number,lat,lng,alt,dir,speed,updated,aircraft_icao,reg_number,airline_name,airline_icao,airline_iata,dep_iata,dep_icao,arr_iata,arr_icao,status");
  }else if(relay){
   // Do not send precise GPS coordinates through an unowned relay.
   const lat=(Math.round(state.queryLat*10)/10).toFixed(1);
