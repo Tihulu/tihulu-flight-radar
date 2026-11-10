@@ -1353,8 +1353,14 @@ function paintRfMapLabel(kind,x,y,message,offscreen=false){
  if(kind==="best")top=Math.max(5,Math.min(y+10,vh-h-5));
  const colors={live10:"#87edfb",liveX:"#80b2ff",
    best:"#d8b8ff",history:"#79e0b1",historyBest:"#edbc73"};
+ const layerMode=kind.startsWith("layer:")?kind.slice(6):null;
+ if(layerMode){
+  const slot=["live10","liveX","history","historyBest"].indexOf(layerMode);
+  top=Math.max(5,Math.min(y+22+Math.max(0,slot)*28,vh-h-5));
+ }
  const color=kind==="best"?"#d8b8ff":
-  colors[(typeof window!=="undefined"&&window.TihuluRFV2?.getMode())||"live10"];
+  colors[layerMode||((typeof window!=="undefined"&&
+   window.TihuluRFV2?.getMode())||"live10")]||"#87edfb";
  ctx.save();ctx.setLineDash([]);ctx.fillStyle="rgba(7,19,31,.96)";
  ctx.strokeStyle=color;ctx.lineWidth=1.5;
  ctx.fillRect(left,top,width,h);ctx.strokeRect(left+.5,top+.5,width-1,h-1);
@@ -2406,7 +2412,14 @@ function paintRfCoverage(result){
     ctx.strokeStyle="rgba(104,230,238,.88)";ctx.lineWidth=2.2;ctx.stroke();
    }
   }
-  if($("rfModelCircle").checked){
+  const selectedMode=typeof window!=="undefined"?
+   window.TihuluRFV2?.getMode():null;
+  const activeLayerVisible=typeof window!=="undefined"&&
+   window.TihuluRFV2?.layerEnabled?
+    window.TihuluRFV2.layerEnabled(selectedMode):
+    $("rfModelCircle").checked;
+  if(activeLayerVisible&&selectedMode!=="best"&&
+     Number.isFinite(r.extentKm)&&r.extentKm>0){
    // Approximate maximum sampled distance from the *modeled* centroid.
    // This is deliberately NOT called a confidence/error radius.
    rfDrawRing({lat:r.lat,lon:r.lon,radiusKm:r.extentKm},
@@ -2456,16 +2469,34 @@ function pickPaintedAircraft(hits,x,y,touchSlack=0){
  return best;
 }
 function paintRfComparisons(){
- if(typeof window==="undefined")return;
+ if(typeof window==="undefined"||!rfLocatorActive)return;
  const others=window.TihuluRFV2?.comparisons?.()||[];
- const colors={live10:"rgba(117,229,246,.48)",
-  liveX:"rgba(116,163,245,.48)",best:"rgba(204,170,255,.48)",
-  history:"rgba(105,220,164,.48)",historyBest:"rgba(240,190,102,.48)"};
+ const colors={live10:"#75e5f6",liveX:"#80b2ff",
+  history:"#79e0b1",historyBest:"#edbc73"};
+ const titles={live10:"LIVE 10m",liveX:"X-hour LIVE",
+  history:"HISTORY",historyBest:"HISTORY BEST"};
  for(const item of others){
   const r=item.result.region;
-  if(!r||!Number.isFinite(r.extentKm)||r.extentKm<=0)continue;
-  rfDrawRing({lat:r.lat,lon:r.lon,radiusKm:r.extentKm},
-   colors[item.id]||"rgba(225,231,235,.45)",[3,9],1.5);
+  if(!r||!Number.isFinite(r.lat)||!Number.isFinite(r.lon))continue;
+  const color=colors[item.id]||"#c9dded";
+  // A geometric circle exists only for an explicitly sampled feasible area.
+  // Weighted HISTORY BEST is NOT a GPS confidence/error circle.
+  if(item.result.status==="region"&&Number.isFinite(r.extentKm)&&
+     r.extentKm>0){
+   rfDrawRing({lat:r.lat,lon:r.lon,radiusKm:r.extentKm},
+    rfHexToRgba(color,.75),[3,8],1.8);
+  }
+  const [x,y]=rfMapXy(r);
+  if(x<0||x>canvas.clientWidth||y<0||y>canvas.clientHeight)continue;
+  ctx.save();ctx.setLineDash([]);ctx.strokeStyle=color;
+  ctx.lineWidth=2.1;ctx.fillStyle="rgba(8,30,42,.96)";
+  ctx.beginPath();ctx.arc(x,y,8,0,Math.PI*2);ctx.fill();ctx.stroke();
+  ctx.beginPath();ctx.moveTo(x-13,y);ctx.lineTo(x+13,y);
+  ctx.moveTo(x,y-13);ctx.lineTo(x,y+13);ctx.stroke();ctx.restore();
+  const spread=Number.isFinite(r.extentKm)?
+   " · ~"+Math.round(r.extentKm)+" km":" · weighted point";
+  paintedModelHits.push(paintRfMapLabel("layer:"+item.id,x,y,
+   titles[item.id]+" · "+item.result.count+" aircraft"+spread));
  }
 }
 function paint(){
