@@ -581,3 +581,7 @@ html:not(.native) .offline-map-controls{display:none}
  .aircraft-table-title label{margin-left:0}
  .tablewrap{scrollbar-gutter:auto}
 }
+
+/* A receiver observation must stay visually distinct from online timetable. */
+.tablewrap .journey-radio-time{color:#7fdec5;font-weight:600;
+ margin-top:5px;padding-top:3px;border-top:1px dashed #37635b}
