@@ -1886,7 +1886,9 @@ function renderRfPickedPanel(){
    :"Selected · aircraft not in current live feed";
   const route=document.createElement("small");
   const journey=live&&typeof window!=="undefined"&&window.TihuluJourneyUI?.row(live);
-  route.textContent=journey?journey.route+" · "+journey.time:
+  route.textContent=journey?
+   journey.route+" · "+journey.time+
+   (journey.radio?" · "+journey.radio:""):
    "Route: not loaded";
   detail.append(label,status,route);
   const info=document.createElement("button");info.type="button";
@@ -1944,7 +1946,13 @@ function renderTable(){
   routeTitle.textContent=journey?.route||"Route unknown";
   const routeTimes=document.createElement("small");
   routeTimes.textContent=journey?.time||"Timetable unavailable";
-  routeCell.append(routeTitle,routeTimes);tr.append(routeCell);
+  routeCell.append(routeTitle,routeTimes);
+  if(journey?.radio){
+   const rfTime=document.createElement("small");
+   rfTime.className="journey-radio-time";rfTime.textContent=journey.radio;
+   routeCell.append(rfTime);
+  }
+  tr.append(routeCell);
   // Accessible, explicit fallback if a native Qt canvas click is lost.
   const infoCell=document.createElement("td");infoCell.dataset.label="Actions";
   const info=document.createElement("button");
