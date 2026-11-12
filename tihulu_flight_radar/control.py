@@ -350,7 +350,8 @@ class ReceiverController:
                         self.mode = mode
                 if (platform.system() == "Linux" and release_local_service
                         and (self._service_units_started_by_app
-                             or self.mode == "Linux services")):
+                             or (self.mode == "Linux services" and any(
+                                 _unit_active(unit)[0] for unit in UNITS)))):
                     # Global services remain independent. The historic start
                     # ledger and even an empty lease registry cannot prove no
                     # late or noncooperating consumers. Do not attempt Stop.
