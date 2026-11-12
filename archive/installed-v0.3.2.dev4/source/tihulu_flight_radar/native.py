@@ -1,0 +1,368 @@
+"""Tihulu Flight Radar — real in-application radar window.
+
+The Qt WebEngine window renders the same map as GitHub Pages, but serves it
+from a private local bridge and pairs automatically. It never launches the
+system web browser or puts a bridge secret in a URL or persistent storage.
+"""
+from __future__ import annotations
+
+import json
+import sys
+import threading
+from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+from PySide6.QtCore import Qt, QUrl, QSettings, QTimer
+from PySide6.QtGui import QAction
+from PySide6.QtWebEngineCore import QWebEnginePermission
+from PySide6.QtWebEngineWidgets import QWebEngineView
+from PySide6.QtWidgets import QApplication, QDialog, QMainWindow, QMessageBox, QVBoxLayout, QFileDialog
+
+from .bridge import Bridge, make_handler
+
+
+class EmbeddedRadarView(QWebEngineView):
+    """New-window requests (e.g. tar1090) become Qt dialogs, not browsers."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._popups: list[QDialog] = []
+
+    def createWindow(self, _type):
+        dialog = QDialog(self.window())
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
+        dialog.setWindowTitle("Tihulu Flight Radar — Additional map")
+        dialog.resize(1180, 800)
+        layout = QVBoxLayout(dialog)
+        from .tar_overlay import TarOverlayView
+        # Give the full tar viewer its own bounded feed cache. Previously it
+        # shared the main map's single-key 35-second cooldown, so querying a
+        # different tar1090 viewport returned no aircraft despite a healthy
+        # Internet feed in the main window.
+        child = TarOverlayView(dialog, assume_tar=True)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(child)
+        self._popups.append(dialog)
+        dialog.destroyed.connect(lambda *_: self._forget_popup(dialog))
+        dialog.show()
+        return child
+
+    def _forget_popup(self, dialog):
+        try:
+            self._popups.remove(dialog)
+        except ValueError:
+            pass
+
+
+class NativeRadarWindow(QMainWindow):
+    """Dedicated native desktop GUI, automatically paired with its own bridge."""
+
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Tihulu Flight Radar — Live Radar")
+        self.resize(1420, 880)
+        self.setMinimumSize(850, 560)
+        self.settings = QSettings("Tihulu", "FlightRadar")
+        self.bridge = Bridge(allow_control=True)
+        # Share the user's already-configured receiver mode from the classic
+        # dashboard. Earlier versions ignored this and defaulted to systemd,
+        # hiding a working Direct readsb / Remote JSON receiver.
+        from .control import MODES, linux_readsb_unit_installed
+        import platform
+        import shutil
+        preferred = str(self.settings.value("mode", self.bridge.receiver.mode))
+        remote = str(self.settings.value("remote", ""))
+        decoder = str(self.settings.value("decoder", ""))
+        if preferred == "Remote JSON" and not remote.strip():
+            preferred = self.bridge.receiver.mode
+        # Users with a working standalone readsb often have no systemd
+        # readsb.service; do not silently show an empty RF layer in that case.
+        if (preferred == "Linux services" and platform.system() == "Linux"
+                and not linux_readsb_unit_installed()
+                and (shutil.which("readsb")
+                     or Path("/usr/bin/readsb").is_file()
+                     or Path("/usr/local/bin/readsb").is_file())):
+            preferred = "Direct readsb"
+            self.settings.setValue("mode", preferred)
+        try:
+            if preferred in MODES:
+                self.bridge.receiver.configure(preferred, remote, decoder)
+        except Exception:
+            # An invalid saved URL must not crash the radar window.
+            self.bridge.receiver.configure(self.bridge.receiver.mode)
+
+        # Ephemeral loopback port allows multiple instances without taking over
+        # an unrelated running service or requiring manual bridge connection.
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), BaseHTTPRequestHandler)
+        self.server.RequestHandlerClass = make_handler(self.bridge, self.server.server_port)
+        self.server.daemon_threads = True
+        self.server_thread = threading.Thread(
+            target=self.server.serve_forever, kwargs={"poll_interval": 0.2},
+            name="tihulu-native-radar", daemon=True,
+        )
+        self.server_thread.start()
+        self.local_url = f"http://127.0.0.1:{self.server.server_port}"
+
+        self.web = EmbeddedRadarView(self)
+        self.setCentralWidget(self.web)
+        self.web.loadFinished.connect(self._paired_on_loaded)
+        # Qt WebEngine may not save blob: downloads without an explicit
+        # downloadRequested handler. Keep exports in a user-chosen local path.
+        self.web.page().profile().downloadRequested.connect(self._save_web_download)
+        self.web.page().permissionRequested.connect(self._location_permission_requested)
+        # This desktop installation can start in the selected region without
+        # misrepresenting it as the real antenna position or requesting GPS.
+        region = str(self.settings.value("start_region", "cologne")).lower()
+        if region not in ("cologne", "germany"):
+            region = "germany"
+        self.web.setUrl(QUrl(self.local_url + "/?region=" + region))
+
+        self.classic_window = None
+        self._startup_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="tihulu-rf-start")
+        self._startup_future = None
+        self._exit_requested = False
+        self._startup_timer = QTimer(self)
+        self._startup_timer.setInterval(250)
+        self._startup_timer.timeout.connect(self._check_startup)
+        menu = self.menuBar().addMenu("Receiver")
+        reconnect = QAction("Reconnect local bridge", self)
+        reconnect.triggered.connect(lambda: self._paired_on_loaded(True))
+        menu.addAction(reconnect)
+        classic = QAction("Open full classic receiver dashboard", self)
+        classic.triggered.connect(self.open_classic)
+        menu.addAction(classic)
+        self.autostart_action = QAction("Start local receiver on application launch", self)
+        self.autostart_action.setCheckable(True)
+        self.autostart_action.setChecked(
+            self.settings.value("auto_start_receiver", False, type=bool)
+        )
+        self.autostart_action.toggled.connect(
+            lambda checked: self.settings.setValue("auto_start_receiver", checked)
+        )
+        menu.addAction(self.autostart_action)
+        self.release_action = QAction("Release local SDR on exit", self)
+        self.release_action.setCheckable(True)
+        self.release_action.setChecked(
+            self.settings.value("release_sdr_on_exit", True, type=bool)
+        )
+        self.release_action.toggled.connect(
+            lambda value: self.settings.setValue("release_sdr_on_exit", value)
+        )
+        menu.addAction(self.release_action)
+        reload_view = QAction("Reload radar view", self)
+        reload_view.triggered.connect(self.web.reload)
+        menu.addAction(reload_view)
+        about = QAction("About sources and permissions", self)
+        about.triggered.connect(self._about)
+        menu.addAction(about)
+        self.statusBar().showMessage(
+            "Local radar in this window · readsb reception separate from Internet data"
+        )
+        # Start after the GUI is visible; never auto-start remote receivers.
+        # The startup is asynchronous so failing sudo/USB detection cannot
+        # freeze the entire map or prevent Internet aircraft rendering.
+        QTimer.singleShot(700, self._start_receiver_if_needed)
+
+    def _location_permission_requested(self, permission):
+        # The main application may request location for startup viewport only.
+        # Never grant it silently, and never permit another origin to receive
+        # location. Denial falls back to the nearest real RF plane or Cologne.
+        origin = permission.origin()
+        if (permission.permissionType()
+                != QWebEnginePermission.PermissionType.Geolocation):
+            permission.deny()
+            return
+        if (origin.scheme() != "http" or origin.host() != "127.0.0.1"
+                or origin.port() != self.server.server_port):
+            permission.deny()
+            return
+        choice = QMessageBox.question(
+            self, "Flight Radar location",
+            "Use your current location as the initial radar map center?\n"
+            "If unavailable or declined, the app will focus on the nearest "
+            "radio-received aircraft; otherwise Cologne.\n"
+            "This does not change the SDR receiver's physical site location.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if choice == QMessageBox.StandardButton.Yes:
+            permission.grant()
+        else:
+            permission.deny()
+
+    def _start_receiver_if_needed(self):
+        if (self._exit_requested or not self.autostart_action.isChecked()):
+            return
+        if self.bridge.receiver.mode == "Remote JSON":
+            return
+        self.bridge.last_start_error = None
+        self.statusBar().showMessage("Checking local receiver and USB ownership…")
+        self._startup_future = self._startup_pool.submit(self._ensure_receiver_active)
+        self._startup_timer.start()
+
+    def _ensure_receiver_active(self):
+        # Runs on a worker, not the Qt event thread. A successful start()
+        # request alone is NOT evidence the readsb process stayed alive.
+        with self.bridge.receiver_lock:
+            active, message = self.bridge.receiver.status()
+            if active:
+                return "Local decoder already running: " + message
+            started = self.bridge.receiver.start()
+            if self.bridge.receiver.mode == "Direct readsb":
+                # USB / permissions failures may make readsb exit immediately.
+                threading.Event().wait(0.7)
+            active, detail = self.bridge.receiver.status()
+            if not active:
+                raise RuntimeError(
+                    "Receiver did not stay running after start: " + detail +
+                    ". Check readsb logs, device availability, and other SDR apps."
+                )
+            return started + " Verified active decoder; ADS-B reception still unverified."
+
+    def _check_startup(self):
+        f = self._startup_future
+        if f is None or not f.done():
+            return
+        self._startup_timer.stop()
+        self._startup_future = None
+        try:
+            result = f.result()
+            self.bridge.last_start_error = None
+            self.statusBar().showMessage(result)
+        except Exception as exc:
+            message = str(exc)
+            self.bridge.last_start_error = message
+            self.statusBar().showMessage("Local receiver unavailable: " + message)
+        if not self._exit_requested:
+            self.web.page().runJavaScript(
+                "if (typeof checkReceiver === 'function') checkReceiver().catch(()=>{});"
+            )
+        else:
+            # The close request waits for startup completion. Do not race a
+            # systemd start and leave the USB device claimed after close.
+            self.close()
+
+    def _paired_on_loaded(self, ok: bool, attempt: int = 0):
+        if self._exit_requested:
+            return
+        if not ok:
+            self.statusBar().showMessage("Local radar page failed to load; check Qt WebEngine.")
+            return
+        # Only inject the ephemeral token into this exact app-owned loopback
+        # page, never a URL, external page, persistent store or log.
+        if not (self.web.url().scheme() == "http"
+                and self.web.url().host() == "127.0.0.1"
+                and self.web.url().port() == self.server.server_port):
+            self.statusBar().showMessage("Untrusted web origin — auto-pairing refused.")
+            return
+        script = (
+            "(function(){"
+            "document.documentElement.classList.add('native');"
+            "var label=document.getElementById('connectionLabel');"
+            "if(typeof window.tihuluNativeConnect!=='function'){"
+            "if(label)label.textContent='Connecting installed desktop receiver…';"
+            "return 'waiting';}"
+            "window.tihuluNativeConnect(" + json.dumps(self.local_url) + ", "
+            + json.dumps(self.bridge.token) + ");"
+            "return 'requested';"
+            "})()"
+        )
+
+        def result(value):
+            if self._exit_requested:
+                return
+            if value == "requested":
+                return
+            if value == "waiting" and attempt < 16:
+                QTimer.singleShot(200, lambda: self._paired_on_loaded(True, attempt + 1))
+                return
+            self.statusBar().showMessage(
+                "Native pairing script unavailable. Use Receiver → Reconnect local bridge "
+                "or Reload radar view; Internet flights do not imply SDR control."
+            )
+        self.web.page().runJavaScript(script, result)
+
+    def _save_web_download(self, request):
+        """Confirm a local destination for a user-initiated browser download.
+
+        This is especially important for JSON/CSV RF timing laboratory exports
+        from a blob: URL. No data is sent to an external service.
+        """
+        filename = Path(request.downloadFileName()).name or "flight-radar-export"
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Flight Radar export",
+            str(Path.home() / "Downloads" / filename),
+        )
+        if not path:
+            request.cancel()
+            return
+        target = Path(path).expanduser()
+        request.setDownloadDirectory(str(target.parent))
+        request.setDownloadFileName(target.name)
+        request.accept()
+
+    def open_classic(self):
+        # Native QWidget, not an external browser. The shared controller avoids
+        # two independent readsb processes simultaneously owning one RTL-SDR.
+        from .app import RadarWindow
+        if self.classic_window is None:
+            self.classic_window = RadarWindow(
+                controller=self.bridge.receiver, owns_receiver=False
+            )
+            self.classic_window.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
+            self.classic_window.destroyed.connect(self._classic_closed)
+        self.classic_window.show()
+        self.classic_window.raise_()
+        self.classic_window.activateWindow()
+
+    def _classic_closed(self, *_):
+        self.classic_window = None
+
+    def _about(self):
+        QMessageBox.information(
+            self, "Tihulu Flight Radar",
+            "The embedded window connects to a private 127.0.0.1 bridge automatically.\n"
+            "Antenna data comes from an installed readsb receiver, if available.\n"
+            "Internet data comes from adsb.lol; map center queries leave your device.\n"
+            "No aircraft are simulated. No system browser is required.\n"
+            "Receiver start/stop requires an explicit click and confirmation."
+        )
+
+    def closeEvent(self, event):
+        if self._startup_future is not None and not self._startup_future.done():
+            self._exit_requested = True
+            self.statusBar().showMessage("Finishing receiver startup before safe shutdown…")
+            event.ignore()
+            return
+        self._startup_timer.stop()
+        self._startup_pool.shutdown(wait=False, cancel_futures=True)
+        # Stop the app-owned direct child; optionally stop local readsb and
+        # tar1090 services to release the same USB tuner for other SDR apps.
+        if self.classic_window is not None:
+            self.classic_window.close()
+        self.web.setUrl(QUrl("about:blank"))
+        self.server.shutdown()
+        self.server.server_close()
+        self.server_thread.join(timeout=2)
+        try:
+            self.bridge.receiver.close(
+                release_local_service=self.release_action.isChecked()
+            )
+        except Exception as exc:
+            QMessageBox.warning(self, "Receiver release warning",
+                                "The receiver may still be occupied: " + str(exc))
+        super().closeEvent(event)
+
+
+def main() -> int:
+    application = QApplication.instance() or QApplication(sys.argv)
+    application.setApplicationName("Tihulu Flight Radar")
+    window = NativeRadarWindow()
+    window.show()
+    return application.exec()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

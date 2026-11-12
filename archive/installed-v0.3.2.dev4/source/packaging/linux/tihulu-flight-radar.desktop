@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Tihulu Flight Radar
+GenericName=ADS-B Aircraft Monitor
+Comment=Local-first ADS-B and Mode S aircraft monitoring
+Exec=tihulu-flight-radar
+Icon=tihulu-flight-radar
+Terminal=false
+Categories=Network;HamRadio;
+StartupNotify=true

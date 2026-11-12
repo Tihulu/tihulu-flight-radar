@@ -1,0 +1,85 @@
+name: Publish standalone Flight Radar GitHub Pages (canonical source)
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Hourly recovery of the canonical main browser build if a push publish failed.
+    - cron: '19 * * * *'
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/standalone-pages.yml
+      - AGENTS.md
+
+# Same output and source SHA as TEXT CENTER/flight_radar. Main is the canonical release branch.
+permissions:
+  contents: write
+
+concurrency:
+  group: tihulu-flight-radar-standalone-pages
+  cancel-in-progress: false
+
+jobs:
+  verify-deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout canonical Flight Radar browser source
+        uses: actions/checkout@v4
+        with:
+          repository: Tihulu/tihulu-flight-radar
+          ref: main
+          path: flight
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build and verify WebUSB browser application
+        run: |
+          set -euo pipefail
+          cd flight
+          bash scripts/build-browser-assets.sh
+          node --check tihulu_flight_radar/web/flight_location_ui.mjs
+          node --check tihulu_flight_radar/web/location_search.mjs
+          node --check tihulu_flight_radar/web/app.js
+          node --check tihulu_flight_radar/web/browser_usb.mjs
+          node --check tihulu_flight_radar/web/adsb_worker.mjs
+          node --check tihulu_flight_radar/web/sw.js
+          node --test tests/web_bridge.test.cjs tests/pages_tar.test.cjs tests/browser_adsb.test.cjs tests/browser_source.test.cjs tests/aircraft_visuals.test.cjs tests/webusb_sampleblock.test.cjs tests/internet_sources.test.cjs tests/multi_sources.test.cjs tests/tar_layers_regression.test.cjs tests/location_selector.test.cjs tests/release_main.test.cjs tests/tar_full_browser.test.cjs
+          test -s tihulu_flight_radar/web/vendor/rtlsdr.mjs
+          test -s tihulu_flight_radar/web/install.html
+          test -s tihulu_flight_radar/web/cities-de-tr.json
+      - name: Build pinned upstream full tar1090 frontend
+        run: cd flight && bash scripts/build-web-tar1090.sh
+      - name: Stamp same browser source revision as TEXT CENTER
+        run: |
+          set -euo pipefail
+          sha="$(git -C flight rev-parse HEAD)"
+          printf '{"repo":"Tihulu/tihulu-flight-radar","source_ref":"main","source_sha":"%s"}\n' "$sha" > flight/tihulu_flight_radar/web/source-revision.json
+          echo "Canonical source: $sha"
+      - uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: pages
+      - name: Publish standalone Pages root without an unconfigured Pages environment
+        run: |
+          set -euo pipefail
+          rsync -a --delete --exclude=.git flight/tihulu_flight_radar/web/ pages/
+          touch pages/.nojekyll
+          test -s pages/index.html
+          test -s pages/install.html
+          test -s pages/cities-de-tr.json
+          test -s pages/tar1090/index.html
+          test -s pages/source-revision.json
+          git -C pages config user.name 'github-actions[bot]'
+          git -C pages config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git -C pages add -A
+          if ! git -C pages diff --cached --quiet; then
+            git -C pages commit -m "publish: standalone Flight Radar browser UI and full tar1090"
+            git -C pages push origin HEAD:gh-pages
+          fi
+          echo "Standalone: https://tihulu.github.io/tihulu-flight-radar/"
+          echo "One-time setting if 404: Settings > Pages > Deploy from a branch > gh-pages / root"
+

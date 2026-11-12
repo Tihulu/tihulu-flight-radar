@@ -1,0 +1,159 @@
+name: Publish Flight Radar GitHub Pages
+# Publish from main to both Pages websites, after web checks, retaining the 0.3.1 legacy branch.
+on:
+  push:
+    branches: [main, feature/github-pages-local-bridge-2026-11-06]
+    paths:
+      - "tihulu_flight_radar/web/**"
+      - "tihulu_flight_radar/network_sources.py"
+      - "tihulu_flight_radar/bridge.py"
+      - "pyproject.toml"
+      - ".github/workflows/pages.yml"
+      - "AGENTS.md"
+      - "scripts/build-web-tar1090.sh"
+      - "scripts/build-browser-assets.sh"
+      - "tests/internet_sources.test.cjs"
+      - "tests/multi_sources.test.cjs"
+      - "tests/tar_layers_regression.test.cjs"
+      - "tests/location_selector.test.cjs"
+      - "tests/release_main.test.cjs"
+      - "tests/test_multi_sources.py"
+      - "tests/webusb_sampleblock.test.cjs"
+      - "tests/tar_full_browser.test.cjs"
+      - "tests/map_motion.test.cjs"
+      - "tests/rf_trajectory_layers.test.cjs"
+      - "tests/aircraft_popup_reliability.test.cjs"
+      - "tests/rf_multiaircraft_center_regression.test.cjs"
+      - "tests/rf_circles_layers.test.cjs"
+      - "scripts/install-linux.sh"
+  pull_request:
+    branches: [main]
+    paths:
+      - "tihulu_flight_radar/web/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+# Tar1090 source-layer fixes: test-confirmed lexical OLMap, immediate visibility and responsive legend layout.
+# Two URLs, one source: this repo's browser source is mirrored by the
+# TIHULU-TEXT-CENTER sync workflow to /flight_radar/.
+# Pages must be enabled once at Settings -> Pages -> Source: Deploy from branch gh-pages / (root).
+concurrency:
+  group: tihulu-flight-radar-standalone-pages
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  web-check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Build pinned same-origin WebUSB driver (CI only)
+        run: bash scripts/build-browser-assets.sh
+      - name: Bundle complete original tar1090 browser frontend
+        run: bash scripts/build-web-tar1090.sh
+      - name: Validate standalone app JavaScript and static assets
+        run: |
+          test -s tihulu_flight_radar/web/index.html
+          test -s tihulu_flight_radar/web/install.html
+          test -s tihulu_flight_radar/web/style.css
+          node --check tihulu_flight_radar/web/multi_sources.js
+          node --check tihulu_flight_radar/web/flight_location_ui.mjs
+          node --check tihulu_flight_radar/web/location_search.mjs
+          node --check tihulu_flight_radar/web/app.js
+          node --check tihulu_flight_radar/web/receiver_coverage.js
+          node --check tihulu_flight_radar/web/map_motion.js
+          node --check tihulu_flight_radar/web/rf_timing_lab.js
+          node --check tihulu_flight_radar/web/sw.js
+          node --check tihulu_flight_radar/web/browser_usb.mjs
+          node --check tihulu_flight_radar/web/adsb_worker.mjs
+          node --check tihulu_flight_radar/web/usb_tools.mjs
+          node --check tihulu_flight_radar/web/tar1090-adapter.js
+          node --check tihulu_flight_radar/web/tar1090/tihulu-browser-bridge.js
+          test -s tihulu_flight_radar/web/tar1090/index.html
+          test -s tihulu_flight_radar/web/tar1090/UPSTREAM-GPL-LICENSE.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          db = Path("tihulu_flight_radar/web/tar1090/db2")
+          for name in ["operators.js", "icao_aircraft_types2.js"]:
+              data = (db / name).read_bytes()
+              assert data and not data.startswith(bytes([0x1f, 0x8b])), name
+              assert isinstance(json.loads(data), dict), name
+          PY
+          bash -n scripts/rtl-sdr-usb-interface.sh
+          node --check deploy/cloudflare-worker.mjs
+          node --test tests/web_bridge.test.cjs tests/pages_tar.test.cjs tests/browser_adsb.test.cjs tests/browser_source.test.cjs tests/aircraft_visuals.test.cjs tests/webusb_sampleblock.test.cjs tests/internet_sources.test.cjs tests/multi_sources.test.cjs tests/tar_layers_regression.test.cjs tests/location_selector.test.cjs tests/release_main.test.cjs tests/tar_full_browser.test.cjs tests/aircraft_popup_rf_coverage.test.cjs tests/rf_timing_lab.test.cjs tests/map_motion.test.cjs tests/rf_trajectory_layers.test.cjs tests/rf_multiaircraft_center_regression.test.cjs tests/aircraft_popup_reliability.test.cjs tests/rf_circles_layers.test.cjs
+          python3 -m json.tool tihulu_flight_radar/web/manifest.webmanifest >/dev/null
+          test -s tihulu_flight_radar/web/icon.svg
+          test -s tihulu_flight_radar/web/sw.js
+          test -s tihulu_flight_radar/web/browser_usb.mjs
+          test -s tihulu_flight_radar/web/multi_sources.js
+          test -s tihulu_flight_radar/web/receiver_coverage.js
+          test -s tihulu_flight_radar/web/map_motion.js
+          test -s tihulu_flight_radar/web/rf_timing_lab.js
+          test -s tihulu_flight_radar/web/flight_location_ui.mjs
+          test -s tihulu_flight_radar/web/location_search.mjs
+          test -s tihulu_flight_radar/web/cities-de-tr.json
+          test -s tihulu_flight_radar/web/CITY_DATA_LICENSE.md
+          test -s tihulu_flight_radar/web/adsb_worker.mjs
+          test -s tihulu_flight_radar/web/usb_tools.mjs
+          test -s tihulu_flight_radar/web/vendor/rtlsdr.mjs
+          test -s tihulu_flight_radar/web/vendor/RTLSDR-LICENSE.txt
+          grep -q 'app.js' tihulu_flight_radar/web/index.html
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: web-check
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    concurrency:
+      group: flight-radar-pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Build pinned browser WebUSB assets for deployment
+        run: bash scripts/build-browser-assets.sh
+      - name: Bundle complete tar1090 browser UI for deployment
+        run: bash scripts/build-web-tar1090.sh
+      - name: Record the exact browser source revision
+        run: |
+          printf '{"repo":"Tihulu/tihulu-flight-radar","source_ref":"%s","source_sha":"%s"}\n' \
+            "$GITHUB_REF_NAME" "$GITHUB_SHA" > tihulu_flight_radar/web/source-revision.json
+          printf '%s\n' 'https://tihulu.github.io/tihulu-flight-radar/' > "$RUNNER_TEMP/standalone-url.txt"
+      - name: Checkout standalone Pages publishing branch
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: pages
+      - name: Publish exactly the source browser build at branch root
+        run: |
+          set -euo pipefail
+          rsync -a --delete --exclude=.git tihulu_flight_radar/web/ pages/
+          touch pages/.nojekyll
+          test -s pages/index.html
+          test -s pages/install.html
+          test -s pages/cities-de-tr.json
+          test -s pages/flight_location_ui.mjs
+          test -s pages/location_search.mjs
+          test -s pages/CITY_DATA_LICENSE.md
+          test -s pages/tar1090/index.html
+          test -s pages/vendor/rtlsdr.mjs
+          test -s pages/source-revision.json
+          git -C pages config user.name 'github-actions[bot]'
+          git -C pages config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git -C pages add -A
+          if ! git -C pages diff --cached --quiet; then
+            git -C pages commit -m "publish: standalone Flight Radar same browser source"
+            git -C pages push origin HEAD:gh-pages
+          fi
+          echo "Target: https://tihulu.github.io/tihulu-flight-radar/"
+          echo "If still 404, enable Settings → Pages → Deploy from branch gh-pages / (root)."
+

@@ -1,0 +1,40 @@
+name: Current installed v0.3.2.dev4 source snapshot (review-only)
+on:
+  pull_request:
+    paths:
+      - "archive/installed-v0.3.2.dev4/**"
+      - ".github/workflows/installed-v0.3.2.dev4-snapshot.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-source-only:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify source Git-tree and each preserved blob; no hardware access
+        run: python3 archive/installed-v0.3.2.dev4/tests/verify_snapshot.py
+      - name: Verify package version from preserved pyproject
+        run: |
+          python3 - <<'PY'
+          import tomllib
+          with open("archive/installed-v0.3.2.dev4/source/pyproject.toml", "rb") as f:
+              data = tomllib.load(f)
+          assert data["project"]["name"] == "tihulu-flight-radar"
+          assert data["project"]["version"] == "0.3.2.dev4"
+          print("Source package version: 0.3.2.dev4")
+          PY
+      - name: Compile source Python syntax without writing pyc files
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("archive/installed-v0.3.2.dev4/source/tihulu_flight_radar")
+          paths = list(p.glob("*.py"))
+          assert paths
+          for f in paths:
+              compile(f.read_bytes(), str(f), "exec")
+          print(f"Syntax compiled: {len(paths)} Python files")
+          PY
