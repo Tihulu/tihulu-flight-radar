@@ -167,12 +167,12 @@ class PR31IndependentSecurityQA(unittest.TestCase):
                     self.runner.rename(displaced)
                     self.runner.mkdir(mode=0o700)
                     code = (
-                        "from pathlib import Path\\n"
-                        "import sys\\n"
-                        "from tools import flight_transaction_lab as tx\\n"
-                        "print('READY',flush=True)\\n"
-                        "with tx.TransactionLab(Path(sys.argv[1])).locked():\\n"
-                        " print('ENTERED',flush=True)\\n"
+                        "from pathlib import Path\n"
+                        "import sys\n"
+                        "from tools import flight_transaction_lab as tx\n"
+                        "print('READY',flush=True)\n"
+                        "with tx.TransactionLab(Path(sys.argv[1])).locked():\n"
+                        " print('ENTERED',flush=True)\n"
                     )
                     child = subprocess.Popen(
                         [sys.executable, "-c", code, str(self.runner /
