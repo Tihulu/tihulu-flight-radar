@@ -405,3 +405,296 @@ def test_headless_bridge_quit_closes_only_its_local_listener(monkeypatch):
     assert events[-4:] == [
         "serve-returned", "quit-requested", "listener-closed", "receiver-closed"
     ]
+
+
+# Independent EXIT-01 QA follow-up: classification, bounded locks, HTTP
+# request workers and read-only external-data preservation. All I/O below
+# uses mocks and pytest's own temporary directory; no actual systemctl,
+# receiver, network, installed app, or live HTTP server is touched.
+
+
+@pytest.mark.parametrize("external_unit", control.UNITS)
+def test_mixed_service_warning_is_typed_and_preserves_foreign_unit(
+        services, external_unit):
+    states, events = services
+    owned = next(x for x in control.UNITS if x != external_unit)
+    states[owned] = "inactive"
+    receiver = control.ReceiverController()
+    receiver.start()
+    with pytest.raises(control.MixedOwnershipWarning, match="mixed ownership"):
+        receiver.close(release_local_service=True)
+    assert events == ["start"], "Passive Quit must never run a paired stop"
+    assert states[external_unit] == "active"
+    assert receiver._service_units_started_by_app == {owned}
+
+
+def test_direct_failure_plus_mixed_is_fatal_not_harmless_warning(
+        monkeypatch, services):
+    states, events = services
+    states["readsb.service"] = "inactive"
+    receiver = control.ReceiverController()
+    receiver.start()  # mixed: readsb app-owned, tar1090 external
+    child = FakeDirectChild(stubborn=True, fail_kill=True)
+    cleaned = []
+    receiver.mode = "Direct readsb"
+    receiver.process = child
+    receiver._directory = SimpleNamespace(cleanup=lambda: cleaned.append(True))
+    with pytest.raises(DataError, match="did not exit.*mixed ownership") as error:
+        receiver.close(release_local_service=True)
+    assert not isinstance(error.value, control.MixedOwnershipWarning)
+    assert child.kill_calls == 1
+    assert receiver.process is child and cleaned == []
+    assert receiver._service_units_started_by_app == {"readsb.service"}
+    assert states["tar1090.service"] == "active"
+    assert events == ["start"], "Never use paired Stop on mixed ownership"
+
+
+def test_quit_receiver_operation_lock_timeout_is_retryable(monkeypatch, services):
+    states, events = services
+    states.update({name: "inactive" for name in states})
+    entered = threading.Event()
+    release = threading.Event()
+    monkeypatch.setattr(control, "QUIT_OPERATION_TIMEOUT_SECONDS", 0.01)
+    calls = []
+
+    def fake_action(action):
+        calls.append(action)
+        if action == "start":
+            entered.set()
+            assert release.wait(2), "mock operation timed out"
+            states.update({name: "active" for name in states})
+        elif action == "stop":
+            states.update({name: "inactive" for name in states})
+        return "fake " + action
+
+    monkeypatch.setattr(control, "service_action", fake_action)
+    receiver = control.ReceiverController()
+    errors = []
+
+    def starter():
+        try:
+            receiver.start()
+        except Exception as exc:
+            errors.append(exc)
+
+    worker = threading.Thread(target=starter, daemon=True)
+    worker.start()
+    try:
+        assert entered.wait(1)
+        with pytest.raises(DataError, match="operation is still running"):
+            receiver.close(release_local_service=True)
+        assert receiver._quit_requested.is_set()
+        assert not receiver._closed
+        assert calls == ["start"]
+    finally:
+        release.set()
+        worker.join(2)
+    assert not worker.is_alive() and errors == []
+    receiver.close(release_local_service=True)
+    assert calls == ["start", "stop"]
+    assert set(states.values()) == {"inactive"}
+
+
+def test_bridge_request_handler_ownership_registration_is_balanced(monkeypatch):
+    bridge = bridge_module.Bridge()
+    handler_cls = bridge_module.make_handler(bridge, 8510)
+    calls = []
+    monkeypatch.setattr(
+        bridge_module.BaseHTTPRequestHandler, "handle",
+        lambda _self: calls.append("handled"),
+    )
+    handler = handler_cls.__new__(handler_cls)
+    handler.handle()
+    assert calls == ["handled"]
+    assert bridge._active_requests == 0
+    bridge.request_quit()
+    handler.handle()
+    assert calls == ["handled"], "No new request after STOPPING"
+    assert bridge._active_requests == 0
+
+
+def test_bridge_http_request_drain_reports_partial_then_releases_caches(
+        monkeypatch, tmp_path):
+    bridge = bridge_module.Bridge()
+    original_export = tmp_path / "user-export.json"
+    original_export.write_text('{"saved":true}', encoding="utf-8")
+    bridge.online.cached = [{"hex": "abcdef"}]
+    bridge.multi_online.records["adsblol"] = {"rows": [{"hex": "abcdef"}]}
+    mock_releases = []
+    monkeypatch.setattr(
+        bridge.receiver, "close",
+        lambda **kwargs: mock_releases.append(kwargs),
+    )
+    assert bridge._begin_request()
+    bridge.request_quit()
+    with pytest.raises(DataError, match="active request"):
+        bridge._wait_for_requests(timeout=0.01)
+    monkeypatch.setattr(
+        bridge, "_wait_for_requests",
+        lambda: (_ for _ in ()).throw(DataError("1 active request, fake timeout"))
+        if bridge._active_requests else None,
+    )
+    with pytest.raises(DataError, match="active request"):
+        bridge.close()
+    assert bridge.online.cached and bridge.multi_online.records
+    bridge._end_request()
+    bridge.close()
+    assert bridge.online.cached == []
+    assert bridge.multi_online.records == {}
+    assert original_export.read_text(encoding="utf-8") == '{"saved":true}'
+    assert len(mock_releases) == 2
+    assert not bridge._begin_request(), "No late HTTP admission"
+
+
+def test_bridge_close_receiver_lock_is_bounded(monkeypatch):
+    bridge = bridge_module.Bridge()
+    monkeypatch.setattr(bridge_module, "BRIDGE_LOCK_TIMEOUT_SECONDS", 0.01)
+    entered = threading.Event()
+    release = threading.Event()
+    calls = []
+    monkeypatch.setattr(bridge.receiver, "close", lambda **kwargs: calls.append("closed"))
+
+    def other_request():
+        with bridge.receiver_lock:
+            entered.set()
+            assert release.wait(2), "mock HTTP request timed out"
+
+    worker = threading.Thread(target=other_request, daemon=True)
+    worker.start()
+    try:
+        assert entered.wait(1)
+        with pytest.raises(DataError, match="bridge command is still running"):
+            bridge.close()
+        assert bridge._quit_requested.is_set()
+        assert calls == []
+    finally:
+        release.set()
+        worker.join(2)
+    assert not worker.is_alive()
+    bridge.close()
+    assert calls == ["closed"]
+
+
+def test_remote_json_host_and_user_settings_survive_local_quit(
+        monkeypatch, tmp_path, services):
+    _, events = services
+    saved = tmp_path / "recording.json"
+    saved.write_bytes(b'{"saved":"owned by user"}')
+    bridge = bridge_module.Bridge(allow_control=True)
+    url = "https://remote.example.invalid/aircraft.json"
+    bridge.receiver.configure("Remote JSON", url)
+    monkeypatch.setattr(
+        control, "read_remote",
+        lambda _: pytest.fail("Quit must not contact a remote host"),
+    )
+    bridge.online.cached = [{"hex": "cafeda"}]
+    bridge.close(release_local_service=True)
+    assert bridge.receiver.remote_url == url
+    assert saved.read_bytes() == b'{"saved":"owned by user"}'
+    assert events == []
+    assert bridge.online.cached == []
+    with pytest.raises(DataError, match="shutting down"):
+        bridge.control("start")
+
+
+def test_native_startup_timeout_warning_is_observed_without_second_close(
+        monkeypatch):
+    from tihulu_flight_radar import native
+
+    dialogs = []
+    monkeypatch.setattr(native, "QMessageBox", SimpleNamespace(
+        warning=lambda *args: dialogs.append(args)
+    ))
+    fake = SimpleNamespace(
+        _startup_future=SimpleNamespace(done=lambda: False),
+        _exit_requested=True,
+        _quit_deadline=0.0,
+        _quit_warning_shown=False,
+    )
+    native.NativeRadarWindow._check_startup(fake)
+    native.NativeRadarWindow._check_startup(fake)
+    assert len(dialogs) == 1 and "Quit still draining" in dialogs[0][1]
+    assert fake._quit_warning_shown
+
+
+def test_native_local_listener_retryable_after_fake_thread_timeout():
+    from tihulu_flight_radar.native import NativeRadarWindow
+
+    server = FakeServer()
+    thread = FakeThread(alive=True)
+    window = SimpleNamespace(
+        server=server, server_thread=thread, _listener_closed=False
+    )
+    with pytest.raises(RuntimeError, match="still alive"):
+        NativeRadarWindow._close_local_listener(window)
+    assert server.shutdowns == 1 and server.closes == 1
+    assert window._listener_closed
+    thread.alive = False
+    NativeRadarWindow._close_local_listener(window)
+    assert server.shutdowns == 1 and server.closes == 1
+    assert thread.joins == [2, 2]
+
+
+def test_native_combined_direct_failure_never_exits_as_mixed_only(monkeypatch):
+    from tihulu_flight_radar import native
+
+    warnings = []
+    monkeypatch.setattr(native, "QMessageBox", SimpleNamespace(
+        warning=lambda *args: warnings.append(args)
+    ))
+    ignored = []
+    event = SimpleNamespace(ignore=lambda: ignored.append("ignored"))
+    fake_bridge = SimpleNamespace(
+        request_quit=lambda: None,
+        close=lambda **kwargs: (_ for _ in ()).throw(
+            DataError("app-owned readsb did not exit; mixed ownership warning")
+        ),
+    )
+    window = SimpleNamespace(
+        _quit_done=False,
+        _exit_requested=False,
+        _quit_deadline=None,
+        _quit_warning_shown=False,
+        _startup_future=None,
+        classic_window=None,
+        bridge=fake_bridge,
+        _startup_timer=SimpleNamespace(stop=lambda: None),
+        _startup_pool=SimpleNamespace(shutdown=lambda **kwargs: None),
+        _close_local_listener=lambda: None,
+        release_action=SimpleNamespace(isChecked=lambda: True),
+    )
+    native.NativeRadarWindow.closeEvent(window, event)
+    assert ignored == ["ignored"]
+    assert warnings and "did not exit" in warnings[0][2]
+    assert not window._quit_done
+
+
+def test_classic_combined_failure_never_exits_as_mixed_only(monkeypatch):
+    from tihulu_flight_radar import app as classic
+
+    warnings = []
+    monkeypatch.setattr(classic, "QMessageBox", SimpleNamespace(
+        warning=lambda *args: warnings.append(args)
+    ))
+    ignored = []
+    event = SimpleNamespace(ignore=lambda: ignored.append("ignored"))
+    receiver = SimpleNamespace(
+        request_quit=lambda: None,
+        close=lambda **kwargs: (_ for _ in ()).throw(
+            DataError("app-owned readsb did not exit; mixed ownership warning")
+        ),
+    )
+    window = SimpleNamespace(
+        _quit_done=False, _quit_requested=False, _quit_deadline=None,
+        _quit_warning_shown=False, timer=SimpleNamespace(stop=lambda: None),
+        controller=receiver, _owns_receiver=True,
+        action_future=None, snapshot_future=None, map_future=None,
+        _quit_retry=SimpleNamespace(stop=lambda: None),
+        pool=SimpleNamespace(shutdown=lambda **kwargs: None),
+        release_checkbox=SimpleNamespace(isChecked=lambda: True),
+        map_server=SimpleNamespace(close=lambda: None),
+    )
+    classic.RadarWindow.closeEvent(window, event)
+    assert ignored == ["ignored"]
+    assert warnings and "did not exit" in warnings[0][2]
+    assert not window._quit_done
