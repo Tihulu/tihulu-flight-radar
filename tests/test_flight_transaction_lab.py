@@ -123,9 +123,14 @@ def test_does_not_touch_preexisting_fake_pipx_or_system_configuration(lab):
     lab.switch("v1")
     lab.switch(None)
     assert secret.read_bytes() == b"unchanged"
-    assert set(lab.root.iterdir()) == {
-        lab.releases, lab.current.parent / "lab.lock", lab.state_path
-    }
+    # Committed journal/pointer/state entries are retained as forensic
+    # quarantine; never blindly unlink a just-verified shared-path entry.
+    entries = {p.name for p in lab.root.iterdir()}
+    assert {"releases", "lab.lock", "state.json"} <= entries
+    assert all(name in {"releases", "lab.lock", "state.json"}
+               or name.startswith((".tx-", ".pointer-", ".retired-"))
+               for name in entries)
+    assert any(name.startswith(".retired-journal-") for name in entries)
 
 
 def test_rejects_wrong_release_marker_owner(lab):
