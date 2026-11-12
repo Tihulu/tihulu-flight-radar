@@ -252,15 +252,56 @@ def test_mixed_ownership_preserves_preexisting_unit(pair, external):
     assert pair.states[external] == "active"
 
 
-def test_unshared_app_started_pair_releases_exactly_once(pair):
-    """Protect existing cleanup so a lease fix cannot silently retain everything."""
+def test_unregistered_borrower_is_not_proof_of_exclusive_systemd_ownership(pair):
+    """Noncooperating apps have NO lease record; passive Quit must still be safe."""
     owner = control.ReceiverController()
     owner.start()
+    # Simulate a legacy/non-TIHULU client consuming systemd readsb without
+    # participating in any optional cross-process TIHULU lease protocol.
+    outsider = {"name": "independent decoder client", "receiver_active": True,
+                "registered_in_lease": False}
+    assert pair.borrowers == set()
+    owner.close(release_local_service=True)
+
+    assert pair.actions == ["start"], (
+        "No lease record cannot prove no noncooperating receiver clients exist"
+    )
+    assert outsider["receiver_active"]
+    assert set(pair.states.values()) == {"active"}
+
+
+def test_owned_direct_child_is_reaped_once_without_touching_shared_services(pair):
+    """Preserve complete Flight-owned cleanup even if systemd Stop is unsafe."""
+    events = []
+
+    class FakeChild:
+        alive = True
+
+        def poll(self):
+            return None if self.alive else 0
+
+        def terminate(self):
+            events.append("terminate")
+            self.alive = False
+
+        def wait(self, timeout):
+            events.append(("wait", timeout))
+            return 0
+
+        def kill(self):
+            raise AssertionError("Graceful mock child must not be killed")
+
+    owner = control.ReceiverController()
+    owner.mode = "Direct readsb"
+    owner.process = FakeChild()
+    owner._directory = SimpleNamespace(cleanup=lambda: events.append("cleanup"))
+
     owner.close(release_local_service=True)
     owner.close(release_local_service=True)
 
-    assert pair.actions == ["start", "stop"]
-    assert set(pair.states.values()) == {"inactive"}
+    assert events == ["terminate", ("wait", 5), "cleanup"]
+    assert owner.process is None and owner._directory is None
+    assert pair.actions == [], "Owned child cleanup must not stop systemd"
 
 
 def test_release_opt_out_keeps_service_pair_running(pair):
