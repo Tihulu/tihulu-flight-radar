@@ -1,0 +1,47 @@
+name: Flight 0.3.2 safe-preview preflight (read-only)
+on:
+  pull_request:
+    paths:
+      - "tools/flight_safe_preflight.py"
+      - "tests/test_flight_safe_preflight.py"
+      - ".github/workflows/flight-safe-preview-preflight.yml"
+      - "docs/FLIGHT_032_SAFE_INSTALLER_PLAN.md"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  nonmutating-preflight:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.3'
+      - name: Install only test tools in GitHub runner
+        run: python -m pip install 'pytest>=8,<10'
+      - name: Run read-only negative tests using disposable fake home
+        run: python -m pytest -q tests/test_flight_safe_preflight.py
+      - name: Syntax and no forbidden mutating calls
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          f=Path("tools/flight_safe_preflight.py")
+          text=f.read_text(encoding="utf-8")
+          compile(text,str(f),"exec")
+          for forbidden in ("subprocess", "sudo ", "systemctl ", "pipx install", ".mkdir(", ".unlink(", ".rmtree(", ".replace(", ".chmod(", "open("):
+              assert forbidden not in text, forbidden
+          print("Preflight read-only source guard PASS")
+          PY
+      - name: Verify CLI emits complete read-only JSON, even when sudoers is inaccessible
+        shell: bash
+        run: |
+          set +e
+          result="$(python tools/flight_safe_preflight.py --json)"
+          rc=$?
+          set -e
+          if [[ "$rc" != "0" && "$rc" != "2" ]]; then
+            echo "::error::Unexpected preflight exit status: $rc"
+            exit 1
+          fi
+          printf '%s\n' "$result" | python -c 'import json,sys; d=json.load(sys.stdin); assert d["ready_for_installation"] is False; assert d["check_mode"]=="read-only-no-side-effects"; assert isinstance(d["blockers"],list); assert d["sudoers_policy_present"] in (True,False,None)'
+          git diff --exit-code
