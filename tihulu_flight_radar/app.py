@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from . import __version__
-from .control import MODES, ReceiverController, service_action
+from .control import MODES, ReceiverController, service_action, MixedOwnershipWarning
 from .core import (DataError, detect_sdr_processes, export_json, find_tar1090_url,
                    lan_ip, summarize, recently_seen, position_is_fresh)
 from .map_server import LocalMapServer
@@ -791,22 +791,27 @@ class RadarWindow(QMainWindow):
         # cannot create a late readsb child or leave running Python threads.
         self.pool.shutdown(wait=True, cancel_futures=True)
         problems = []
+        owned_cleanup_failed = False
         if self._owns_receiver:
             try:
                 self.controller.close(
                     release_local_service=self.release_checkbox.isChecked()
                 )
+            except MixedOwnershipWarning as exc:
+                problems.append(str(exc))
             except DataError as exc:
                 problems.append(str(exc))
+                owned_cleanup_failed = True
         try:
             self.map_server.close()
         except (OSError, RuntimeError) as exc:
             problems.append("Local map listener: " + str(exc))
+            owned_cleanup_failed = True
         # PR #15 expressly permits a visible warning on mixed systemd
         # ownership while preserving the unrelated service.
         if problems:
             QMessageBox.warning(self, "Quit cleanup incomplete", "\n".join(problems))
-            if any("mixed ownership" not in problem for problem in problems):
+            if owned_cleanup_failed:
                 event.ignore()
                 return
         for dialog in list(self._map_dialogs):
