@@ -11,6 +11,7 @@ import time
 from pathlib import Path
 
 from .core import DataError, detect_sdr_processes, read_local, read_remote
+from .direct_lease import DirectDeviceLease
 
 LINUX_JSON = Path("/run/readsb/aircraft.json")
 UNITS = ("readsb.service", "tar1090.service")
@@ -100,6 +101,14 @@ def service_action(action: str) -> str:
         raise DataError("Unsupported service action.")
     if platform.system() != "Linux":
         raise DataError("Systemd service management is Linux-only.")
+    if action == "stop":
+        # Global systemd services are not Flight-private. Historical Start
+        # cannot rule out even noncooperating decoder consumers. Fail closed.
+        raise DataError(
+            "Shared readsb/tar1090 services cannot be stopped by Flight: "
+            "external receiver borrowers cannot be excluded. Use explicit "
+            "system administrator controls after checking every client."
+        )
     if action == "start" and not _unit_active("readsb.service")[0]:
         conflicts = detect_sdr_processes()
         if conflicts:
@@ -149,6 +158,9 @@ class ReceiverController:
         # inactive BEFORE our own successful Start can be attributed to us.
         # Unknown/failed states are never enough proof of ownership.
         self._service_units_started_by_app: set[str] = set()
+        # Start provenance is historical, not an exclusive lifetime lease.
+        self.last_service_release_note: str | None = None
+        self._direct_lease: DirectDeviceLease | None = None
         self._operation_lock = threading.RLock()
         self._quit_requested = threading.Event()
         self._inside_close = False
@@ -218,9 +230,27 @@ class ReceiverController:
             raise DataError("readsb not found. Install a compatible native decoder first.")
         if self.decoder_path and not Path(binary).is_file():
             raise DataError("Specified readsb executable does not exist.")
+        # A known foreign SDR process vetoes Direct readsb Start. This is an
+        # advisory check; a kernel lifetime lock below also excludes competing
+        # Flight-owned direct decoders, but cannot bind noncooperating apps.
+        conflicts = detect_sdr_processes()
+        if conflicts:
+            raise DataError(
+                "RTL-SDR is busy or owned by another receiver application: "
+                + ", ".join(conflicts) + ". Close it before Direct readsb Start."
+            )
+        if self._direct_lease is None:
+            lease = DirectDeviceLease("rtlsdr-index-0")
+            lease.acquire()
+            self._direct_lease = lease
         if self._directory is not None:
             self._directory.cleanup()
-        self._directory = tempfile.TemporaryDirectory(prefix="tihulu-flight-radar-")
+        try:
+            self._directory = tempfile.TemporaryDirectory(prefix="tihulu-flight-radar-")
+        except OSError:
+            self._direct_lease.release()
+            self._direct_lease = None
+            raise
         cmd = [str(binary), "--device-type", "rtlsdr", "--device", "0",
                "--gain", "auto", "--write-json", self._directory.name,
                "--write-json-every", "1", "--quiet"]
@@ -231,6 +261,8 @@ class ReceiverController:
         except OSError as exc:
             self._directory.cleanup()
             self._directory = None
+            self._direct_lease.release()
+            self._direct_lease = None
             raise DataError(f"Cannot launch readsb: {exc}") from exc
         return "Starting local readsb. Waiting for real aircraft messages."
 
@@ -252,12 +284,12 @@ class ReceiverController:
         if self.mode == "Remote JSON":
             raise DataError("Remote receiver must be stopped on its own computer.")
         if self.mode == "Linux services":
-            # An explicit user-invoked Stop remains a separate, intentional
-            # command for the paired services, unlike passive application Exit.
-            result = service_action("stop")
-            self._service_units_started_by_app.clear()
-            self._service_started_by_app = False
-            return result
+            # Explicit Stop/Restart may disrupt a second noncooperating client
+            # even when Flight originally requested Start. Never issue Stop.
+            raise DataError(
+                "Shared receiver is busy or may have external borrowers; "
+                "Flight cannot safely Stop/Restart global readsb/tar1090 services."
+            )
         if self.process is not None:
             # Operate on the exact child handle this app created, never a
             # shared process name, external service, or unverified PID.
@@ -278,6 +310,9 @@ class ReceiverController:
         if self._directory is not None:
             self._directory.cleanup()
             self._directory = None
+        if self._direct_lease is not None:
+            self._direct_lease.release()
+            self._direct_lease = None
         return "Direct receiver stopped; SDR released."
 
     def snapshot(self) -> dict:
@@ -314,19 +349,15 @@ class ReceiverController:
                         self.mode = mode
                 if (platform.system() == "Linux" and release_local_service
                         and self._service_units_started_by_app):
-                    if self._service_units_started_by_app == set(UNITS):
-                        try:
-                            service_action("stop")
-                        except DataError as exc:
-                            error = exc if error is None else DataError(
-                                f"{error}; service release: {exc}"
-                            )
-                        else:
-                            self._service_units_started_by_app.clear()
-                            self._service_started_by_app = False
-                    else:
-                        # Existing sudoers authorizes only a paired stop.
-                        # Preserve the external unit and PR #15's warning.
+                    # Service units are globally shared. A foreign client may
+                    # join after Start, and systemd may replace a unit without
+                    # Flight observing its new InvocationID. Never auto-Stop.
+                    self.last_service_release_note = (
+                        "Shared readsb/tar1090 services preserved on Quit; "
+                        "Flight cannot verify exclusive receiver ownership."
+                    )
+                    if self._service_units_started_by_app != set(UNITS):
+                        # Keep #15/#16's typed mixed-ownership warning.
                         mixed = MixedOwnershipWarning(
                             "Automatic release skipped: readsb/tar1090 have mixed "
                             "ownership. The external service was preserved; a "
@@ -334,6 +365,11 @@ class ReceiverController:
                             "explicitly only when no other app is using it."
                         )
                         error = mixed if error is None else DataError(f"{error}; {mixed}")
+                    else:
+                        # Clear Flight's historical attribution on successful
+                        # private cleanup; never act on stale global identity.
+                        self._service_units_started_by_app.clear()
+                        self._service_started_by_app = False
             finally:
                 self._inside_close = False
             if error:
