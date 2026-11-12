@@ -1,0 +1,41 @@
+name: Flight shared service independent security gate
+on:
+  pull_request:
+    paths:
+      - "tihulu_flight_radar/control.py"
+      - "tihulu_flight_radar/bridge.py"
+      - "tihulu_flight_radar/native.py"
+      - "tihulu_flight_radar/app.py"
+      - "scripts/install-linux.sh"
+      - "tests/**"
+      - ".github/workflows/flight-shared-service-security.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  shared-service-readonly:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.3'
+      - name: Install source and test tools in disposable GitHub runner only
+        run: python -m pip install -e ".[test]"
+      - name: Run full Python regression suite including adversarial ownership tests
+        run: python -m pytest -q
+      - name: Run all JavaScript regressions (no skipped historical files)
+        run: node --test tests/*.test.cjs
+      - name: Verify installer syntax; never execute installer
+        run: bash -n scripts/install-linux.sh
+      - name: Enforce no sudoers grants or shared service mutators from application
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          s=Path("scripts/install-linux.sh").read_text()
+          c=Path("tihulu_flight_radar/control.py").read_text()
+          assert "visudo" not in s and "sudo install -m 0440" not in s
+          assert "Manage shared service lifecycle externally" in c
+          assert 'service_action("stop", ownership_confirmed=True)' not in c
+          print("PASS: shared systemd mutation denied, no new sudoers grant")
+          PY

@@ -8,7 +8,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from .core import DataError, detect_sdr_processes, read_local, read_remote
+from .core import DataError, read_local, read_remote
 
 LINUX_JSON = Path("/run/readsb/aircraft.json")
 UNITS = ("readsb.service", "tar1090.service")
@@ -86,37 +86,18 @@ def _verify_transition(action: str, timeout_seconds: float = 8.0) -> None:
 
 
 def service_action(action: str, *, ownership_confirmed: bool = False) -> str:
+    """Refuse ALL mutations of globally shared systemd services.
+
+    The legacy ownership_confirmed parameter is deliberately ineffective:
+    a process-local flag never proves that other TIHULU consumers have left.
+    Keep this API for compatibility, but never invoke sudo/systemctl actions.
+    """
     if action not in ACTIONS:
         raise DataError("Unsupported service action.")
-    if action == "stop" and not ownership_confirmed:
-        raise DataError("Refusing to stop shared systemd readsb without explicit app ownership.")
-    if platform.system() != "Linux":
-        raise DataError("Systemd service management is Linux-only.")
-    if action == "start" and not _unit_active("readsb.service")[0]:
-        conflicts = detect_sdr_processes()
-        if conflicts:
-            raise DataError(
-                "The RTL-SDR may be in use by: " + ", ".join(conflicts) +
-                ". Close the competing application before starting readsb."
-            )
-    # The exact argument list matches the narrowly scoped sudoers policy.
-    # Never pass arbitrary strings or request blanket root permissions.
-    cmd = ["/usr/bin/sudo", "-n", SYSTEMCTL, action, *UNITS]
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=False)
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        raise DataError(f"Service operation failed: {exc}") from exc
-    if result.returncode:
-        details = (result.stderr or result.stdout).strip()[:500]
-        raise DataError(details or "Service operation failed. Verify the restricted sudo policy.")
-    if action in ("start", "stop"):
-        _verify_transition(action)
-    if action == "start":
-        return "Decoder started. Waiting for ADS-B messages; an active service does not guarantee RF reception."
-    if action == "stop":
-        return "Decoder stopped. Receiver can be used by another SDR module."
-    return f"Receiver boot setting: {action} completed."
-
+    raise DataError(
+        "Shared readsb/tar1090 systemd services are read-only in Flight Radar. "
+        "Manage shared service lifecycle externally after checking all consumers."
+    )
 
 class ReceiverController:
     def __init__(self):
@@ -164,9 +145,10 @@ class ReceiverController:
         if self.mode == "Linux services":
             if _unit_active("readsb.service")[0]:
                 return "Shared readsb is already running; monitoring without service ownership."
-            outcome = service_action("start")
-            self._service_started_by_app = True
-            return outcome
+            raise DataError(
+                "Shared readsb is inactive. Flight Radar uses Linux services read-only; "
+                "start the system receiver separately or choose Direct readsb."
+            )
         if self.process is not None and self.process.poll() is None:
             return "Direct receiver is already running."
         if platform.system() == "Linux" and _unit_active("readsb.service")[0]:
@@ -204,8 +186,8 @@ class ReceiverController:
         """Stop and start the selected receiver, surfacing start failures."""
         if self.mode == "Remote JSON":
             raise DataError("Remote receiver restart must happen on its own computer.")
-        if self.mode == "Linux services" and not self._service_started_by_app:
-            raise DataError("Refusing to restart an existing shared readsb service not started by this app.")
+        if self.mode == "Linux services":
+            raise DataError("Refusing to restart shared readsb/tar1090 systemd services.")
         self.stop()
         return self.start()
 
@@ -213,11 +195,7 @@ class ReceiverController:
         if self.mode == "Remote JSON":
             raise DataError("Remote receiver must be stopped on its own computer.")
         if self.mode == "Linux services":
-            if not self._service_started_by_app:
-                raise DataError("Refusing to stop shared readsb: this app did not start the service.")
-            result = service_action("stop", ownership_confirmed=True)
-            self._service_started_by_app = False
-            return result
+            raise DataError("Refusing to stop globally shared readsb/tar1090 systemd services.")
         if self.process is not None and self.process.poll() is None:
             self.process.terminate()
             try:
@@ -246,8 +224,8 @@ class ReceiverController:
         The legacy release_local_service argument is accepted for compatibility
         but NEVER authorizes shutdown of global readsb/tar1090 systemd services.
         Multiple apps can consume these units, and there is no safe exclusive
-        ownership proof at GUI exit. Explicit user-directed stop() remains
-        limited to a service successfully started by this controller instance.
+        ownership proof at GUI exit or during explicit UI control requests.
+        Shared service stop/restart and boot configuration are always refused.
         """
         error = None
         if self.process is not None:

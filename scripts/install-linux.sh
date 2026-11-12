@@ -15,12 +15,6 @@ if [[ -z "${HOME:-}" || ! -d "$HOME" ]]; then
   exit 1
 fi
 
-login="$(id -un)"
-if [[ ! "$login" =~ ^[a-z_][a-z0-9_-]*$ ]]; then
-  echo "Unexpected account name; refusing to create a sudo rule." >&2
-  exit 1
-fi
-
 # Default to stable main after the release. Preview installers explicitly pass
 # TIHULU_REF=feature/github-pages-local-bridge-2026-11-06.
 ref="${TIHULU_REF:-main}"
@@ -31,7 +25,7 @@ fi
 
 echo "Tihulu Flight Radar — install or update from '$ref'"
 echo "The existing readsb/tar1090 services, receiver settings and recordings stay untouched."
-echo "System packages and narrowly scoped sudoers permissions require sudo."
+echo "System packages require sudo. No service-control sudoers grants will be created."
 sudo apt-get update
 # Ubuntu 24.04 uses libasound2t64; Debian 12 uses libasound2.
 if apt-cache show libasound2t64 >/dev/null 2>&1; then
@@ -104,8 +98,7 @@ mkdir -p "$app_dir" "$icon_dir"
 
 # Download the icon from the same ref used to install code.
 icon_tmp="$(mktemp)"
-policy_tmp="$(mktemp)"
-trap 'rm -f "$icon_tmp" "$policy_tmp"' EXIT
+trap 'rm -f "$icon_tmp"' EXIT
 curl -fLsS "https://raw.githubusercontent.com/Tihulu/tihulu-flight-radar/$ref/packaging/linux/tihulu-flight-radar.svg" -o "$icon_tmp"
 install -m 0644 "$icon_tmp" "$icon_dir/tihulu-flight-radar.svg"
 
@@ -119,14 +112,9 @@ for pkg in tihulu-adsb-radar tihulu-flight-radar; do
   fi
 done
 
-# Minimal account-scoped service authorization; never unrestricted sudo.
-cat > "$policy_tmp" <<EOF
-Cmnd_Alias TIHULU_FLIGHT = /usr/bin/systemctl start readsb.service tar1090.service, /usr/bin/systemctl stop readsb.service tar1090.service, /usr/bin/systemctl enable readsb.service tar1090.service, /usr/bin/systemctl disable readsb.service tar1090.service
-$login ALL=(root) NOPASSWD: TIHULU_FLIGHT
-EOF
-sudo visudo -cf "$policy_tmp"
-sudo install -m 0440 "$policy_tmp" /etc/sudoers.d/tihulu-flight-radar
-sudo visudo -cf /etc/sudoers.d/tihulu-flight-radar
+# Security: this version grants NO privileged systemd controls.
+# Prior /etc/sudoers.d/tihulu-flight-radar entries (if any) are untouched;
+# an administrator must review old grants. Never remove or migrate automatically.
 
 # The main icon opens the native embedded live radar, never a system browser.
 # Classic keeps all earlier receiver functionality in another Qt application.
