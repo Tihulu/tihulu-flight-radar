@@ -338,5 +338,64 @@ class IndependentPR33QA(unittest.TestCase):
         self.assertEqual(old, b"initial")
 
 
+    def test_15_residual_last_reopen_same_uid_race_is_still_hold(self):
+        # Honest residual red-team demonstration. Two re-open rounds are not
+        # atomic: swap just AFTER the final live-base FD was acquired.
+        # A PASS HERE MEANS THE REMAINING THREAT WAS REPRODUCED, NOT FIXED.
+        lab = self.prepared("lastopen")
+        moved = self.top / "lastopen-displaced"
+        original = tx._open_chain
+        checks = []
+        def attack(path, *, create=False):
+            fd = original(path, create=create)
+            if os.fspath(path) == os.fspath(self.base):
+                checks.append(True)
+                if len(checks) == 5:
+                    self.base.rename(moved)
+                    self.base.mkdir(mode=0o700)
+                    (self.base / "foreign-marker").write_bytes(b"HOLD-TOCTOU")
+            return fd
+        with patch.object(tx, "_open_chain", side_effect=attack):
+            lab.switch("new")
+        self.assertEqual(len(checks), 5)
+        self.assertEqual((self.base / "foreign-marker").read_bytes(),
+                         b"HOLD-TOCTOU")
+        self.assertEqual(json.loads((moved / "flight-transaction-lab" /
+                                     "lastopen" / "state.json").read_text())["active"],
+                         "new")
+        with self.assertRaisesRegex(RuntimeError,
+                                    "Validated runner base inode changed"):
+            lab.status()
+
+    def test_16_residual_after_last_snapshot_check_is_still_hold(self):
+        # Source-of-truth never becomes protected by a cooperating lock.
+        # A malicious same-UID writer may mutate AFTER the last byte check.
+        # A PASS HERE IS A CONFIRMED RESIDUAL LIMITATION, NOT ACCEPTANCE.
+        original = b"known-checked"
+        pin = hashlib.sha256(original).hexdigest()
+        lab = self.lab("latewrite")
+        lab.stage_fixture("v1", original)
+        pinned = self.lab("latewrite", pins={"v1": pin})
+        release = lab.releases / "v1"
+        original_check = tx._View.check_verified_snapshots
+        triggered = []
+        def late_change(view):
+            original_check(view)
+            modified = b"after-snapshot-check"
+            (release / "image.bin").write_bytes(modified)
+            (release / "manifest.json").write_text(json.dumps({
+                "owner": tx.OWNER, "name": "v1",
+                "sha256": hashlib.sha256(modified).hexdigest(),
+                "size": len(modified)}))
+            triggered.append(True)
+        with patch.object(tx._View, "check_verified_snapshots",
+                          side_effect=late_change):
+            pinned.switch("v1")
+        self.assertTrue(triggered)
+        with self.assertRaisesRegex(RuntimeError,
+                                    "Externally pinned artifact"):
+            pinned.status()
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
