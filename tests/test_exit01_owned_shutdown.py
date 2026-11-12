@@ -332,6 +332,8 @@ def map_server_with_fakes(*, started=False, alive=False):
     listener.httpd = FakeServer()
     listener.thread = FakeThread(alive=alive)
     listener._lifecycle_lock = threading.Lock()
+    listener._request_condition = threading.Condition()
+    listener._active_requests = 0
     listener._started = started
     listener._closed = False
     return listener
@@ -731,3 +733,31 @@ def test_classic_combined_failure_never_exits_as_mixed_only(monkeypatch):
     assert ignored == ["ignored"]
     assert warnings and "did not exit" in warnings[0][2]
     assert not window._quit_done
+
+def test_map_listener_reports_active_request_and_rechecks_on_retry(monkeypatch):
+    listener = map_server_with_fakes(started=True)
+    assert listener._begin_request()
+    # An immediate fake wait is deterministic: no 3-second CI delay or port.
+    monkeypatch.setattr(
+        listener._request_condition, "wait_for",
+        lambda predicate, timeout: predicate(),
+    )
+    with pytest.raises(RuntimeError, match="request workers still active"):
+        listener.close()
+    assert listener.httpd.shutdowns == 1
+    assert listener.httpd.closes == 1
+    assert not listener._begin_request(), "Closed listener cannot admit work"
+    listener._end_request()
+    listener.close()  # Retry must verify the prior owned handler completed.
+    assert listener._active_requests == 0
+    assert listener.httpd.closes == 1
+
+
+def test_map_handler_request_registry_cannot_underflow_after_repeated_quit():
+    listener = map_server_with_fakes(started=False)
+    assert listener._begin_request()
+    listener._end_request()
+    listener.close()
+    listener.close()
+    assert listener._active_requests == 0
+    assert not listener._begin_request()
