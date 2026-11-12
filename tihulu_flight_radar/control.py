@@ -124,6 +124,10 @@ class ReceiverController:
         self.process: subprocess.Popen | None = None
         self._directory: tempfile.TemporaryDirectory | None = None
         self._service_started_by_app = False
+        # Shared systemd actions control both units. Only a unit confirmed
+        # inactive BEFORE our own successful Start can be attributed to us.
+        # Unknown/failed states are never enough proof of ownership.
+        self._service_units_started_by_app: set[str] = set()
 
     def configure(self, mode: str, remote_url: str = "", decoder_path: str = ""):
         if mode not in MODES:
@@ -157,10 +161,14 @@ class ReceiverController:
         if self.mode == "Remote JSON":
             raise DataError("Remote receiver must be started on its own computer.")
         if self.mode == "Linux services":
-            preexisting = _unit_active("readsb.service")[0]
+            before = {unit: _unit_active(unit) for unit in UNITS}
             outcome = service_action("start")
-            if not preexisting:
-                self._service_started_by_app = True
+            for unit, (active, state) in before.items():
+                if not active and state == "inactive":
+                    self._service_units_started_by_app.add(unit)
+            self._service_started_by_app = (
+                "readsb.service" in self._service_units_started_by_app
+            )
             return outcome
         if self.process is not None and self.process.poll() is None:
             return "Direct receiver is already running."
@@ -206,7 +214,10 @@ class ReceiverController:
         if self.mode == "Remote JSON":
             raise DataError("Remote receiver must be stopped on its own computer.")
         if self.mode == "Linux services":
+            # An explicit user-invoked Stop remains a separate, intentional
+            # command for the paired services, unlike passive application Exit.
             result = service_action("stop")
+            self._service_units_started_by_app.clear()
             self._service_started_by_app = False
             return result
         if self.process is not None and self.process.poll() is None:
@@ -235,10 +246,13 @@ class ReceiverController:
         """Release direct app-owned child and optionally shared Linux services.
 
         Systemd readsb/tar1090 can outlive the desktop when the user unchecks
-        "Release local SDR on exit". Merely having been started by this app
-        must never override that explicit preference. Direct readsb uses an
-        app-owned temporary directory and must always stop on exit.
-        Remote JSON is never controlled by the local app.
+        "Release local SDR on exit". Passive Exit may stop paired systemd
+        units only when BOTH were confirmed app-started. If ownership is
+        mixed, leave both active rather than kill a pre-existing external
+        service, and surface an explicit warning through the caller. This
+        respects the existing paired-command sudoers policy without widening
+        permissions. A direct app-owned child always stops. Remote receivers
+        are never controlled.
         """
         error = None
         if self.process is not None:
@@ -250,14 +264,26 @@ class ReceiverController:
                 error = exc
             finally:
                 self.mode = mode
-        if (platform.system() == "Linux"
-                and self.mode == "Linux services"
-                and release_local_service
-                and _unit_active("readsb.service")[0]):
-            try:
-                service_action("stop")
-                self._service_started_by_app = False
-            except DataError as exc:
-                error = exc
+        if (platform.system() == "Linux" and release_local_service
+                and self._service_units_started_by_app):
+            if self._service_units_started_by_app == set(UNITS):
+                try:
+                    service_action("stop")
+                except DataError as exc:
+                    error = exc
+                else:
+                    self._service_units_started_by_app.clear()
+                    self._service_started_by_app = False
+            else:
+                # Existing installer sudoers permits only the paired command.
+                # Stopping both would terminate another application's service;
+                # never fall back to that dangerous action, even if Exit asks
+                # for local release. Qt will display this actionable warning.
+                error = DataError(
+                    "Automatic release skipped: readsb/tar1090 have mixed "
+                    "ownership. The external service was preserved; a "
+                    "receiver started here may remain active. Stop it "
+                    "explicitly only when no other app is using it."
+                )
         if error:
             raise DataError(f"SDR release on exit was incomplete: {error}") from error
