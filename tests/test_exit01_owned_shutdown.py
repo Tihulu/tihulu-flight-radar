@@ -378,6 +378,8 @@ def test_headless_bridge_quit_closes_only_its_local_listener(monkeypatch):
 
     class SyntheticBridge:
         def __init__(self, **kwargs):
+            self.token = "synthetic-token-not-used"
+            self.allow_control = bool(kwargs.get("allow_control", False))
             events.append("bridge-created")
 
         def request_quit(self):
