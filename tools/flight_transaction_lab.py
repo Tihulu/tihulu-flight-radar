@@ -161,6 +161,7 @@ def _write_new(fd, name, payload):
     finally:
         os.close(handle)
     _fsync(fd)
+    return _inode(_entry(fd, name))
 
 
 def _rename(fd, src, dst, flag):
@@ -217,16 +218,14 @@ def _replace_if_expected(fd, temp, target, old_inode, old_content=None):
 
 def _atomic_file(fd, target, payload, expected_inode=None, expected_raw=None):
     temp = ".tx-" + uuid.uuid4().hex
-    _write_new(fd, temp, payload)
+    created_inode = _write_new(fd, temp, payload)
     try:
         _replace_if_expected(fd, temp, target, expected_inode, expected_raw)
     finally:
         st = _entry(fd, temp)
-        if st is not None and stat.S_ISREG(st.st_mode):
-            # Never remove foreign entry after failed exchange restoration.
-            if st.st_uid == os.getuid() and st.st_mode & 0o077 == 0:
-                os.unlink(temp, dir_fd=fd)
-                _fsync(fd)
+        if st is not None and _inode(st) == created_inode:
+            os.unlink(temp, dir_fd=fd)
+            _fsync(fd)
 
 
 class _View:
@@ -289,35 +288,38 @@ class _View:
         current, current_inode, link = self.pointer()
         if name is None:
             if current_inode is not None:
-                # There is no safe unlink-CAS with POSIX rename alone.
-                # Exchange a new tombstone file, validate displaced pointer.
-                self._pointer_tombstone(current_inode, link)
+                self._pointer_deactivate(current_inode, link)
             return
         if name == current:
             return
         tmp = ".pointer-" + uuid.uuid4().hex
         os.symlink("releases/" + name, tmp, dir_fd=self.root_fd)
+        created_inode = _inode(_entry(self.root_fd, tmp))
         _fsync(self.root_fd)
         try:
             _replace_if_expected(self.root_fd, tmp, "current", current_inode, link)
         finally:
-            if _entry(self.root_fd, tmp) is not None:
-                # Only our own temporary symlink is safe to discard.
-                if os.readlink(tmp, dir_fd=self.root_fd) == "releases/" + name:
-                    os.unlink(tmp, dir_fd=self.root_fd)
-                    _fsync(self.root_fd)
-
-    def _pointer_tombstone(self, current_inode, link):
-        tmp = ".tombstone-" + uuid.uuid4().hex
-        _write_new(self.root_fd, tmp, b"deactivated\n")
-        try:
-            _replace_if_expected(self.root_fd, tmp, "current", current_inode, link)
-            os.unlink("current", dir_fd=self.root_fd)
-            _fsync(self.root_fd)
-        finally:
-            if _entry(self.root_fd, tmp) is not None:
+            st = _entry(self.root_fd, tmp)
+            if st is not None and _inode(st) == created_inode:
                 os.unlink(tmp, dir_fd=self.root_fd)
                 _fsync(self.root_fd)
+
+    def _pointer_deactivate(self, current_inode, link):
+        # Rename the old pointer to a unique retired name. If a foreign entry
+        # appeared, it is never destroyed: failed verification restores it.
+        retired = ".retired-" + uuid.uuid4().hex
+        _rename(self.root_fd, "current", retired, _NOREPLACE)
+        displaced = _entry(self.root_fd, retired)
+        if (displaced is None or _inode(displaced) != current_inode
+                or not stat.S_ISLNK(displaced.st_mode)
+                or os.readlink(retired, dir_fd=self.root_fd) != link):
+            try:
+                _rename(self.root_fd, retired, "current", _NOREPLACE)
+            except BaseException:
+                fail("Raced entry preserved in retired slot; recovery HOLD")
+            fail("Foreign pointer raced during deactivation")
+        os.unlink(retired, dir_fd=self.root_fd)
+        _fsync(self.root_fd)
 
     def change(self, target, state=None):
         if state is None:
