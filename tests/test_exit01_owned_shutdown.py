@@ -869,3 +869,201 @@ def test_shutdown_caches_are_owned_memory_not_saved_user_exports(
     assert bridge.online.cached == []
     assert bridge.multi_online.records == {}
     assert exported.read_bytes() == b"previously saved recording"
+
+
+# Final integration-safety coverage. These tests use the existing real Qt
+# method bodies via _qt_method, but never load Qt, open SDR/HTTP sockets,
+# spawn a subprocess, call sudo/systemctl, or access a real remote host.
+
+
+def test_shared_classic_window_closes_only_its_owned_map_and_workers():
+    """A secondary native classic view is a borrower of its parent receiver."""
+    import time
+
+    events = []
+    receiver = SimpleNamespace(
+        request_quit=lambda: pytest.fail("borrowed controller must not enter Quit"),
+        close=lambda **kw: pytest.fail("borrowed controller must not be released"),
+    )
+    classic_close = _qt_method(
+        "app.py", "RadarWindow", "closeEvent",
+        time=time, DataError=DataError,
+        MixedOwnershipWarning=control.MixedOwnershipWarning,
+        QMessageBox=SimpleNamespace(warning=lambda *a: pytest.fail(str(a))),
+        super=lambda: SimpleNamespace(
+            closeEvent=lambda event: events.append("classic-qt-close")),
+    )
+    secondary = SimpleNamespace(
+        _quit_done=False, _quit_requested=False, _quit_deadline=None,
+        _quit_warning_shown=False, _owns_receiver=False, controller=receiver,
+        timer=SimpleNamespace(stop=lambda: events.append("classic-timer-stop")),
+        action_future=None, snapshot_future=None, map_future=None,
+        _quit_retry=SimpleNamespace(
+            stop=lambda: events.append("classic-retry-stop")),
+        pool=SimpleNamespace(shutdown=lambda **kw: events.append(
+            ("classic-pool-stop", kw["wait"], kw["cancel_futures"]))),
+        map_server=SimpleNamespace(close=lambda: events.append("classic-map-close")),
+        _map_dialogs=[SimpleNamespace(close=lambda: events.append("map-dialog-close"))],
+    )
+    ignored = []
+    event = SimpleNamespace(ignore=lambda: ignored.append("ignored"))
+    classic_close(secondary, event)
+    assert ignored == []
+    assert secondary._quit_done and secondary._quit_requested
+    assert ("classic-pool-stop", True, True) in events
+    assert events.index("classic-map-close") < events.index("classic-qt-close")
+    assert events.count("classic-map-close") == 1
+    classic_close(secondary, event)
+    assert events.count("classic-map-close") == 1, "Repeated close is idempotent"
+
+
+def test_native_quit_drains_shared_classic_then_reaps_only_owned_child(monkeypatch):
+    """Full native Quit uses one controller, and does not kill another SDR client."""
+    import time
+
+    monkeypatch.setattr(control.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(
+        control, "service_action",
+        lambda action: pytest.fail("Quit may not touch external systemd services"))
+    bridge = bridge_module.Bridge(allow_control=True)
+    bridge.receiver.configure("Direct readsb")
+    ours = FakeDirectChild()
+    independent = FakeDirectChild()
+    bridge.receiver.process = ours
+    released = []
+    bridge.receiver._directory = SimpleNamespace(
+        cleanup=lambda: released.append("owned-json-dir"))
+
+    actions = []
+    classic_close = _qt_method(
+        "app.py", "RadarWindow", "closeEvent",
+        time=time, DataError=DataError,
+        MixedOwnershipWarning=control.MixedOwnershipWarning,
+        QMessageBox=SimpleNamespace(warning=lambda *a: pytest.fail(str(a))),
+        super=lambda: SimpleNamespace(
+            closeEvent=lambda event: actions.append("classic-qt-close")),
+    )
+    classic_ignored = []
+    classic = SimpleNamespace(
+        _quit_done=False, _quit_requested=False, _quit_deadline=None,
+        _quit_warning_shown=False, _owns_receiver=False,
+        controller=bridge.receiver,
+        timer=SimpleNamespace(stop=lambda: None),
+        action_future=None, snapshot_future=None, map_future=None,
+        _quit_retry=SimpleNamespace(stop=lambda: None),
+        pool=SimpleNamespace(shutdown=lambda **kw: actions.append("classic-pool")),
+        map_server=SimpleNamespace(close=lambda: actions.append("classic-map")),
+        _map_dialogs=[],
+    )
+
+    def close_classic():
+        actions.append("classic-quit")
+        classic_close(classic, SimpleNamespace(
+            ignore=lambda: classic_ignored.append("ignore")))
+        return not classic_ignored
+
+    server = SimpleNamespace(
+        shutdown=lambda: actions.append("native-http-shutdown"),
+        server_close=lambda: actions.append("native-socket-closed"),
+    )
+    thread = FakeThread(alive=False)
+    popup = SimpleNamespace(close=lambda: actions.append("popup-closed"))
+    web = SimpleNamespace(
+        _popups=[popup], setUrl=lambda url: actions.append(("web-url", url)))
+    native_listener_close = _qt_method(
+        "native.py", "NativeRadarWindow", "_close_local_listener")
+    native_close = _qt_method(
+        "native.py", "NativeRadarWindow", "closeEvent",
+        time=time, QUrl=lambda url: url,
+        MixedOwnershipWarning=control.MixedOwnershipWarning,
+        QMessageBox=SimpleNamespace(warning=lambda *a: pytest.fail(str(a))),
+        super=lambda: SimpleNamespace(
+            closeEvent=lambda event: actions.append("native-qt-close")),
+    )
+    native = SimpleNamespace(
+        _quit_done=False, _exit_requested=False, _quit_deadline=None,
+        _quit_warning_shown=False, _startup_future=None, bridge=bridge,
+        classic_window=SimpleNamespace(close=close_classic),
+        _startup_timer=SimpleNamespace(stop=lambda: actions.append("startup-stop")),
+        _startup_pool=SimpleNamespace(shutdown=lambda **kw: actions.append(
+            ("native-pool", kw["wait"], kw["cancel_futures"]))),
+        _listener_closed=False, server=server, server_thread=thread,
+        release_action=SimpleNamespace(isChecked=lambda: True), web=web,
+    )
+    native._close_local_listener = lambda: native_listener_close(native)
+    ignored = []
+    event = SimpleNamespace(ignore=lambda: ignored.append("ignored"))
+    native_close(native, event)
+
+    assert ignored == [] and classic_ignored == []
+    assert native._quit_done and classic._quit_done
+    assert native._listener_closed and bridge._quit_requested.is_set()
+    assert bridge.receiver._quit_requested.is_set()
+    assert actions.index("classic-map") < actions.index("native-http-shutdown")
+    assert ("native-pool", True, True) in actions
+    assert actions.count("native-http-shutdown") == 1
+    assert actions.count("native-socket-closed") == 1
+    assert thread.joins == [2]
+    assert ("web-url", "about:blank") in actions
+    assert ours.terminate_calls == 1 and ours.wait_calls == [5]
+    assert ours.exited and bridge.receiver.process is None
+    assert released == ["owned-json-dir"]
+    assert independent.terminate_calls == independent.kill_calls == 0
+    assert independent.wait_calls == [] and not independent.exited
+
+    native_close(native, event)
+    assert actions.count("native-http-shutdown") == 1
+    assert actions.count("classic-quit") == 1
+    assert ours.terminate_calls == 1 and ours.wait_calls == [5]
+
+
+def test_two_borrowers_of_external_pair_quit_without_stopping_any_unit(services):
+    """Independent read-only watchers do not gain service shutdown ownership."""
+    states, events = services
+    first = bridge_module.Bridge(allow_control=True)
+    second = bridge_module.Bridge(allow_control=True)
+    assert first.receiver is not second.receiver
+    assert first.receiver._service_units_started_by_app == set()
+    assert second.receiver._service_units_started_by_app == set()
+    first.close(release_local_service=True)
+    assert states == {"readsb.service": "active", "tar1090.service": "active"}
+    second.close(release_local_service=True)
+    first.close(release_local_service=True)
+    assert events == [], "Neither borrower may issue a paired service Stop"
+    assert first.receiver._closed and second.receiver._closed
+
+
+def test_explicit_start_claims_pair_but_second_observer_quit_only_borrows(services):
+    """One owner and a subsequently observing client are tracked separately.
+
+    This is a *sequential* case: the borrower quits BEFORE the owner.
+    Concurrent cross-process leases are not implemented or certified here.
+    """
+    states, events = services
+    states.update({unit: "inactive" for unit in states})
+    owner = control.ReceiverController()
+    observer = control.ReceiverController()
+    owner.start()
+    observer.start()
+    assert owner._service_units_started_by_app == set(control.UNITS)
+    assert observer._service_units_started_by_app == set()
+    observer.close(release_local_service=True)
+    assert states == {"readsb.service": "active", "tar1090.service": "active"}
+    assert events == ["start", "start"]
+    owner.close(release_local_service=True)
+    assert events == ["start", "start", "stop"]
+
+
+def test_local_direct_child_quit_does_not_touch_foreign_direct_child(monkeypatch):
+    ours = FakeDirectChild(stubborn=True)
+    independent = FakeDirectChild()
+    receiver, cleaned = direct_receiver(monkeypatch, ours)
+    monkeypatch.setattr(
+        control, "service_action",
+        lambda action: pytest.fail("No global service action on direct Quit"))
+    receiver.close(release_local_service=True)
+    assert ours.terminate_calls == 1 and ours.kill_calls == 1
+    assert ours.wait_calls == [5, 3]
+    assert receiver.process is None and cleaned == [True]
+    assert independent.terminate_calls == independent.kill_calls == 0
+    assert independent.wait_calls == [] and not independent.exited
