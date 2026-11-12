@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """AGENT 06 independent PR #29 race evidence — synthetic CI-only fixtures.
 
-IMPORTANT: These tests intentionally assert the CURRENT unsafe behavior to
-document reproducible release blockers. A green test run is NOT a security GO.
+Agent 07 continuation: turn independent reproductions into negative security
+acceptance checks. A PASS still does NOT prove resistance to hostile same-UID
+processes or production release safety.
 Runs exclusively in a newly created disposable RUNNER_TEMP sandbox on Linux.
 No production installation, pipx, QSettings, systemctl, sudo, SDR or network.
 """
@@ -13,8 +14,9 @@ import json
 import multiprocessing
 import os
 from pathlib import Path
-import shutil
+import subprocess
 import sys
+import time
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -53,73 +55,65 @@ class IndependentPR29Evidence(unittest.TestCase):
         self.lab.stage_fixture("new", b"new")
         self.lab.switch("old")
 
-    def race_delete(self, prefix, switch_to):
-        """Inject a foreign file at the instant the trusted caller unlinks.
+    def assert_retains_without_unlink(self, prefix, switch_to):
+        """Enforce: no pathname-based deletion in shared transaction namespace.
 
-        Real adversarial schedule: after validated moved-entry inode/content,
-        another same-UID process swaps the entry before unlink(). The
-        injected file's bytes are unrelated to this transaction and must be
-        preserved. Existing code calls unconditional unlink and deletes it.
+        The audit's previous deterministic inject-on-unlink tests established
+        that any validation before os.unlink is still racy. Their secure
+        successors reject the dangerous operation itself; displaced entries
+        must be retained as evidence. This is NOT a same-UID trust guarantee.
         """
         real_unlink = os.unlink
-        observed = []
-        original_payload = b"FOREIGN_INDEPENDENT_DATA_PR29"
-        def interleave(name, *args, **kwargs):
-            fd = kwargs.get("dir_fd")
-            if (fd is not None and isinstance(name, str)
-                    and name.startswith(prefix) and not observed):
-                real_unlink(name, dir_fd=fd)
-                handle = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL,
-                                 0o600, dir_fd=fd)
-                try:
-                    os.write(handle, original_payload)
-                    os.fsync(handle)
-                finally:
-                    os.close(handle)
-                observed.append(name)
+        attempted = []
+        def forbid(name, *args, **kwargs):
+            if kwargs.get("dir_fd") is not None:
+                attempted.append(name)
+                raise AssertionError("Unsafe path-unlink attempted: " + str(name))
             return real_unlink(name, *args, **kwargs)
-        with patch.object(tx.os, "unlink", side_effect=interleave):
+        with patch.object(tx.os, "unlink", side_effect=forbid):
             self.lab.switch(switch_to)
-        self.assertEqual(len(observed), 1, "Injected race was not reached")
-        self.assertFalse((self.lab.root / observed[0]).exists(),
-                         "Reproduction: foreign bytes were removed by final unlink")
-        self.assertFalse((self.lab.root / observed[0]).is_symlink())
-        return observed[0]
+        self.assertEqual(attempted, [], "No transaction path may be unlinked")
+        matches = list(self.lab.root.glob(prefix + "*"))
+        self.assertTrue(matches, "Old transaction evidence must be retained")
+        return matches
 
-    def test_repro_pointer_displaced_entry_replaced_before_unlink(self):
+    def test_accept_pointer_displaced_entry_kept_instead_of_unlink(self):
         self.prepare()
-        name = self.race_delete(".pointer-", "new")
-        self.assertTrue(name.startswith(".pointer-"))
+        entries = self.assert_retains_without_unlink(".pointer-", "new")
+        self.assertTrue(any(x.is_symlink() and os.readlink(x) == "releases/old"
+                            for x in entries))
         self.assertEqual(self.lab.status()["active"], "new")
 
-    def test_repro_state_displaced_entry_replaced_before_unlink(self):
+    def test_accept_state_displaced_entry_kept_instead_of_unlink(self):
         self.prepare()
-        name = self.race_delete(".tx-", "new")
-        self.assertTrue(name.startswith(".tx-"))
+        entries = self.assert_retains_without_unlink(".tx-", "new")
+        self.assertTrue(any(b'"active":"old"' in x.read_bytes()
+                            for x in entries if x.is_file()))
         self.assertEqual(self.lab.status()["active"], "new")
 
-    def test_repro_verified_pending_retirement_replaced_before_unlink(self):
+    def test_accept_verified_pending_retirement_kept_instead_of_unlink(self):
         self.prepare()
-        name = self.race_delete(".retired-journal-", "new")
-        self.assertTrue(name.startswith(".retired-journal-"))
+        entries = self.assert_retains_without_unlink(".retired-journal-", "new")
+        self.assertTrue(any(b'"owner"' in x.read_bytes()
+                            for x in entries if x.is_file()))
         self.assertFalse(self.lab.pending.exists())
         self.assertEqual(self.lab.status()["active"], "new")
 
-    def test_repro_verified_deactivation_retired_pointer_replaced_before_unlink(self):
+    def test_accept_deactivation_retired_pointer_kept_instead_of_unlink(self):
         self.prepare()
-        name = self.race_delete(".retired-", None)
-        self.assertTrue(name.startswith(".retired-"))
+        entries = self.assert_retains_without_unlink(".retired-", None)
+        self.assertTrue(any(x.is_symlink() and os.readlink(x) == "releases/old"
+                            for x in entries))
         self.assertIsNone(self.lab.status()["active"])
 
-    def test_repro_env_runner_temp_changed_after_constructor_changes_write_root(self):
-        # The root was validated at initial construction; locked() uses live
-        # environment rather than a bound root path/descriptor.
+    def test_accept_env_root_drift_is_rejected_without_write(self):
         self.lab.stage_fixture("one", b"old-base")
         second = Path(tempfile.mkdtemp(prefix="flight-pr29-other-", dir=self.base))
         os.environ["RUNNER_TEMP"] = str(second)
-        self.lab.stage_fixture("two", b"unexpected-other-base")
-        unexpected = second / "flight-transaction-lab" / "qa" / "releases" / "two" / "image.bin"
-        self.assertEqual(unexpected.read_bytes(), b"unexpected-other-base")
+        with self.assertRaisesRegex(RuntimeError, "RUNNER_TEMP changed"):
+            self.lab.stage_fixture("two", b"must-not-write")
+        unexpected = second / "flight-transaction-lab" / "qa" / "releases" / "two"
+        self.assertFalse(unexpected.exists(), "No silent redirected writes")
         self.assertFalse((self.lab.releases / "two").exists())
 
     def test_control_strict_invalid_journal_is_preserved(self):
@@ -203,34 +197,44 @@ class IndependentPR29Evidence(unittest.TestCase):
         self.assertEqual(self.lab.state_path.read_bytes(), state_before)
         self.assertEqual(os.readlink(self.lab.current), "releases/new")
 
-    def test_repro_lock_inode_replacement_allows_overlapping_critical_sections(self):
-        # Cooperative rollback serializes. Replacing lab.lock after its
-        # initial inode check, however, creates a second independent flock.
+    def test_accept_replaced_lock_cannot_overlap_critical_sections(self):
         self.prepare()
-        ctx = multiprocessing.get_context("fork")
-        result = ctx.Queue()
-        root = self.lab.root
-        with self.lab.locked():
-            first_ino = self.lab.lock_path.stat().st_ino
-            self.lab.lock_path.unlink()
-            self.lab.lock_path.write_bytes(b"FOREIGN_LOCK_PATH")
-            self.assertNotEqual(self.lab.lock_path.stat().st_ino, first_ino)
-            def worker():
-                try:
-                    with tx.TransactionLab(root).locked():
-                        result.put("SECOND_CRITICAL_SECTION_ENTERED")
-                except BaseException as exc:
-                    result.put("ERROR:" + repr(exc))
-            process = ctx.Process(target=worker)
-            process.start()
-            process.join(timeout=8)
-            if process.is_alive():
-                process.terminate()
-                process.join()
-                self.fail("Child could not enter replaced lock")
-            self.assertEqual(process.exitcode, 0)
-            # The original lock is STILL held by the parent here.
-            self.assertEqual(result.get(timeout=2), "SECOND_CRITICAL_SECTION_ENTERED")
+        child = None
+        try:
+            with self.assertRaisesRegex(RuntimeError,
+                                        "Lock entry replaced during transaction"):
+                with self.lab.locked():
+                    old_inode = self.lab.lock_path.stat().st_ino
+                    self.lab.lock_path.unlink()
+                    self.lab.lock_path.write_bytes(b"FOREIGN_LOCK_PATH")
+                    self.assertNotEqual(self.lab.lock_path.stat().st_ino, old_inode)
+                    # Fresh subprocess prevents inherited parent flock FDs
+                    # under fork from extending the original held lock.
+                    script = (
+                        "import os,sys\n"
+                        "from pathlib import Path\n"
+                        "from tools import flight_transaction_lab as tx\n"
+                        "print('READY',flush=True)\n"
+                        "with tx.TransactionLab(Path(sys.argv[1])).locked():\n"
+                        " print('ENTERED',flush=True)\n"
+                    )
+                    child = subprocess.Popen(
+                        [sys.executable, "-c", script, str(self.lab.root)],
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                        cwd=os.getcwd(), env=os.environ.copy(), close_fds=True)
+                    self.assertEqual(child.stdout.readline().strip(), b"READY")
+                    # Before parent release, child MUST remain blocked even
+                    # though lab.lock was replaced by a same-UID process.
+                    time.sleep(0.35)
+                    self.assertIsNone(child.poll(),
+                        "Replacing lock inode entered a second critical section")
+            stdout, stderr = child.communicate(timeout=8)
+            self.assertEqual(child.returncode, 0, stderr.decode(errors="replace"))
+            self.assertIn(b"ENTERED", stdout)
+        finally:
+            if child is not None and child.poll() is None:
+                child.kill()
+                child.communicate()
 
 
 if __name__ == "__main__":
