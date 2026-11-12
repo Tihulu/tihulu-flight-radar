@@ -827,3 +827,45 @@ def test_headless_quit_releases_app_owned_paired_systemd_only(
     assert events == ["start", "stop"]
     assert set(states.values()) == {"inactive"}
     assert instances[0].receiver._quit_requested.is_set()
+
+
+def test_queued_start_is_rejected_after_quit_even_if_executor_runs_it(
+        monkeypatch, services):
+    """Synthetic Qt-style queued Start cannot acquire a receiver after STOPPING."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    _, events = services
+    gate = threading.Event()
+    entered = threading.Event()
+    controller = control.ReceiverController()
+
+    def blocking_first_job():
+        entered.set()
+        assert gate.wait(2), "fake queued worker did not finish"
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        first = pool.submit(blocking_first_job)
+        assert entered.wait(1)
+        queued_start = pool.submit(controller.start)
+        controller.request_quit()  # event set before worker may start
+        gate.set()
+        first.result(timeout=2)
+        with pytest.raises(DataError, match="shutting down"):
+            queued_start.result(timeout=2)
+    controller.close(release_local_service=True)
+    assert events == [], "Queued Start must not touch external systemd services"
+
+
+def test_shutdown_caches_are_owned_memory_not_saved_user_exports(
+        monkeypatch, tmp_path):
+    """No remote API call, delete, or cache-to-recording spill on Quit."""
+    bridge = bridge_module.Bridge()
+    exported = tmp_path / "completed-flight-data.json"
+    exported.write_bytes(b"previously saved recording")
+    bridge.online.cached = [{"hex": "deadc0", "seen": 0}]
+    bridge.multi_online.records = {"adsblol": {"rows": [{"hex": "deadc0"}]}}
+    monkeypatch.setattr(bridge.receiver, "close", lambda **kwargs: None)
+    bridge.close(release_local_service=True)
+    assert bridge.online.cached == []
+    assert bridge.multi_online.records == {}
+    assert exported.read_bytes() == b"previously saved recording"
