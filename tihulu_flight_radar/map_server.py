@@ -80,16 +80,18 @@ class LocalMapServer:
         so an unstarted instance needs server_close() only.
         """
         with self._lifecycle_lock:
-            if self._closed:
-                return
+            first_close = not self._closed
             self._closed = True
             started = self._started
-        try:
-            if started:
-                self.httpd.shutdown()
-        finally:
-            self.httpd.server_close()
+        if first_close:
+            try:
+                if started:
+                    self.httpd.shutdown()
+            finally:
+                self.httpd.server_close()
         if started:
             self.thread.join(timeout=3)
             if self.thread.is_alive():
+                # Retry still checks the exact owned thread; never claim
+                # the listener has stopped just because it was closed once.
                 raise RuntimeError("App-owned local map server did not stop within 3 seconds.")
