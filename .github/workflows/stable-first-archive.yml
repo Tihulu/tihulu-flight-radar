@@ -54,6 +54,29 @@ jobs:
         run: python scripts/qt_smoke.py
       - name: Native embedded Qt import
         run: python -c "from tihulu_flight_radar.native import NativeRadarWindow; print(NativeRadarWindow.__name__)"
+      - name: Real Qt WebEngine window smoke with passive Stable First shim
+        env:
+          TIHULU_STABLE_FIRST_PASSIVE: "1"
+          QTWEBENGINE_CHROMIUM_FLAGS: "--disable-gpu"
+        run: |
+          mkdir -p "$RUNNER_TEMP/stable-first-qt-config" "$RUNNER_TEMP/stable-first-qt-cache" "$RUNNER_TEMP/stable-first-qt-data"
+          export XDG_CONFIG_HOME="$RUNNER_TEMP/stable-first-qt-config"
+          export XDG_CACHE_HOME="$RUNNER_TEMP/stable-first-qt-cache"
+          export XDG_DATA_HOME="$RUNNER_TEMP/stable-first-qt-data"
+          python - <<'PY'
+          import runpy
+          runpy.run_path("archive/stable-first/installer/safe_entry.py", run_name="ci_import_only")
+          from PySide6.QtWidgets import QApplication
+          from tihulu_flight_radar.native import NativeRadarWindow
+          app = QApplication([])
+          window = NativeRadarWindow()
+          assert window.bridge is not None
+          assert window.web is not None
+          assert "Tihulu Flight Radar" in window.windowTitle()
+          assert window.autostart_action is not None
+          window.close()
+          print("Original Qt WebEngine window created and closed under passive safety shim")
+          PY
       - name: Archive safety unit tests
         run: python -m unittest discover -s archive/stable-first/tests -v
 
