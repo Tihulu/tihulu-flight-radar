@@ -1,0 +1,42 @@
+name: Flight version transaction laboratory (CI-only)
+on:
+  pull_request:
+    paths:
+      - "tools/flight_transaction_lab.py"
+      - "tests/test_flight_transaction_lab.py"
+      - ".github/workflows/flight-transaction-lab.yml"
+      - "docs/FLIGHT_032_TRANSACTION_LAB.md"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  recoverable-fixture-transactions:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.3'
+      - run: python -m pip install 'pytest>=8,<10'
+      - name: Inject failures and verify recovery in disposable sandbox
+        run: python -m pytest -q tests/test_flight_transaction_lab.py
+      - name: Demonstrate read-only plan has no side effects
+        run: |
+          python tools/flight_transaction_lab.py --plan
+          git diff --exit-code
+      - name: Check no actual install, service manager, or elevated commands in laboratory
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          code=Path("tools/flight_transaction_lab.py").read_text(encoding="utf-8")
+          compile(code, "tools/flight_transaction_lab.py", "exec")
+          for bad in ("subprocess", "pipx", "systemctl", "sudo ", "apt-get", "urllib", "requests"):
+              if bad in ("pipx", "systemctl") and bad in code:
+                  # Documentation bans are non-executable; reject programmatic calls instead.
+                  assert bad + "(" not in code
+              else:
+                  assert bad not in code, bad
+          assert 'GITHUB_ACTIONS") != "true"' in code
+          print("PASS: CI-gated fixture-only operations")
+          PY
