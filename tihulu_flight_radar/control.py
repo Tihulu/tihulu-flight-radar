@@ -22,6 +22,11 @@ MODES = ("Linux services", "Direct readsb", "Remote JSON")
 QUIT_OPERATION_TIMEOUT_SECONDS = 5.0
 
 
+class MixedOwnershipWarning(DataError):
+    """Safe nonfatal Quit warning; external systemd service was untouched."""
+
+
+
 def _unit_active(unit: str) -> tuple[bool, str]:
     """Read-only state check. Active process != confirmed RF reception."""
     try:
@@ -322,7 +327,7 @@ class ReceiverController:
                     else:
                         # Existing sudoers authorizes only a paired stop.
                         # Preserve the external unit and PR #15's warning.
-                        mixed = DataError(
+                        mixed = MixedOwnershipWarning(
                             "Automatic release skipped: readsb/tar1090 have mixed "
                             "ownership. The external service was preserved; a "
                             "receiver started here may remain active. Stop it "
@@ -332,9 +337,13 @@ class ReceiverController:
             finally:
                 self._inside_close = False
             if error:
-                # No false assertion that all resources were released;
-                # successfully reaped child handles are already cleared.
-                raise DataError(f"SDR release on exit was incomplete: {error}") from error
+                # Only a pure mixed ownership outcome is a nonfatal warning.
+                # A concurrent direct-child failure remains fatal even if its
+                # error includes the words "mixed ownership".
+                msg = f"SDR release on exit was incomplete: {error}"
+                if isinstance(error, MixedOwnershipWarning):
+                    raise MixedOwnershipWarning(msg) from error
+                raise DataError(msg) from error
             self._closed = True
         finally:
             self._operation_lock.release()
