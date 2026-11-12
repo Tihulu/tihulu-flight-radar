@@ -99,6 +99,29 @@ class OwnershipTests(unittest.TestCase):
                 sf.verify_inventory(folder, known_hash)
             self.assertTrue((folder / "foreign-model.gguf").exists())
 
+    def test_interrupted_install_preserves_foreign_files_and_leaves_no_stage(self):
+        with tempfile.TemporaryDirectory() as root:
+            folder = Path(root)
+            foreign = folder / "old-pipx-script"
+            foreign.write_text("NEVER_CHANGE")
+            def local_dir(path):
+                Path(path).mkdir(parents=True, exist_ok=True)
+            with mock.patch.object(sf, "BASE", folder), \
+                 mock.patch.object(sf, "RELEASES", folder / "releases"), \
+                 mock.patch.object(sf, "CURRENT", folder / "current"), \
+                 mock.patch.object(sf, "STATE", folder / "state.json"), \
+                 mock.patch.object(sf, "LAUNCHER", folder / "launcher"), \
+                 mock.patch.object(sf, "DESKTOP", folder / "desktop"), \
+                 mock.patch.object(sf, "secure_dir", side_effect=local_dir), \
+                 mock.patch.object(sf.subprocess, "run", side_effect=RuntimeError("interrupted venv creation")):
+                with self.assertRaisesRegex(RuntimeError, "interrupted"):
+                    sf.install()
+            self.assertEqual(foreign.read_text(), "NEVER_CHANGE")
+            self.assertFalse((folder / "launcher").exists())
+            self.assertFalse((folder / "desktop").exists())
+            self.assertFalse((folder / "current").exists())
+            self.assertEqual(list((folder / "releases").iterdir()), [])
+
     def test_rollback_never_calls_receiver_commands(self):
         state = {"owner": sf.OWNER, "source_sha": sf.SOURCE_SHA,
                  "active": "new", "previous": "old", "releases": {"new": {}, "old": {}}}
