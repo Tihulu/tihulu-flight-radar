@@ -17,6 +17,9 @@ UNITS = ("readsb.service", "tar1090.service")
 ACTIONS = ("start", "stop", "enable", "disable")
 SYSTEMCTL = "/usr/bin/systemctl"
 MODES = ("Linux services", "Direct readsb", "Remote JSON")
+# Maximum time Quit waits for a receiver command already in progress.
+# An incomplete operation must be reported without losing the child handle.
+QUIT_OPERATION_TIMEOUT_SECONDS = 5.0
 
 
 def _unit_active(unit: str) -> tuple[bool, str]:
@@ -284,7 +287,12 @@ class ReceiverController:
     def close(self, release_local_service: bool = False):
         """Idempotent bounded Quit, preserving PR #15's paired-service rules."""
         self.request_quit()  # set before blocking on in-flight Start/Restart
-        with self._operation_lock:
+        if not self._operation_lock.acquire(timeout=QUIT_OPERATION_TIMEOUT_SECONDS):
+            raise DataError(
+                "SDR release on exit incomplete: an app-owned receiver operation "
+                "is still running; retry Quit after it finishes."
+            )
+        try:
             if self._closed:
                 return
             error = None
@@ -328,3 +336,5 @@ class ReceiverController:
                 # successfully reaped child handles are already cleared.
                 raise DataError(f"SDR release on exit was incomplete: {error}") from error
             self._closed = True
+        finally:
+            self._operation_lock.release()
