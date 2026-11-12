@@ -203,6 +203,35 @@ class IndependentPR29Evidence(unittest.TestCase):
         self.assertEqual(self.lab.state_path.read_bytes(), state_before)
         self.assertEqual(os.readlink(self.lab.current), "releases/new")
 
+    def test_repro_lock_inode_replacement_allows_overlapping_critical_sections(self):
+        # Cooperative rollback serializes. Replacing lab.lock after its
+        # initial inode check, however, creates a second independent flock.
+        self.prepare()
+        ctx = multiprocessing.get_context("fork")
+        result = ctx.Queue()
+        root = self.lab.root
+        with self.lab.locked():
+            first_ino = self.lab.lock_path.stat().st_ino
+            self.lab.lock_path.unlink()
+            self.lab.lock_path.write_bytes(b"FOREIGN_LOCK_PATH")
+            self.assertNotEqual(self.lab.lock_path.stat().st_ino, first_ino)
+            def worker():
+                try:
+                    with tx.TransactionLab(root).locked():
+                        result.put("SECOND_CRITICAL_SECTION_ENTERED")
+                except BaseException as exc:
+                    result.put("ERROR:" + repr(exc))
+            process = ctx.Process(target=worker)
+            process.start()
+            process.join(timeout=8)
+            if process.is_alive():
+                process.terminate()
+                process.join()
+                self.fail("Child could not enter replaced lock")
+            self.assertEqual(process.exitcode, 0)
+            # The original lock is STILL held by the parent here.
+            self.assertEqual(result.get(timeout=2), "SECOND_CRITICAL_SECTION_ENTERED")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
