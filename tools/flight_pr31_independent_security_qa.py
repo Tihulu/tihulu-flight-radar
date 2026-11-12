@@ -225,5 +225,38 @@ class PR31IndependentSecurityQA(unittest.TestCase):
         self.assertEqual(lab.pending.read_bytes(), journal)
 
 
+    def test_09_runner_temp_env_drift_has_no_redirected_write(self):
+        lab = self.new_lab("envdrift")
+        lab.stage_fixture("original", b"safe")
+        other = self.anchor / "other-runner"
+        other.mkdir(mode=0o700)
+        os.environ["RUNNER_TEMP"] = str(other)
+        try:
+            with self.assertRaisesRegex(RuntimeError,
+                                        "RUNNER_TEMP changed"):
+                lab.stage_fixture("redirected", b"must-not-write")
+        finally:
+            os.environ["RUNNER_TEMP"] = str(self.runner)
+        self.assertFalse((other / "flight-transaction-lab").exists())
+        self.assertFalse((lab.releases / "redirected").exists())
+
+    def test_10_public_self_hash_manifest_forgery_still_accepted(self):
+        # Known P1 trusted-provenance gap; SHA256 is data integrity, not origin.
+        import hashlib
+        lab = self.new_lab("manifest")
+        lab.stage_fixture("one", b"genuine")
+        release = lab.releases / "one"
+        forged = b"same-uid-forged-content"
+        (release / "image.bin").write_bytes(forged)
+        (release / "manifest.json").write_text(json.dumps({
+            "owner": tx.OWNER, "name": "one",
+            "sha256": hashlib.sha256(forged).hexdigest(),
+            "size": len(forged)
+        }), encoding="utf-8")
+        lab.switch("one")
+        self.assertEqual(lab.status()["active"], "one")
+        self.assertEqual((release / "image.bin").read_bytes(), forged)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
