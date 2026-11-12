@@ -78,7 +78,7 @@ python3 archive/stable-first/installer/stable_first.py --uninstall
 
 The installer creates a new venv in a versioned directory under
 `~/.local/share/tihulu-flight-stable-first/releases/`, installs the pinned
-Qt 6.8.3 Python distributions, and installs the exact local source into that
+Qt 6.12.0 / WebEngine 6.12.0.140 Python distributions, and installs the exact local source into that
 venv. It places **only** a distinct executable in
 `~/.local/bin/tihulu-flight-stable-first` and an independent
 `tihulu-flight-stable-first.desktop`. No existing
