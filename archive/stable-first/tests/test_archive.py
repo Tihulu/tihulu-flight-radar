@@ -101,8 +101,9 @@ class OwnershipTests(unittest.TestCase):
 
     def test_interrupted_install_preserves_foreign_files_and_leaves_no_stage(self):
         with tempfile.TemporaryDirectory() as root:
-            folder = Path(root)
-            foreign = folder / "old-pipx-script"
+            parent = Path(root)
+            folder = parent / "separate-install"
+            foreign = parent / "old-pipx-script"
             foreign.write_text("NEVER_CHANGE")
             def local_dir(path):
                 Path(path).mkdir(parents=True, exist_ok=True)
