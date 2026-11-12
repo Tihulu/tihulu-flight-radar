@@ -11,6 +11,8 @@ import json
 import os
 from pathlib import Path
 import sys
+import subprocess
+import time
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -234,6 +236,46 @@ class IndependentPR33QA(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             lab.recover()
         self.assertEqual(lab.pending.read_bytes(), bad)
+
+
+    def test_11_replaced_base_cannot_split_cooperative_processes(self):
+        # Real child process has a freshly opened "/" FD, not inherited locks.
+        # A separately named replacement RUNNER_TEMP cannot create a
+        # concurrent critical section while the original root flock exists.
+        lab = self.prepared("parallel")
+        displaced = self.top / "parallel-original-base"
+        child = None
+        try:
+            with self.assertRaisesRegex(RuntimeError,
+                                       "Validated runner base namespace changed"):
+                with lab.locked():
+                    self.base.rename(displaced)
+                    self.base.mkdir(mode=0o700)
+                    script = "\n".join([
+                        "import sys",
+                        "from pathlib import Path",
+                        "from tools import flight_transaction_lab as tx",
+                        "print('READY', flush=True)",
+                        "with tx.TransactionLab(Path(sys.argv[1])).locked():",
+                        " print('ENTERED', flush=True)",
+                    ])
+                    child = subprocess.Popen(
+                        [sys.executable, "-c", script,
+                         str(self.base / "flight-transaction-lab" / "parallel")],
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                        env=os.environ.copy(), cwd=os.getcwd(), close_fds=True)
+                    self.assertEqual(child.stdout.readline().strip(), b"READY")
+                    time.sleep(0.3)
+                    self.assertIsNone(child.poll(),
+                                      "Second lab entered before first lock released")
+            out, err = child.communicate(timeout=8)
+            self.assertEqual(child.returncode, 0, err.decode(errors="replace"))
+            self.assertIn(b"ENTERED", out)
+            self.assertTrue(displaced.is_dir())
+        finally:
+            if child is not None and child.poll() is None:
+                child.kill()
+                child.communicate()
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
