@@ -30,6 +30,7 @@ NAME = re.compile(r"^[a-z][a-z0-9_-]{0,39}$")
 OWNER = "TIHULU_FLIGHT_TRANSACTION_LAB_V1"
 MAX_SIZE = 1024 * 1024
 MAX_META = 4096
+RETAINED_MAX = 256  # Quarantine history: fail closed when full, never auto-delete.
 _DIR = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
 _NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
 _EXCHANGE, _NOREPLACE = 2, 1
@@ -213,20 +214,19 @@ def _replace_if_expected(fd, temp, target, old_inode, old_content=None):
         except BaseException:
             fail("Cannot restore raced entry; preserve recovery evidence")
         raise
-    os.unlink(temp, dir_fd=fd)
+    # The displaced entry stays at 'temp' as durable quarantine evidence.
+    # There is NO safe path-based unlink-if-inode-matches on a directory
+    # writable by a hostile same-UID actor. Do not "check then unlink".
+    # A later trusted owner must inspect and clean these entries manually.
     _fsync(fd)
 
 
 def _atomic_file(fd, target, payload, expected_inode=None, expected_raw=None):
     temp = ".tx-" + uuid.uuid4().hex
-    created_inode = _write_new(fd, temp, payload)
-    try:
-        _replace_if_expected(fd, temp, target, expected_inode, expected_raw)
-    finally:
-        st = _entry(fd, temp)
-        if st is not None and _inode(st) == created_inode:
-            os.unlink(temp, dir_fd=fd)
-            _fsync(fd)
+    _write_new(fd, temp, payload)
+    # Failed attempts also leave temp in place: manual inspection, no auto
+    # cleanup that could delete a foreign entry after a final inode check.
+    _replace_if_expected(fd, temp, target, expected_inode, expected_raw)
 
 
 class _View:
@@ -296,15 +296,10 @@ class _View:
             return
         tmp = ".pointer-" + uuid.uuid4().hex
         os.symlink("releases/" + name, tmp, dir_fd=self.root_fd)
-        created_inode = _inode(_entry(self.root_fd, tmp))
         _fsync(self.root_fd)
-        try:
-            _replace_if_expected(self.root_fd, tmp, "current", current_inode, link)
-        finally:
-            st = _entry(self.root_fd, tmp)
-            if st is not None and _inode(st) == created_inode:
-                os.unlink(tmp, dir_fd=self.root_fd)
-                _fsync(self.root_fd)
+        # Every failed or displaced pointer is retained; never path-unlink a
+        # writable namespace entry after verifying an earlier inode.
+        _replace_if_expected(self.root_fd, tmp, "current", current_inode, link)
 
     def _pointer_deactivate(self, current_inode, link):
         # Rename the old pointer to a unique retired name. If a foreign entry
@@ -320,7 +315,7 @@ class _View:
             except BaseException:
                 fail("Raced entry preserved in retired slot; recovery HOLD")
             fail("Foreign pointer raced during deactivation")
-        os.unlink(retired, dir_fd=self.root_fd)
+        # Retain verified former pointer for owner inspection; no unlink race.
         _fsync(self.root_fd)
 
     def change(self, target, state=None):
@@ -332,6 +327,12 @@ class _View:
             self.verify_release(target)
         if target == state["active"]:
             return
+        # Never silently purge retained evidence. Cap the number of retained
+        # slots so CI cannot write an unbounded history without manual review.
+        retained = sum(name.startswith((".tx-", ".pointer-", ".retired-"))
+                       for name in os.listdir(self.root_fd))
+        if retained >= RETAINED_MAX:
+            fail("Retained transaction evidence limit exceeded: manual review")
         # Journal must be durable BEFORE pointer or state changes.
         before = state
         journal = {"owner": OWNER, "before": before, "to": target}
@@ -375,7 +376,8 @@ class _View:
             except BaseException:
                 fail("Raced journal preserved in retired slot; HOLD")
             fail("Foreign journal raced finalization")
-        os.unlink(retired, dir_fd=self.root_fd)
+        # Keep the checked committed journal in a retired quarantine slot.
+        # Its bytes remain available even if later forensic inspection is needed.
         _fsync(self.root_fd)
 
 
@@ -394,6 +396,9 @@ class TransactionLab:
             fail("Absolute disposable paths and names required")
         if root.parent != base / "flight-transaction-lab":
             fail("Fixture must be a direct child of RUNNER_TEMP/flight-transaction-lab")
+        self._base = base  # Constructor-validated path; never read env to locate writes.
+        self._base_inode = None
+        self._root_inode = None
         self.root = root
         self.releases = root / "releases"
         self.current = root / "current"
@@ -406,39 +411,71 @@ class TransactionLab:
             current = current / part
             if current.is_symlink():
                 fail("Symlink is forbidden in path ancestors")
-        if base.exists():
-            _owned(base.lstat(), directory=True)
+        if not base.exists():
+            fail("Runner base missing")
+        _owned(base.lstat(), directory=True)
+        self._base_inode = _inode(base.lstat())
+        if root.exists():
+            _owned(root.lstat(), directory=True)
+            self._root_inode = _inode(root.lstat())
 
     @contextlib.contextmanager
     def locked(self):
-        base = Path(os.environ["RUNNER_TEMP"])
-        basefd = _open_chain(base)
+        # The path validated at construction is immutable for this lab object.
+        # Never silently redirect operations when the process environment drifts.
+        if os.environ.get("RUNNER_TEMP") != os.fspath(self._base):
+            fail("RUNNER_TEMP changed after fixture construction")
+        basefd = _open_chain(self._base)
         try:
             _owned(os.fstat(basefd), directory=True)
-            parentfd = _dir_open(basefd, "flight-transaction-lab", create=True)
+            if _inode(os.fstat(basefd)) != self._base_inode:
+                fail("Validated runner base inode changed")
+            # Extra lock on the parent *directory*, independent of the lab.lock
+            # pathname. Replacing lab.lock alone cannot split the critical
+            # section, including before/after rollback selection.
+            fcntl.flock(basefd, fcntl.LOCK_EX)
             try:
-                rootfd = _dir_open(parentfd, self.root.name, create=True)
+                parentfd = _dir_open(basefd, "flight-transaction-lab", create=True)
                 try:
-                    lockfd = os.open("lab.lock",
-                        os.O_RDWR | os.O_CREAT | _NOFOLLOW, 0o600, dir_fd=rootfd)
+                    rootfd = _dir_open(parentfd, self.root.name, create=True)
                     try:
-                        _owned(os.fstat(lockfd))
-                        fcntl.flock(lockfd, fcntl.LOCK_EX)
-                        st = _entry(rootfd, "lab.lock")
-                        if st is None or _inode(st) != _inode(os.fstat(lockfd)):
-                            fail("Lock entry replaced")
-                        releasesfd = _dir_open(rootfd, "releases", create=True)
+                        root_inode = _inode(os.fstat(rootfd))
+                        if self._root_inode is None:
+                            self._root_inode = root_inode
+                        elif root_inode != self._root_inode:
+                            fail("Fixture root inode changed")
+                        lockfd = os.open("lab.lock",
+                            os.O_RDWR | os.O_CREAT | _NOFOLLOW, 0o600, dir_fd=rootfd)
                         try:
-                            yield _View(rootfd, releasesfd)
+                            _owned(os.fstat(lockfd))
+                            fcntl.flock(lockfd, fcntl.LOCK_EX)
+                            try:
+                                st = _entry(rootfd, "lab.lock")
+                                if st is None or _inode(st) != _inode(os.fstat(lockfd)):
+                                    fail("Lock entry replaced")
+                                releasesfd = _dir_open(rootfd, "releases", create=True)
+                                try:
+                                    yield _View(rootfd, releasesfd)
+                                finally:
+                                    os.close(releasesfd)
+                                    # Re-check on all exit paths, including on
+                                    # exception. This doesn't authenticate a
+                                    # malicious same-UID actor; it fails closed
+                                    # when the path changes during a transaction.
+                                    final = _entry(rootfd, "lab.lock")
+                                    if (final is None or
+                                            _inode(final) != _inode(os.fstat(lockfd))):
+                                        fail("Lock entry replaced during transaction")
+                            finally:
+                                fcntl.flock(lockfd, fcntl.LOCK_UN)
                         finally:
-                            os.close(releasesfd)
-                            fcntl.flock(lockfd, fcntl.LOCK_UN)
+                            os.close(lockfd)
                     finally:
-                        os.close(lockfd)
+                        os.close(rootfd)
                 finally:
-                    os.close(rootfd)
+                    os.close(parentfd)
             finally:
-                os.close(parentfd)
+                fcntl.flock(basefd, fcntl.LOCK_UN)
         finally:
             os.close(basefd)
 
