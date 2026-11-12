@@ -132,8 +132,8 @@ class IndependentPR29Evidence(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "Foreign or corrupt"):
             self.lab.recover()
         self.assertEqual(self.lab.pending.read_bytes(), data)
-        self.assertEqual(self.lab.status if self.lab.pending.exists() else None,
-                         self.lab.status)
+        self.assertTrue(self.lab.pending.exists(),
+                        "Corrupt journal must remain available for diagnosis")
 
     def test_control_interrupted_pointer_recovery_and_one_lock_rollback(self):
         self.prepare()
