@@ -79,9 +79,45 @@ def verify():
     )
 
 
+
+
+def verify_owner_reported_python_environment():
+    """Verify saved owner-reported inventory against an independent typed manifest.
+
+    This verifies consistency of archive evidence; it does not validate the
+    real workstation's environment or reconstruct a wheel-locked installation.
+    """
+    observed = ARCHIVE / "manifest" / "observed-pip-freeze.txt"
+    typed = ARCHIVE / "manifest" / "observed-python-environment.json"
+    if observed.is_symlink() or typed.is_symlink():
+        raise ValueError("Observed environment evidence cannot be symlinks")
+    data = json.loads(typed.read_text(encoding="utf-8"))
+    if (data.get("git_revision") != EXPECTED_COMMIT
+            or data.get("source_archive_tree_sha") != EXPECTED_TREE
+            or data.get("kind") != "owner-reported-python-distribution-inventory"
+            or data.get("observed_python") != "3.12.3"):
+        raise ValueError("Owner-reported Python environment provenance mismatch")
+    actual = [line.strip() for line in observed.read_text(encoding="utf-8").splitlines()
+              if line.strip() and not line.startswith("#")]
+    expected = [f'{p["name"]}=={p["version"]}' for p in data["observed_packages"]]
+    pinned = (
+        "pip==26.3",
+        "PySide6==6.12.0",
+        "PySide6_Addons==6.12.0",
+        "PySide6_Essentials==6.12.0",
+        "PySide6_Pdf==6.12.0.140",
+        "PySide6_WebEngine==6.12.0.140",
+        "shiboken6==6.12.0",
+        "tihulu-flight-radar==0.3.2.dev4",
+    )
+    if actual != expected or tuple(expected) != pinned:
+        raise ValueError("User-observed package list changed")
+    print(f"PASS: {len(expected)} observed Python distribution versions (not wheel hashes)")
+
 if __name__ == "__main__":
     try:
         verify()
+        verify_owner_reported_python_environment()
     except (OSError, KeyError, ValueError, subprocess.CalledProcessError) as exc:
         print("HOLD: " + str(exc), file=sys.stderr)
         raise SystemExit(2)

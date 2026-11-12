@@ -1,0 +1,54 @@
+{
+  "schema": 1,
+  "kind": "owner-reported-python-distribution-inventory",
+  "observed_date": "2026-11-12",
+  "observed_timezone": "Europe/Berlin",
+  "observed_command": "~/.local/share/pipx/venvs/tihulu-flight-radar/bin/python -m pip list --format=freeze",
+  "host_os": "Pop!_OS 24.04 LTS",
+  "observed_python": "3.12.3",
+  "git_provenance_source": "installed tihulu-flight-radar direct_url.json from owner terminal output",
+  "git_revision": "950f8278a625ce13a9a3c7e21bf9bf76d4b5888e",
+  "observed_packages": [
+    {
+      "name": "pip",
+      "version": "26.3"
+    },
+    {
+      "name": "PySide6",
+      "version": "6.12.0"
+    },
+    {
+      "name": "PySide6_Addons",
+      "version": "6.12.0"
+    },
+    {
+      "name": "PySide6_Essentials",
+      "version": "6.12.0"
+    },
+    {
+      "name": "PySide6_Pdf",
+      "version": "6.12.0.140"
+    },
+    {
+      "name": "PySide6_WebEngine",
+      "version": "6.12.0.140"
+    },
+    {
+      "name": "shiboken6",
+      "version": "6.12.0"
+    },
+    {
+      "name": "tihulu-flight-radar",
+      "version": "0.3.2.dev4"
+    }
+  ],
+  "scope": "user-reported pip-list snapshot of that pipx virtual environment only; does not enumerate global system packages, native libraries, standalone tar1090 cache, or private user files",
+  "verification_limits": [
+    "not independently read from the owner's machine",
+    "no local wheel file hashes, package RECORD attestation, exact pip artifacts, native OS dependencies or platform details",
+    "not an installable or reproducible lockfile",
+    "same package version may originate from different source or build"
+  ],
+  "permitted_use": "source provenance and dependency reconciliation for independent QA; not automatic installation or updating",
+  "source_archive_tree_sha": "0aa376600310576bb1de3c0c557e774c3233b6c5"
+}

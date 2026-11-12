@@ -17,6 +17,18 @@ jobs:
           python-version: '3.12'
       - name: Verify source Git-tree and each preserved blob; no hardware access
         run: python3 archive/installed-v0.3.2.dev4/tests/verify_snapshot.py
+      - name: Validate reported pip inventory (archive evidence only, no pip install)
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path("archive/installed-v0.3.2.dev4/manifest/observed-python-environment.json")
+          data = json.loads(p.read_text())
+          assert len(data["observed_packages"]) == 8
+          assert data["git_revision"] == "950f8278a625ce13a9a3c7e21bf9bf76d4b5888e"
+          assert data["verification_limits"]
+          print("Recorded package versions: 8 (environment reconstruction not certified)")
+          PY
       - name: Verify package version from preserved pyproject
         run: |
           python3 - <<'PY'

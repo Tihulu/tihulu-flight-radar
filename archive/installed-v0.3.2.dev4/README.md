@@ -13,7 +13,7 @@ GitHub independently resolves the requested revision to the same commit; its exa
 - `manifest/provenance.json` — path, byte size, Git blob SHA-1, Git mode for each of 120 files. Both the commit and tree are pinned, not dynamically copied from `main`.
 - `tests/verify_snapshot.py` — read-only verification of the exact Git subtree, source blob hashes and file inventory.
 
-The observed installed Python dependencies are `PySide6 6.12.0` and `PySide6-WebEngine 6.12.0.140`. This observation is **not** a complete pip-freeze or a wheel-hash lockfile; the full machine-installed dependency graph and build hashes were **not collected**. The source tree does not contain private local settings, stored receiver credentials, recordings, models, logs, pipx venv, or generated tar1090 cache.
+The owner subsequently provided the **entire observed output** of `pip list --format=freeze` from that pipx environment on 12 November 2026: **8 Python distributions**, including `pip`, `PySide6`, `PySide6_Addons`, `PySide6_Essentials`, `PySide6_Pdf`, `PySide6_WebEngine`, `shiboken6`, and `tihulu-flight-radar`. Preserve it as read-only evidence under [`manifest/observed-pip-freeze.txt`](manifest/observed-pip-freeze.txt) and [`manifest/observed-python-environment.json`](manifest/observed-python-environment.json); the verification script cross-checks both files. This is **not an installable lockfile or hash-verified reproduction**: the exact local wheel/archive hashes, platform-native shared-library versions, globally installed packages, separate tar1090 cache, private user data and installed venv contents were not collected or independently inspected. Do not run `pip install -r` against this observation.
 
 ## Version distinction
 
