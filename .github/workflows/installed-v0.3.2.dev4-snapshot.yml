@@ -1,0 +1,162 @@
+name: Current installed v0.3.2.dev4 source snapshot (review-only)
+on:
+  pull_request:
+    paths:
+      - "archive/installed-v0.3.2.dev4/**"
+      - ".github/workflows/installed-v0.3.2.dev4-snapshot.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-source-only:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify source Git-tree and each preserved blob; no hardware access
+        run: python3 archive/installed-v0.3.2.dev4/tests/verify_snapshot.py
+      - name: Validate reported pip inventory (archive evidence only, no pip install)
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path("archive/installed-v0.3.2.dev4/manifest/observed-python-environment.json")
+          data = json.loads(p.read_text())
+          assert len(data["observed_packages"]) == 8
+          assert data["git_revision"] == "950f8278a625ce13a9a3c7e21bf9bf76d4b5888e"
+          assert data["verification_limits"]
+          print("Recorded package versions: 8 (environment reconstruction not certified)")
+          PY
+      - name: Verify package version from preserved pyproject
+        run: |
+          python3 - <<'PY'
+          import tomllib
+          with open("archive/installed-v0.3.2.dev4/source/pyproject.toml", "rb") as f:
+              data = tomllib.load(f)
+          assert data["project"]["name"] == "tihulu-flight-radar"
+          assert data["project"]["version"] == "0.3.2.dev4"
+          print("Source package version: 0.3.2.dev4")
+          PY
+      - name: Compile source Python syntax without writing pyc files
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("archive/installed-v0.3.2.dev4/source/tihulu_flight_radar")
+          paths = list(p.glob("*.py"))
+          assert paths
+          for f in paths:
+              compile(f.read_bytes(), str(f), "exec")
+          print(f"Syntax compiled: {len(paths)} Python files")
+          PY
+
+  replay-observed-python-linux:
+    name: Rebuild owner-observed Python pins in disposable CI (not workstation)
+    needs: verify-source-only
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      PIP_NO_INPUT: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PYTHONNOUSERSITE: "1"
+      QT_QPA_PLATFORM: offscreen
+      QTWEBENGINE_CHROMIUM_FLAGS: --disable-gpu
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.3'
+      - name: Install sandbox Qt runtime dependencies (CI runner only)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libegl1 libgl1 libxkbcommon0 libxkbcommon-x11-0 libdbus-1-3 libnss3 libnspr4 libxcomposite1 libxdamage1 libxrandr2 libgbm1 libxtst6 libxkbfile1 libxss1 libxshmfence1 libasound2t64
+      - name: Create separate venv and replay eight owner-reported package versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m venv "$RUNNER_TEMP/installed-snapshot-venv"
+          P="$RUNNER_TEMP/installed-snapshot-venv/bin/python"
+          "$P" -m pip install --no-cache-dir "pip==26.3"
+          "$P" -m pip install --no-cache-dir \
+            "PySide6==6.12.0" \
+            "PySide6_Addons==6.12.0" \
+            "PySide6_Essentials==6.12.0" \
+            "PySide6_Pdf==6.12.0.140" \
+            "PySide6_WebEngine==6.12.0.140" \
+            "shiboken6==6.12.0"
+          "$P" -m pip install --no-cache-dir --no-deps "$GITHUB_WORKSPACE/archive/installed-v0.3.2.dev4/source"
+      - name: Verify the eight observed package versions BEFORE installing test-only tools
+        shell: bash
+        run: |
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/installed-snapshot-venv/bin/python" \
+            "$GITHUB_WORKSPACE/archive/installed-v0.3.2.dev4/tests/verify_rebuilt_environment.py"
+      - name: Run archived Python tests with only additional test tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          P="$RUNNER_TEMP/installed-snapshot-venv/bin/python"
+          "$P" -m pip install 'pytest>=8,<10'
+          mkdir -p "$RUNNER_TEMP/installed-snapshot-home/.config" \
+                   "$RUNNER_TEMP/installed-snapshot-home/.cache" \
+                   "$RUNNER_TEMP/installed-snapshot-home/.local/share"
+          export HOME="$RUNNER_TEMP/installed-snapshot-home"
+          export XDG_CONFIG_HOME="$HOME/.config"
+          export XDG_CACHE_HOME="$HOME/.cache"
+          export XDG_DATA_HOME="$HOME/.local/share"
+          cd "$GITHUB_WORKSPACE/archive/installed-v0.3.2.dev4/source"
+          "$P" -m pytest -q
+      - name: Run all archived JavaScript regressions (capture failure, do not hide it)
+        id: archived_js
+        continue-on-error: true
+        shell: bash
+        run: |
+          cd "$GITHUB_WORKSPACE/archive/installed-v0.3.2.dev4/source"
+          node --test tests/*.test.cjs
+      - name: Guarded classic Qt GUI smoke; never control receiver
+        id: guarded_qt
+        shell: bash
+        run: |
+          set -euo pipefail
+          export HOME="$RUNNER_TEMP/installed-snapshot-home"
+          export XDG_CONFIG_HOME="$HOME/.config"
+          export XDG_CACHE_HOME="$HOME/.cache"
+          export XDG_DATA_HOME="$HOME/.local/share"
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/installed-snapshot-venv/bin/python" \
+            "$GITHUB_WORKSPACE/archive/installed-v0.3.2.dev4/tests/guarded_classic_qt_smoke.py"
+      - name: Guarded native Qt WebEngine smoke (CI only, no SDR)
+        id: guarded_native
+        if: success() || steps.archived_js.outcome == 'failure'
+        shell: bash
+        env:
+          QTWEBENGINE_DISABLE_SANDBOX: '1'
+        run: |
+          set -euo pipefail
+          export HOME="$RUNNER_TEMP/installed-snapshot-home"
+          export XDG_CONFIG_HOME="$HOME/.config"
+          export XDG_CACHE_HOME="$HOME/.cache"
+          export XDG_DATA_HOME="$HOME/.local/share"
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/installed-snapshot-venv/bin/python" \
+            "$GITHUB_WORKSPACE/archive/installed-v0.3.2.dev4/tests/guarded_native_qt_smoke.py"
+      - name: Final source-parity HOLD gate (never mask original test failures)
+        if: always()
+        shell: bash
+        run: |
+          if [[ "${{ steps.archived_js.outcome }}" != "success" ]]; then
+            echo "::error::Original archived JavaScript regression suite failed. Preservation remains GO, functional parity HOLD."
+            exit 1
+          fi
+          if [[ "${{ steps.guarded_qt.outcome }}" != "success" ]]; then
+            echo "::error::Guarded Qt smoke did not pass. Functional parity HOLD."
+            exit 1
+          fi
+          if [[ "${{ steps.guarded_native.outcome }}" != "success" ]]; then
+            echo "::error::Guarded native Qt WebEngine smoke did not pass. Native runtime QA HOLD."
+            exit 1
+          fi
+          echo "Archived source and sandbox GUI tests passed; hardware and release remain HOLD."

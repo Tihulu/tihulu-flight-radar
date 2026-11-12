@@ -1,0 +1,13 @@
+# User-observed pip list --format=freeze, 2026-11-12 (Europe/Berlin)
+# Pop!_OS 24.04 LTS; pipx venv for tihulu-flight-radar; Python 3.12.3
+# NON-INSTALLABLE AUDIT EVIDENCE: not a dependency lock, wheel-hash manifest, or installer.
+# Exact Git source revision of application: 950f8278a625ce13a9a3c7e21bf9bf76d4b5888e
+# Do NOT use 'pip install -r' here to reconstruct; same version strings can resolve to different source/artifacts.
+pip==26.3
+PySide6==6.12.0
+PySide6_Addons==6.12.0
+PySide6_Essentials==6.12.0
+PySide6_Pdf==6.12.0.140
+PySide6_WebEngine==6.12.0.140
+shiboken6==6.12.0
+tihulu-flight-radar==0.3.2.dev4

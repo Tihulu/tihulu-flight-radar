@@ -1,0 +1,742 @@
+{
+  "schema": 1,
+  "kind": "user-observed-installed-source-snapshot",
+  "repository": "Tihulu/tihulu-flight-radar",
+  "package": "tihulu-flight-radar",
+  "version": "0.3.2.dev4",
+  "source_revision": "fix/native-radar-pairing-install-ui-2026-11-08",
+  "pinned_source_commit": "950f8278a625ce13a9a3c7e21bf9bf76d4b5888e",
+  "pinned_source_tree_sha": "0aa376600310576bb1de3c0c557e774c3233b6c5",
+  "pin_branch": "snapshot/installed-v0.3.2.dev4-950f8278",
+  "local_observation": "pipx distribution direct_url.json identifies exact Git source; this does not prove byte-for-byte equivalence of built wheel, environment, cache or configuration",
+  "observed_platform": "Pop!_OS 24.04 LTS",
+  "observed_python": "3.12.3",
+  "observed_dependencies": {
+    "PySide6": "6.12.0",
+    "PySide6-WebEngine": "6.12.0.140"
+  },
+  "source_file_count": 120,
+  "source_bytes": 1526385,
+  "files": [
+    {
+      "path": ".github/workflows/bridge-arm64.yml",
+      "mode": "100644",
+      "size": 1288,
+      "git_blob_sha1": "00518a3f80af6f540e951f516aa8424a950b174a"
+    },
+    {
+      "path": ".github/workflows/build.yml",
+      "mode": "100644",
+      "size": 5319,
+      "git_blob_sha1": "3a8ed42d4a4ae2aa063d1a41b242281e80fbb3c5"
+    },
+    {
+      "path": ".github/workflows/pages.yml",
+      "mode": "100644",
+      "size": 7812,
+      "git_blob_sha1": "4dd06f24dcae37d9a204e6208d5a2408b2e82f93"
+    },
+    {
+      "path": ".github/workflows/standalone-pages.yml",
+      "mode": "100644",
+      "size": 3673,
+      "git_blob_sha1": "8a1e5c05205f711ef777164b2f7de61f44603ecf"
+    },
+    {
+      "path": ".gitignore",
+      "mode": "100644",
+      "size": 80,
+      "git_blob_sha1": "643032ef66c43655e7548921bf9a4d10d13d9b0e"
+    },
+    {
+      "path": "AGENTS.md",
+      "mode": "100644",
+      "size": 7620,
+      "git_blob_sha1": "d0856e2bf25a69f1a6f515e48d35026d8410b553"
+    },
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "size": 11386,
+      "git_blob_sha1": "54ebd0d8177af80a3b167f9891aa1ffff2147281"
+    },
+    {
+      "path": "deploy/cloudflare-worker.mjs",
+      "mode": "100644",
+      "size": 3895,
+      "git_blob_sha1": "0384b4179e9860d2c6956b391c3608e9f6e20a4e"
+    },
+    {
+      "path": "deploy/wrangler.toml",
+      "mode": "100644",
+      "size": 356,
+      "git_blob_sha1": "e7e2d109c231d7c4d3e05ca2c9714c6fc5e5d5be"
+    },
+    {
+      "path": "docs/ANTENNA_OPTIONAL_TAR1090.md",
+      "mode": "100644",
+      "size": 4100,
+      "git_blob_sha1": "899b73100e46c724b1f5e4767400d045074d8672"
+    },
+    {
+      "path": "docs/DUAL_GITHUB_PAGES.md",
+      "mode": "100644",
+      "size": 4313,
+      "git_blob_sha1": "b1b7c92722adb32a375a7e2629cca7d9a78a3bff"
+    },
+    {
+      "path": "docs/FEATURE_PARITY_AND_SURVIVAL_KIT_GATE.md",
+      "mode": "100644",
+      "size": 5068,
+      "git_blob_sha1": "0ed599788615a90c86ba2d24ff68b6d195cd66dc"
+    },
+    {
+      "path": "docs/GITHUB_PAGES_AND_LOCAL_BRIDGE.md",
+      "mode": "100644",
+      "size": 11156,
+      "git_blob_sha1": "e077f030034cb0a7087fcbf0fd902429c50604ee"
+    },
+    {
+      "path": "docs/PAGES_TAR1090_SDR_HANDOFF.md",
+      "mode": "100644",
+      "size": 13668,
+      "git_blob_sha1": "6eec2228b551e08bc0ce1ad189eb547eb621a664"
+    },
+    {
+      "path": "docs/POP_OS_VERSION_SWITCH_AND_LEGACY.md",
+      "mode": "100644",
+      "size": 4396,
+      "git_blob_sha1": "3b2a4baa3459516789fbb8cffb28590ea2990892"
+    },
+    {
+      "path": "docs/RF_COVERAGE_AND_TIMESTAMP_LIMITS.md",
+      "mode": "100644",
+      "size": 24043,
+      "git_blob_sha1": "eced4a17366585123bc4c73c28b90062425e6fea"
+    },
+    {
+      "path": "docs/RTL_SDR_WEBUSB_LINUX_OWNERSHIP.md",
+      "mode": "100644",
+      "size": 5011,
+      "git_blob_sha1": "8a3eec0f74583a36779c8f4c5e6f790c4a65314e"
+    },
+    {
+      "path": "docs/SURVIVAL_KIT_FLIGHT_RADAR_HANDOFF_2026-11-05.md",
+      "mode": "100644",
+      "size": 5500,
+      "git_blob_sha1": "4c2bee15f05794a5236c9e939e1e62303b145dcc"
+    },
+    {
+      "path": "docs/TAR1090_WEBUSB_AND_INTERNET_SOURCES.md",
+      "mode": "100644",
+      "size": 5790,
+      "git_blob_sha1": "9e98aafb9a16577a8256c26dad914354fdb22448"
+    },
+    {
+      "path": "packaging/linux/build-deb.sh",
+      "mode": "100644",
+      "size": 1612,
+      "git_blob_sha1": "f1aeb7d2f560289259bd66d99f14260849c756d6"
+    },
+    {
+      "path": "packaging/linux/sudoers.conf",
+      "mode": "100644",
+      "size": 399,
+      "git_blob_sha1": "4533db0fec139dee8fc6dfb4fef660b0d5d48128"
+    },
+    {
+      "path": "packaging/linux/tihulu-flight-radar.desktop",
+      "mode": "100644",
+      "size": 263,
+      "git_blob_sha1": "390d29b97237053d76b2407f63accac18d045a89"
+    },
+    {
+      "path": "packaging/linux/tihulu-flight-radar.svg",
+      "mode": "100644",
+      "size": 495,
+      "git_blob_sha1": "c8ebad6ba2806798c4f65e96464e85473ca6e7b9"
+    },
+    {
+      "path": "pyproject.toml",
+      "mode": "100644",
+      "size": 1137,
+      "git_blob_sha1": "234e2bf8c02f529a7169beedba4ee97e055eac98"
+    },
+    {
+      "path": "scripts/build-browser-assets.sh",
+      "mode": "100644",
+      "size": 1417,
+      "git_blob_sha1": "1c3c70ea6309b266876f30323c8a1fb6adae2510"
+    },
+    {
+      "path": "scripts/build-web-tar1090.sh",
+      "mode": "100644",
+      "size": 3257,
+      "git_blob_sha1": "4bbdc4bb54585e3781ba2469060e6254f58d5d1f"
+    },
+    {
+      "path": "scripts/install-linux.sh",
+      "mode": "100644",
+      "size": 8329,
+      "git_blob_sha1": "4f732845b86aa0f58a32cae3133972b99d60819c"
+    },
+    {
+      "path": "scripts/popos-version-switch.sh",
+      "mode": "100644",
+      "size": 2844,
+      "git_blob_sha1": "dbde80f991583276fed13df89eb603f4b8f5832b"
+    },
+    {
+      "path": "scripts/qt_smoke.py",
+      "mode": "100644",
+      "size": 2527,
+      "git_blob_sha1": "cdbbe9f86b55f2cd090920505c3afb1a209b00d9"
+    },
+    {
+      "path": "scripts/rtl-sdr-usb-interface.sh",
+      "mode": "100644",
+      "size": 3302,
+      "git_blob_sha1": "a0f5eef895bc2d815d5b067d2db380f1438fdfce"
+    },
+    {
+      "path": "tests/aircraft_journey_routes.test.cjs",
+      "mode": "100644",
+      "size": 5157,
+      "git_blob_sha1": "ccb946e91733ce49d90458f04f450755e2406ced"
+    },
+    {
+      "path": "tests/aircraft_popup_reliability.test.cjs",
+      "mode": "100644",
+      "size": 5784,
+      "git_blob_sha1": "988696314053b196da7006aca0a6a022a777967f"
+    },
+    {
+      "path": "tests/aircraft_popup_rf_coverage.test.cjs",
+      "mode": "100644",
+      "size": 10264,
+      "git_blob_sha1": "db95dd6739e95ef170f389dadd4cc8ab20508921"
+    },
+    {
+      "path": "tests/aircraft_responsive_radio_load.test.cjs",
+      "mode": "100644",
+      "size": 3973,
+      "git_blob_sha1": "cd0d0bf6b8e271bb3becd0c9a888ca4e2b3b1c0e"
+    },
+    {
+      "path": "tests/aircraft_visuals.test.cjs",
+      "mode": "100644",
+      "size": 6466,
+      "git_blob_sha1": "cd88c51c651d80766130adb93dd436a7d28041e5"
+    },
+    {
+      "path": "tests/browser_adsb.test.cjs",
+      "mode": "100644",
+      "size": 4113,
+      "git_blob_sha1": "2d5d3e4a61dee48a39b4ab0f4b707ed17ff47aca"
+    },
+    {
+      "path": "tests/browser_source.test.cjs",
+      "mode": "100644",
+      "size": 2760,
+      "git_blob_sha1": "5cef42dc31e132f7c00523536d144220e56df91c"
+    },
+    {
+      "path": "tests/internet_sources.test.cjs",
+      "mode": "100644",
+      "size": 12097,
+      "git_blob_sha1": "e2bb6f2c0639389f3fb72c2cb02b00f878101acb"
+    },
+    {
+      "path": "tests/location_selector.test.cjs",
+      "mode": "100644",
+      "size": 5080,
+      "git_blob_sha1": "10752175ba1041bbad56f24260d3062f4597a355"
+    },
+    {
+      "path": "tests/map_focus.test.cjs",
+      "mode": "100644",
+      "size": 2169,
+      "git_blob_sha1": "ebe9c451aa7b9294f1e21591b6957463ec73ac57"
+    },
+    {
+      "path": "tests/map_html.test.cjs",
+      "mode": "100644",
+      "size": 1999,
+      "git_blob_sha1": "9d34883deba3b87c92ecc8b6d9d6b2797cb8bed7"
+    },
+    {
+      "path": "tests/map_motion.test.cjs",
+      "mode": "100644",
+      "size": 1639,
+      "git_blob_sha1": "020972a91e576f8e60d3a32161531f91b51b5108"
+    },
+    {
+      "path": "tests/multi_sources.test.cjs",
+      "mode": "100644",
+      "size": 4586,
+      "git_blob_sha1": "557fc12010f62615be475df2ffe90eda1026ee0a"
+    },
+    {
+      "path": "tests/native_desktop_pairing.test.cjs",
+      "mode": "100644",
+      "size": 4238,
+      "git_blob_sha1": "cd88ada832aeedfe6ecee90b6f8f703131b3a1e4"
+    },
+    {
+      "path": "tests/pages_tar.test.cjs",
+      "mode": "100644",
+      "size": 15116,
+      "git_blob_sha1": "ce27358d728ab4c544f6e081e8a36f2ea14fae8c"
+    },
+    {
+      "path": "tests/release_main.test.cjs",
+      "mode": "100644",
+      "size": 2182,
+      "git_blob_sha1": "d771a20a040c2d249c9b60511bbda61591e76e30"
+    },
+    {
+      "path": "tests/rf_circles_layers.test.cjs",
+      "mode": "100644",
+      "size": 8643,
+      "git_blob_sha1": "5f3ceeffb81d2bb970fe13ffb5fdef66d62c2591"
+    },
+    {
+      "path": "tests/rf_five_layer_portal.test.cjs",
+      "mode": "100644",
+      "size": 5228,
+      "git_blob_sha1": "712dee527967536e7b64c171cc7b4bbcc7befffe"
+    },
+    {
+      "path": "tests/rf_history_five_modes.test.cjs",
+      "mode": "100644",
+      "size": 3243,
+      "git_blob_sha1": "5af68c5457959a1c3c37226b90899a2b3d237434"
+    },
+    {
+      "path": "tests/rf_model_popup_offline.test.cjs",
+      "mode": "100644",
+      "size": 4607,
+      "git_blob_sha1": "a331b7954f67cbdc6a0499c9e5253bf3ad0e717c"
+    },
+    {
+      "path": "tests/rf_multiaircraft_center_regression.test.cjs",
+      "mode": "100644",
+      "size": 3448,
+      "git_blob_sha1": "8b3e8f14732369028ef9b358919813ccb3cf29c1"
+    },
+    {
+      "path": "tests/rf_null_region_desktop_regression.test.cjs",
+      "mode": "100644",
+      "size": 5332,
+      "git_blob_sha1": "2a2c16312a24e41e09fec6671588759227ece1a3"
+    },
+    {
+      "path": "tests/rf_timing_lab.test.cjs",
+      "mode": "100644",
+      "size": 7558,
+      "git_blob_sha1": "8ed90697abf2444f6ab40032d82459ac5c87c5e4"
+    },
+    {
+      "path": "tests/rf_trajectory_layers.test.cjs",
+      "mode": "100644",
+      "size": 13990,
+      "git_blob_sha1": "1fb67392994aaa068be88a00d1ad863d323353fc"
+    },
+    {
+      "path": "tests/selected_aircraft_persistence.test.cjs",
+      "mode": "100644",
+      "size": 6996,
+      "git_blob_sha1": "6dbfcc00550eeb9a207c311ca3726075f6dfe05b"
+    },
+    {
+      "path": "tests/tar_full_browser.test.cjs",
+      "mode": "100644",
+      "size": 8048,
+      "git_blob_sha1": "820fe7a04740ca3038aeb97af61b1d751003cfbe"
+    },
+    {
+      "path": "tests/tar_layers_regression.test.cjs",
+      "mode": "100644",
+      "size": 7032,
+      "git_blob_sha1": "05eb29ed99d127abcb008653711a6797cd1bf22b"
+    },
+    {
+      "path": "tests/tar_no_receiver_ui.test.cjs",
+      "mode": "100644",
+      "size": 2299,
+      "git_blob_sha1": "42bccd1ecd2418d5d7f1984828c3617b2bdb0b2c"
+    },
+    {
+      "path": "tests/test_bridge.py",
+      "mode": "100644",
+      "size": 11966,
+      "git_blob_sha1": "b917bf2c4d6eb908c94a5f3b677e2ce996745375"
+    },
+    {
+      "path": "tests/test_control.py",
+      "mode": "100644",
+      "size": 3784,
+      "git_blob_sha1": "6fbdafe35e79d910b110deaec63f4c5c51a271ff"
+    },
+    {
+      "path": "tests/test_core.py",
+      "mode": "100644",
+      "size": 2421,
+      "git_blob_sha1": "24c867a2f244652688a6ac913eb83234483dc0a1"
+    },
+    {
+      "path": "tests/test_flight_route_lookup.py",
+      "mode": "100644",
+      "size": 2603,
+      "git_blob_sha1": "8b5401135fddb908238cb3c9b01bafb6d02c65e4"
+    },
+    {
+      "path": "tests/test_linux_installer.py",
+      "mode": "100644",
+      "size": 3550,
+      "git_blob_sha1": "4bf855f312fca6f5b807b0448804904253e23dae"
+    },
+    {
+      "path": "tests/test_map_server.py",
+      "mode": "100644",
+      "size": 1011,
+      "git_blob_sha1": "93809108d84a9351d74f56a24ce28dd5744c066a"
+    },
+    {
+      "path": "tests/test_multi_sources.py",
+      "mode": "100644",
+      "size": 4723,
+      "git_blob_sha1": "91543679b0a6684fb19e4b0a861dacec078a7ec1"
+    },
+    {
+      "path": "tests/test_native_desktop_pairing.py",
+      "mode": "100644",
+      "size": 1410,
+      "git_blob_sha1": "d1f387ced39529e0fc0094b6f71098c348f388ff"
+    },
+    {
+      "path": "tests/test_offline_maps.py",
+      "mode": "100644",
+      "size": 3113,
+      "git_blob_sha1": "0acaa92680994611d26fd0d58dc0e3a461b88e28"
+    },
+    {
+      "path": "tests/test_rf_history_store.py",
+      "mode": "100644",
+      "size": 3760,
+      "git_blob_sha1": "524475054d62629af24562dc1a38ca1a602ea2b9"
+    },
+    {
+      "path": "tests/test_search_location.py",
+      "mode": "100644",
+      "size": 4255,
+      "git_blob_sha1": "867c324d9d23a1b83de25fe95dce8515bd1eec76"
+    },
+    {
+      "path": "tests/test_tar_focus_sdr_exit.py",
+      "mode": "100644",
+      "size": 4080,
+      "git_blob_sha1": "a50fb9fc2643c67bd249b34d6f2a9e29ae4ca8df"
+    },
+    {
+      "path": "tests/test_tar_static_internet_only.py",
+      "mode": "100644",
+      "size": 4131,
+      "git_blob_sha1": "80b876db319697f14c6f0b7f1f596f8a5c18ff91"
+    },
+    {
+      "path": "tests/test_version_switch.py",
+      "mode": "100644",
+      "size": 2095,
+      "git_blob_sha1": "1c95c7b51f7414640947850cca450c6186fa751e"
+    },
+    {
+      "path": "tests/web_bridge.test.cjs",
+      "mode": "100644",
+      "size": 1492,
+      "git_blob_sha1": "3dd71cfc743b9f0725cbebf078ff1827f7e55c38"
+    },
+    {
+      "path": "tests/webusb_sampleblock.test.cjs",
+      "mode": "100644",
+      "size": 6118,
+      "git_blob_sha1": "592d25ac20e4bf3809e4e2b9af0f143220abcad7"
+    },
+    {
+      "path": "tihulu_flight_radar/__init__.py",
+      "mode": "100644",
+      "size": 92,
+      "git_blob_sha1": "5e522e8acb3297b1d765cc3a427407eeb94eec65"
+    },
+    {
+      "path": "tihulu_flight_radar/app.py",
+      "mode": "100644",
+      "size": 34834,
+      "git_blob_sha1": "7104cd095d8c66c584ac9d7f18bf296edeaf46c4"
+    },
+    {
+      "path": "tihulu_flight_radar/bridge.py",
+      "mode": "100644",
+      "size": 36825,
+      "git_blob_sha1": "cc5dc71228c9141aa6468b7600a9cd71ec6064c4"
+    },
+    {
+      "path": "tihulu_flight_radar/control.py",
+      "mode": "100644",
+      "size": 11386,
+      "git_blob_sha1": "0f65907feb17c95ccff3dab9617d982ac6a0c164"
+    },
+    {
+      "path": "tihulu_flight_radar/core.py",
+      "mode": "100644",
+      "size": 8114,
+      "git_blob_sha1": "cc72419403c415418b0d59fd4b18730a15cfa22c"
+    },
+    {
+      "path": "tihulu_flight_radar/flight_route_lookup.py",
+      "mode": "100644",
+      "size": 4793,
+      "git_blob_sha1": "262f029b1416e435854cba738b6267bfe75550ea"
+    },
+    {
+      "path": "tihulu_flight_radar/launcher.py",
+      "mode": "100644",
+      "size": 143,
+      "git_blob_sha1": "a22e676c2fbb7ad576cc8bde5adcefc9eb63a440"
+    },
+    {
+      "path": "tihulu_flight_radar/map.html",
+      "mode": "100644",
+      "size": 16958,
+      "git_blob_sha1": "272a61211a73304c958237eb8d507665946a93ab"
+    },
+    {
+      "path": "tihulu_flight_radar/map_focus.js",
+      "mode": "100644",
+      "size": 2902,
+      "git_blob_sha1": "9956a932823b6f6eb7cff75e805bb98f3fb434fd"
+    },
+    {
+      "path": "tihulu_flight_radar/map_server.py",
+      "mode": "100644",
+      "size": 2994,
+      "git_blob_sha1": "c5ca377db92934c95fda75d5d8eb8463e8bec2f9"
+    },
+    {
+      "path": "tihulu_flight_radar/native.py",
+      "mode": "100644",
+      "size": 16823,
+      "git_blob_sha1": "ad431d3543e2eb8cb9f11a8c77d5bd65829727d9"
+    },
+    {
+      "path": "tihulu_flight_radar/network_sources.py",
+      "mode": "100644",
+      "size": 11002,
+      "git_blob_sha1": "f941be9b895b229a89e4ddd6a5bff7b875157b1a"
+    },
+    {
+      "path": "tihulu_flight_radar/offline_maps.py",
+      "mode": "100644",
+      "size": 4218,
+      "git_blob_sha1": "4b87f7b1d5a9dc83d770b27fc80a31a836ce1e5c"
+    },
+    {
+      "path": "tihulu_flight_radar/rf_history_store.py",
+      "mode": "100644",
+      "size": 9446,
+      "git_blob_sha1": "ce4b2b8ea965691a93b949a31f9a660ac00454e1"
+    },
+    {
+      "path": "tihulu_flight_radar/tar_map.py",
+      "mode": "100644",
+      "size": 3927,
+      "git_blob_sha1": "99a5a118c32dcc7e3b5711d4d1d231bb0540790b"
+    },
+    {
+      "path": "tihulu_flight_radar/tar_overlay.py",
+      "mode": "100644",
+      "size": 23344,
+      "git_blob_sha1": "d54365fb2cb685dcef3bfba029b8dc665df5b6a5"
+    },
+    {
+      "path": "tihulu_flight_radar/web/.nojekyll",
+      "mode": "100644",
+      "size": 53,
+      "git_blob_sha1": "6f4cca9aa0402ca6a8d19009bbe674121f95d9f5"
+    },
+    {
+      "path": "tihulu_flight_radar/web/CITY_DATA_LICENSE.md",
+      "mode": "100644",
+      "size": 1924,
+      "git_blob_sha1": "6ff2c931da5ec0fa0320ac7242dd64a748d95b12"
+    },
+    {
+      "path": "tihulu_flight_radar/web/adsb_worker.mjs",
+      "mode": "100644",
+      "size": 10590,
+      "git_blob_sha1": "2702f30a77de7c7f9cdcdca7c9b5362b51fd5a43"
+    },
+    {
+      "path": "tihulu_flight_radar/web/aircraft_panel_resize.js",
+      "mode": "100644",
+      "size": 2526,
+      "git_blob_sha1": "9932e3b2ecbc15056724afa13a201a09bec00f4e"
+    },
+    {
+      "path": "tihulu_flight_radar/web/app.js",
+      "mode": "100644",
+      "size": 149498,
+      "git_blob_sha1": "e7d458759bdd7f5f89893e9758ebe0741c2a3ab9"
+    },
+    {
+      "path": "tihulu_flight_radar/web/browser_usb.mjs",
+      "mode": "100644",
+      "size": 9035,
+      "git_blob_sha1": "2589da8177a48e8cb9dca4ee7a7938468b256969"
+    },
+    {
+      "path": "tihulu_flight_radar/web/cities-de-tr.json",
+      "mode": "100644",
+      "size": 417493,
+      "git_blob_sha1": "6c1f758b06f5c8b87899a76895c3bd0051dfaf13"
+    },
+    {
+      "path": "tihulu_flight_radar/web/flight_journey.js",
+      "mode": "100644",
+      "size": 9021,
+      "git_blob_sha1": "60b1bc4860a198c176dd2ef03bc6c1b2bf3824b1"
+    },
+    {
+      "path": "tihulu_flight_radar/web/flight_journey_ui.js",
+      "mode": "100644",
+      "size": 12039,
+      "git_blob_sha1": "063f3b308e3289fade1b59f231b7fe5b9d138b60"
+    },
+    {
+      "path": "tihulu_flight_radar/web/flight_location_ui.mjs",
+      "mode": "100644",
+      "size": 13940,
+      "git_blob_sha1": "4a030fcb3997da38e0478cdc469b3290e8af29e4"
+    },
+    {
+      "path": "tihulu_flight_radar/web/icon.svg",
+      "mode": "100644",
+      "size": 629,
+      "git_blob_sha1": "c0f4e6ab5f35feec251eca213d28d0a8b3695309"
+    },
+    {
+      "path": "tihulu_flight_radar/web/index.html",
+      "mode": "100644",
+      "size": 40655,
+      "git_blob_sha1": "8c80a055e6ccfc6a8be68d2bcc3929036745ec25"
+    },
+    {
+      "path": "tihulu_flight_radar/web/install.html",
+      "mode": "100644",
+      "size": 7942,
+      "git_blob_sha1": "558215e7577fa298e4a26444d444feaea36878d3"
+    },
+    {
+      "path": "tihulu_flight_radar/web/location_search.mjs",
+      "mode": "100644",
+      "size": 14163,
+      "git_blob_sha1": "285d8a3dc97d18069dcc0f019a70479ef15f4efd"
+    },
+    {
+      "path": "tihulu_flight_radar/web/manifest.webmanifest",
+      "mode": "100644",
+      "size": 511,
+      "git_blob_sha1": "0bbc5c0250a349b979f7a30cd2658bf75aef6b02"
+    },
+    {
+      "path": "tihulu_flight_radar/web/map_motion.js",
+      "mode": "100644",
+      "size": 1777,
+      "git_blob_sha1": "f103a2feafb6cfb41da375bb0cc89fe9a77028b2"
+    },
+    {
+      "path": "tihulu_flight_radar/web/multi_sources.js",
+      "mode": "100644",
+      "size": 9321,
+      "git_blob_sha1": "5acdcecd3f59f4818b0a99f9b783c48522e5ca04"
+    },
+    {
+      "path": "tihulu_flight_radar/web/place_catalog.js",
+      "mode": "100644",
+      "size": 4435,
+      "git_blob_sha1": "6be5045abafd1f510a3cb8d3cd92c614ee348e19"
+    },
+    {
+      "path": "tihulu_flight_radar/web/places/de.json",
+      "mode": "100644",
+      "size": 84516,
+      "git_blob_sha1": "518235506aec0626589f7e4b24e951a2aca9d6aa"
+    },
+    {
+      "path": "tihulu_flight_radar/web/places/tr.json",
+      "mode": "100644",
+      "size": 53692,
+      "git_blob_sha1": "0dcddcb5378ee4f56b0061edef0f39123403cef3"
+    },
+    {
+      "path": "tihulu_flight_radar/web/receiver_coverage.js",
+      "mode": "100644",
+      "size": 14680,
+      "git_blob_sha1": "ddb4e2f4eea4dfdbc1c2398e3ddb79825b3b7436"
+    },
+    {
+      "path": "tihulu_flight_radar/web/rf_history_client.js",
+      "mode": "100644",
+      "size": 11579,
+      "git_blob_sha1": "587c700baac09e2841128ba94f5fd9ebb2292fbe"
+    },
+    {
+      "path": "tihulu_flight_radar/web/rf_history_models.js",
+      "mode": "100644",
+      "size": 8655,
+      "git_blob_sha1": "c48789064387cbd16a07589bc7442eafdc85182b"
+    },
+    {
+      "path": "tihulu_flight_radar/web/rf_history_ui.js",
+      "mode": "100644",
+      "size": 11704,
+      "git_blob_sha1": "04fedb2be7a097f04fedc05e38d6d73a5e6d1b57"
+    },
+    {
+      "path": "tihulu_flight_radar/web/rf_history_worker.js",
+      "mode": "100644",
+      "size": 1112,
+      "git_blob_sha1": "edbed6eae684652bdefc0d2be6640cb2f3854241"
+    },
+    {
+      "path": "tihulu_flight_radar/web/rf_timing_lab.js",
+      "mode": "100644",
+      "size": 6320,
+      "git_blob_sha1": "fc13e39b23abcb15b64b585d42626f5af5625ee0"
+    },
+    {
+      "path": "tihulu_flight_radar/web/style.css",
+      "mode": "100644",
+      "size": 41283,
+      "git_blob_sha1": "d055ed6939cfdaf721bd0c60d60b48d6b2b17e71"
+    },
+    {
+      "path": "tihulu_flight_radar/web/sw.js",
+      "mode": "100644",
+      "size": 1689,
+      "git_blob_sha1": "6f35dd470916fc962d6c93506318d15e8e540cbd"
+    },
+    {
+      "path": "tihulu_flight_radar/web/tar1090-adapter.js",
+      "mode": "100644",
+      "size": 15876,
+      "git_blob_sha1": "192d26d804a04e5c634e03e3bb79395e840fccaa"
+    },
+    {
+      "path": "tihulu_flight_radar/web/usb_tools.mjs",
+      "mode": "100644",
+      "size": 7311,
+      "git_blob_sha1": "83d089986832565857d1b5a09f867237a7c96706"
+    }
+  ]
+}
