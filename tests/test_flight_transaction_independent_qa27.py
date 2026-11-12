@@ -166,7 +166,6 @@ def test_evidence_fake_pipx_archive_settings_noninterference(lab, tmp_path):
     lab.stage_fixture("one", b"one")
     lab.stage_fixture("two", b"two")
     lab.switch("one")
-    lab.switch("two", fault="after_pointer") if False else None
     lab.switch("two")
     lab.rollback()
     assert {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in sentinels} == baseline
