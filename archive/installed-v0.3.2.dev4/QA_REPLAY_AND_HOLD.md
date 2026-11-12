@@ -59,3 +59,9 @@ The original source CI's curated JS command did **not** exercise these three fai
 At [source replay run 43192017994](https://github.com/Tihulu/tihulu-flight-radar/actions/runs/43192017994), the isolated pinned environment and original Python tests passed, **all 179 original JS tests ran (175 PASS, 4 FAIL)**, and the isolated **classic Qt GUI smoke PASS** after forcing all receiver control methods to fail-closed or no-op in the CI process. The final CI job reports **FAIL by design** because the untouched original JavaScript regressions still fail. That is a correct **functional parity HOLD**, not a failure to preserve the Git source.
 
 This smoke does not cover native Qt WebEngine's complete interactive flows, real Pop!_OS COSMIC environment, user-specific configuration, RTL-SDR, readsb/tar1090, or hardware parity. Neither the user's workstation nor a shared receiver was touched.
+
+## Native embedded Qt WebEngine smoke (added for next CI run)
+
+The CI-only `tests/guarded_native_qt_smoke.py` explicitly requires GitHub Actions, Python venv test context, `QT_QPA_PLATFORM=offscreen`, isolated HOME and isolated XDG paths. It installs a fail-closed process-local receiver control patch before importing the frozen original native window, forces auto-start false in temporary QSettings, constructs `NativeRadarWindow`, checks its loopback browser URL and private bridge thread, and closes it. The test is **not** physical SDR, GUI interaction, hardware decoding, external network completeness, private settings compatibility, or an authorized install.
+
+The final source-parity HOLD gate will also fail if native Qt smoke does not pass. JavaScript regressions remain a separate unmodified HOLD irrespective of the native result.

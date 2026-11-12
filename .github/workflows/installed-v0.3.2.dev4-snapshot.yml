@@ -128,6 +128,21 @@ jobs:
           cd "$RUNNER_TEMP"
           "$RUNNER_TEMP/installed-snapshot-venv/bin/python" \
             "$GITHUB_WORKSPACE/archive/installed-v0.3.2.dev4/tests/guarded_classic_qt_smoke.py"
+      - name: Guarded native Qt WebEngine smoke (CI only, no SDR)
+        id: guarded_native
+        if: success() || steps.archived_js.outcome == 'failure'
+        shell: bash
+        env:
+          QTWEBENGINE_DISABLE_SANDBOX: '1'
+        run: |
+          set -euo pipefail
+          export HOME="$RUNNER_TEMP/installed-snapshot-home"
+          export XDG_CONFIG_HOME="$HOME/.config"
+          export XDG_CACHE_HOME="$HOME/.cache"
+          export XDG_DATA_HOME="$HOME/.local/share"
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/installed-snapshot-venv/bin/python" \
+            "$GITHUB_WORKSPACE/archive/installed-v0.3.2.dev4/tests/guarded_native_qt_smoke.py"
       - name: Final source-parity HOLD gate (never mask original test failures)
         if: always()
         shell: bash
@@ -138,6 +153,10 @@ jobs:
           fi
           if [[ "${{ steps.guarded_qt.outcome }}" != "success" ]]; then
             echo "::error::Guarded Qt smoke did not pass. Functional parity HOLD."
+            exit 1
+          fi
+          if [[ "${{ steps.guarded_native.outcome }}" != "success" ]]; then
+            echo "::error::Guarded native Qt WebEngine smoke did not pass. Native runtime QA HOLD."
             exit 1
           fi
           echo "Archived source and sandbox GUI tests passed; hardware and release remain HOLD."
