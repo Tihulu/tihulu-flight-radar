@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import platform
+import threading
+from functools import wraps
 import shutil
 import subprocess
 import tempfile
@@ -15,6 +17,14 @@ UNITS = ("readsb.service", "tar1090.service")
 ACTIONS = ("start", "stop", "enable", "disable")
 SYSTEMCTL = "/usr/bin/systemctl"
 MODES = ("Linux services", "Direct readsb", "Remote JSON")
+# Maximum time Quit waits for a receiver command already in progress.
+# An incomplete operation must be reported without losing the child handle.
+QUIT_OPERATION_TIMEOUT_SECONDS = 5.0
+
+
+class MixedOwnershipWarning(DataError):
+    """Safe nonfatal Quit warning; external systemd service was untouched."""
+
 
 
 def _unit_active(unit: str) -> tuple[bool, str]:
@@ -116,6 +126,17 @@ def service_action(action: str) -> str:
     return f"Receiver boot setting: {action} completed."
 
 
+def _only_while_running(fn):
+    """Serialize receiver mutations and reject work once Quit starts."""
+    @wraps(fn)
+    def guarded(self, *args, **kwargs):
+        with self._operation_lock:
+            if self._quit_requested.is_set():
+                raise DataError("Receiver is shutting down; Start/Restart/configuration refused.")
+            return fn(self, *args, **kwargs)
+    return guarded
+
+
 class ReceiverController:
     def __init__(self):
         self.mode = "Linux services" if platform.system() == "Linux" else "Direct readsb"
@@ -128,7 +149,16 @@ class ReceiverController:
         # inactive BEFORE our own successful Start can be attributed to us.
         # Unknown/failed states are never enough proof of ownership.
         self._service_units_started_by_app: set[str] = set()
+        self._operation_lock = threading.RLock()
+        self._quit_requested = threading.Event()
+        self._inside_close = False
+        self._closed = False
 
+    def request_quit(self):
+        """Stop admitting new starts before any wait for an in-flight worker."""
+        self._quit_requested.set()
+
+    @_only_while_running
     def configure(self, mode: str, remote_url: str = "", decoder_path: str = ""):
         if mode not in MODES:
             raise DataError("Unknown receiver mode.")
@@ -157,6 +187,7 @@ class ReceiverController:
             return False, f"readsb exited with code {code}. {detail}"
         return True, "Direct readsb process is running."
 
+    @_only_while_running
     def start(self) -> str:
         if self.mode == "Remote JSON":
             raise DataError("Remote receiver must be started on its own computer.")
@@ -203,6 +234,7 @@ class ReceiverController:
             raise DataError(f"Cannot launch readsb: {exc}") from exc
         return "Starting local readsb. Waiting for real aircraft messages."
 
+    @_only_while_running
     def restart(self) -> str:
         """Stop and start the selected receiver, surfacing start failures."""
         if self.mode == "Remote JSON":
@@ -211,6 +243,12 @@ class ReceiverController:
         return self.start()
 
     def stop(self) -> str:
+        with self._operation_lock:
+            return self._stop_locked()
+
+    def _stop_locked(self) -> str:
+        if self._quit_requested.is_set() and not self._inside_close:
+            raise DataError("Receiver is shutting down; explicit Stop refused.")
         if self.mode == "Remote JSON":
             raise DataError("Remote receiver must be stopped on its own computer.")
         if self.mode == "Linux services":
@@ -220,14 +258,23 @@ class ReceiverController:
             self._service_units_started_by_app.clear()
             self._service_started_by_app = False
             return result
-        if self.process is not None and self.process.poll() is None:
-            self.process.terminate()
+        if self.process is not None:
+            # Operate on the exact child handle this app created, never a
+            # shared process name, external service, or unverified PID.
             try:
-                self.process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                self.process.kill()
-                self.process.wait(timeout=3)
-        self.process = None
+                if self.process.poll() is None:
+                    self.process.terminate()
+                    try:
+                        self.process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        self.process.kill()
+                        self.process.wait(timeout=3)
+                else:
+                    self.process.wait(timeout=3)  # reap already-ended child
+            except (OSError, subprocess.TimeoutExpired) as exc:
+                # Keep the handle/temporary directory for a safe retry.
+                raise DataError("App-owned direct readsb did not exit: " + str(exc)) from exc
+            self.process = None
         if self._directory is not None:
             self._directory.cleanup()
             self._directory = None
@@ -243,47 +290,60 @@ class ReceiverController:
         return read_local(Path(self._directory.name) / "aircraft.json")
 
     def close(self, release_local_service: bool = False):
-        """Release direct app-owned child and optionally shared Linux services.
-
-        Systemd readsb/tar1090 can outlive the desktop when the user unchecks
-        "Release local SDR on exit". Passive Exit may stop paired systemd
-        units only when BOTH were confirmed app-started. If ownership is
-        mixed, leave both active rather than kill a pre-existing external
-        service, and surface an explicit warning through the caller. This
-        respects the existing paired-command sudoers policy without widening
-        permissions. A direct app-owned child always stops. Remote receivers
-        are never controlled.
-        """
-        error = None
-        if self.process is not None:
-            mode = self.mode
-            self.mode = "Direct readsb"
+        """Idempotent bounded Quit, preserving PR #15's paired-service rules."""
+        self.request_quit()  # set before blocking on in-flight Start/Restart
+        if not self._operation_lock.acquire(timeout=QUIT_OPERATION_TIMEOUT_SECONDS):
+            raise DataError(
+                "SDR release on exit incomplete: an app-owned receiver operation "
+                "is still running; retry Quit after it finishes."
+            )
+        try:
+            if self._closed:
+                return
+            error = None
+            self._inside_close = True
             try:
-                self.stop()
-            except (DataError, OSError) as exc:
-                error = exc
+                if self.process is not None or self._directory is not None:
+                    mode = self.mode
+                    self.mode = "Direct readsb"
+                    try:
+                        self._stop_locked()
+                    except (DataError, OSError) as exc:
+                        error = exc
+                    finally:
+                        self.mode = mode
+                if (platform.system() == "Linux" and release_local_service
+                        and self._service_units_started_by_app):
+                    if self._service_units_started_by_app == set(UNITS):
+                        try:
+                            service_action("stop")
+                        except DataError as exc:
+                            error = exc if error is None else DataError(
+                                f"{error}; service release: {exc}"
+                            )
+                        else:
+                            self._service_units_started_by_app.clear()
+                            self._service_started_by_app = False
+                    else:
+                        # Existing sudoers authorizes only a paired stop.
+                        # Preserve the external unit and PR #15's warning.
+                        mixed = MixedOwnershipWarning(
+                            "Automatic release skipped: readsb/tar1090 have mixed "
+                            "ownership. The external service was preserved; a "
+                            "receiver started here may remain active. Stop it "
+                            "explicitly only when no other app is using it."
+                        )
+                        error = mixed if error is None else DataError(f"{error}; {mixed}")
             finally:
-                self.mode = mode
-        if (platform.system() == "Linux" and release_local_service
-                and self._service_units_started_by_app):
-            if self._service_units_started_by_app == set(UNITS):
-                try:
-                    service_action("stop")
-                except DataError as exc:
-                    error = exc
-                else:
-                    self._service_units_started_by_app.clear()
-                    self._service_started_by_app = False
-            else:
-                # Existing installer sudoers permits only the paired command.
-                # Stopping both would terminate another application's service;
-                # never fall back to that dangerous action, even if Exit asks
-                # for local release. Qt will display this actionable warning.
-                error = DataError(
-                    "Automatic release skipped: readsb/tar1090 have mixed "
-                    "ownership. The external service was preserved; a "
-                    "receiver started here may remain active. Stop it "
-                    "explicitly only when no other app is using it."
-                )
-        if error:
-            raise DataError(f"SDR release on exit was incomplete: {error}") from error
+                self._inside_close = False
+            if error:
+                # Only a pure mixed ownership outcome is a nonfatal warning.
+                # A concurrent direct-child failure remains fatal even if its
+                # error includes the words "mixed ownership".
+                msg = f"SDR release on exit was incomplete: {error}"
+                if isinstance(error, MixedOwnershipWarning):
+                    raise MixedOwnershipWarning(msg) from error
+                raise DataError(msg) from error
+            self._closed = True
+        finally:
+            self._operation_lock.release()

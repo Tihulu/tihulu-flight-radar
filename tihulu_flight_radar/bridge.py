@@ -10,6 +10,7 @@ import json
 import math
 import mimetypes
 import secrets
+import sys
 import threading
 import time
 from http import HTTPStatus
@@ -20,7 +21,7 @@ from urllib.parse import parse_qs, urlsplit, unquote
 from urllib.request import ProxyHandler, Request, build_opener
 
 from .network_sources import MultiNetworkProvider, parse_provider_selection
-from .control import ReceiverController
+from .control import ReceiverController, MixedOwnershipWarning
 from .core import DataError, position_is_fresh, recently_seen
 
 GERMANY = (51.1657, 10.4515)
@@ -258,12 +259,20 @@ class DataProvider:
             return self._fresh_cached(), self._status(cached=bool(self.cached))
 
 
+# A hung local handler must not block the desktop's Quit indefinitely.
+BRIDGE_LOCK_TIMEOUT_SECONDS = 5.0
+BRIDGE_REQUEST_DRAIN_SECONDS = 3.0
+
+
 class Bridge:
     def __init__(self, *, token: str | None = None, allow_control: bool = False):
         self.token = token or secrets.token_urlsafe(32)
         self.allow_control = allow_control
         self.receiver = ReceiverController()
         self.receiver_lock = threading.RLock()
+        self._quit_requested = threading.Event()
+        self._request_condition = threading.Condition()
+        self._active_requests = 0
         self.online = DataProvider()
         self.multi_online = MultiNetworkProvider()
         self.last_start_error: str | None = None
@@ -273,6 +282,68 @@ class Bridge:
         # the selected SEARCH region across ports, OS restarts and platforms.
         self._place_path = (Path.home() / ".config" / "tihulu-flight-radar"
                             / "map-search-location.json")
+
+    def request_quit(self):
+        """Immediately reject new local work; do not touch external services."""
+        self._quit_requested.set()
+        self.receiver.request_quit()
+        with self._request_condition:
+            self._request_condition.notify_all()
+
+    def _begin_request(self) -> bool:
+        """Register only app-owned handler threads admitted before STOPPING."""
+        with self._request_condition:
+            if self._quit_requested.is_set():
+                return False
+            self._active_requests += 1
+            return True
+
+    def _end_request(self):
+        with self._request_condition:
+            self._active_requests -= 1
+            self._request_condition.notify_all()
+
+    def _wait_for_requests(self, timeout: float = BRIDGE_REQUEST_DRAIN_SECONDS):
+        with self._request_condition:
+            if not self._request_condition.wait_for(
+                    lambda: self._active_requests == 0, timeout=timeout):
+                raise DataError(
+                    f"App-owned HTTP bridge still has {self._active_requests} "
+                    "active request(s); Quit incomplete, retry after drain."
+                )
+
+    def close(self, *, release_local_service: bool = False):
+        """Bounded app-owned receiver + HTTP drain; keep PR #15 safeguards."""
+        self.request_quit()
+        if not self.receiver_lock.acquire(timeout=BRIDGE_LOCK_TIMEOUT_SECONDS):
+            raise DataError(
+                "App-owned receiver bridge command is still running; "
+                "Quit incomplete, retry after it finishes."
+            )
+        receiver_error = None
+        try:
+            try:
+                self.receiver.close(release_local_service=release_local_service)
+            except DataError as exc:
+                receiver_error = exc
+        finally:
+            self.receiver_lock.release()
+
+        # Request handler threads may still be fetching independent Internet
+        # data. They own no remote server; wait only a bounded interval.
+        # This timeout has priority over a mixed-service warning: never claim
+        # all app-owned threads have stopped because external services survived.
+        self._wait_for_requests()
+
+        # Release transient in-memory aircraft caches only after request
+        # handlers are done. Never alter saved region/settings or exports.
+        with self.online.lock:
+            self.online.cached.clear()
+            self.online.cache_key = None
+        with self.multi_online.lock:
+            self.multi_online.records.clear()
+        if receiver_error is not None:
+            raise receiver_error
 
     def get_saved_search_place(self) -> dict | None:
         with self._place_lock:
@@ -301,6 +372,8 @@ class Bridge:
 
     def snapshot(self, mode: str, lat: float, lon: float, radius: int,
                  networks: tuple[str, ...] | None = None) -> dict:
+        if self._quit_requested.is_set():
+            raise DataError("Flight Radar bridge is shutting down.")
         if mode not in ("antenna", "internet", "hybrid", "auto"):
             raise DataError("Unknown source mode.")
         local: list[dict] = []
@@ -391,9 +464,13 @@ class Bridge:
                     "startup_error": self.last_start_error}
 
     def control(self, action: str) -> str:
+        if self._quit_requested.is_set():
+            raise DataError("Flight Radar bridge is shutting down.")
         if not self.allow_control:
             raise DataError("Hardware controls are disabled; launch with --allow-control to enable.")
         with self.receiver_lock:
+            if self._quit_requested.is_set():
+                raise DataError("Flight Radar bridge is shutting down.")
             if action == "start":
                 return self.receiver.start()
             if action == "stop":
@@ -410,6 +487,16 @@ def make_handler(bridge: Bridge, port: int):
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "TihuluBridge/0.1"
+
+        def handle(self):
+            # Track *whole* connections, including long request body reads.
+            # A late connection cannot join after Quit has been requested.
+            if not bridge._begin_request():
+                return
+            try:
+                super().handle()
+            finally:
+                bridge._end_request()
 
         def _origin_ok(self) -> bool:
             origin = self.headers.get("Origin")
@@ -578,6 +665,7 @@ def main(argv: list[str] | None = None):
         parser.error("--port must be between 1024 and 65535")
     bridge = Bridge(allow_control=args.allow_control)
     server = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(bridge, args.port))
+    server.daemon_threads = True
     print(f"Local radar UI: http://127.0.0.1:{args.port}/", flush=True)
     print(f"Bridge URL: http://127.0.0.1:{args.port}", flush=True)
     print(f"Session pairing token: {bridge.token}", flush=True)
@@ -596,8 +684,18 @@ def main(argv: list[str] | None = None):
     except KeyboardInterrupt:
         pass
     finally:
-        server.server_close()
-        bridge.receiver.close()
+        bridge.request_quit()
+        try:
+            server.server_close()
+        finally:
+            # The headless browser companion has no saved exit checkbox.
+            # True Quit releases only the paired units that THIS bridge
+            # explicitly started; PR #15 still protects external/mixed units.
+            try:
+                bridge.close(release_local_service=True)
+            except MixedOwnershipWarning as exc:
+                print("Flight Radar Quit warning: " + str(exc),
+                      file=sys.stderr, flush=True)
 
 
 if __name__ == "__main__":
