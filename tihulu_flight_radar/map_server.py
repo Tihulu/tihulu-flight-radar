@@ -54,16 +54,42 @@ class LocalMapServer:
             self.httpd = ThreadingHTTPServer(("127.0.0.1", 8505), Handler)
         except OSError:
             self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.httpd.daemon_threads = True
         self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
+        self._lifecycle_lock = threading.Lock()
+        self._started = False
+        self._closed = False
 
     @property
     def url(self) -> str:
         return f"http://127.0.0.1:{self.httpd.server_port}/"
 
     def start(self):
-        self.thread.start()
+        with self._lifecycle_lock:
+            if self._closed:
+                raise RuntimeError("Local map listener is already closed.")
+            if self._started:
+                return
+            self.thread.start()
+            self._started = True
 
     def close(self):
-        self.httpd.shutdown()
-        self.httpd.server_close()
-        self.thread.join(timeout=3)
+        """Idempotently stop this app-owned listener and bounded server thread.
+
+        BaseServer.shutdown() blocks forever if serve_forever was never started,
+        so an unstarted instance needs server_close() only.
+        """
+        with self._lifecycle_lock:
+            if self._closed:
+                return
+            self._closed = True
+            started = self._started
+        try:
+            if started:
+                self.httpd.shutdown()
+        finally:
+            self.httpd.server_close()
+        if started:
+            self.thread.join(timeout=3)
+            if self.thread.is_alive():
+                raise RuntimeError("App-owned local map server did not stop within 3 seconds.")
