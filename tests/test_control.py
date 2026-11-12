@@ -25,6 +25,8 @@ def test_remote_mode_never_manages_services():
 
 def test_restart_calls_stop_then_start(monkeypatch):
     receiver = ReceiverController()
+    # Restart is permitted for app-owned Direct readsb, not unowned systemd.
+    receiver.configure("Direct readsb")
     calls = []
     monkeypatch.setattr(receiver, "stop", lambda: calls.append("stop"))
     monkeypatch.setattr(receiver, "start", lambda: calls.append("start") or "started")
