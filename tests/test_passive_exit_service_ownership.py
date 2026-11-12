@@ -4,6 +4,9 @@ The currently installed sudoers policy only permits the paired command.
 Mixed ownership MUST NOT trigger a paired Stop; this conservatively preserves
 foreign services and reports that an app-started unit may remain running.
 """
+import subprocess
+from types import SimpleNamespace
+
 import pytest
 
 import tihulu_flight_radar.control as control
@@ -64,9 +67,12 @@ def test_both_confirmed_inactive_started_by_app_are_released(fake_systemd):
     r.start()
     assert r._service_started_by_app
     assert r._service_units_started_by_app == set(control.UNITS)
+    foreign_client = {"using_decoder": True}
     r.close(release_local_service=True)
-    assert events == ["start", "stop"]
-    assert set(states.values()) == {"inactive"}
+    assert events == ["start"], "Historical Start does not prove exclusivity"
+    assert set(states.values()) == {"active"}
+    assert foreign_client["using_decoder"]
+    assert r.last_service_release_note
     assert r._service_units_started_by_app == set()
 
 
@@ -113,8 +119,11 @@ def test_repeated_start_does_not_erase_owned_pair(fake_systemd):
     r.start()
     r.start()
     assert r._service_units_started_by_app == set(control.UNITS)
+    foreign_borrower = {"using_decoder": True}
     r.close(release_local_service=True)
-    assert events == ["start", "start", "stop"]
+    assert events == ["start", "start"]
+    assert set(states.values()) == {"active"} and foreign_borrower["using_decoder"]
+    assert r.last_service_release_note
 
 
 def test_switch_to_remote_does_not_strand_app_started_pair(fake_systemd):
@@ -123,8 +132,12 @@ def test_switch_to_remote_does_not_strand_app_started_pair(fake_systemd):
     r = receiver()
     r.start()
     r.configure("Remote JSON", "http://127.0.0.1:8080/data/aircraft.json")
+    foreign_borrower = {"using_decoder": True}
     r.close(release_local_service=True)
-    assert events == ["start", "stop"]
+    assert events == ["start"], "Switch to remote must not evict other users"
+    assert set(states.values()) == {"active"} and foreign_borrower["using_decoder"]
+    assert r.remote_url == "http://127.0.0.1:8080/data/aircraft.json"
+    assert r.last_service_release_note
 
 
 def test_failed_start_does_not_claim_inactive_units(monkeypatch, fake_systemd):
@@ -141,21 +154,51 @@ def test_failed_start_does_not_claim_inactive_units(monkeypatch, fake_systemd):
 
 
 def test_failed_exit_stop_retains_ownership_for_visible_error(monkeypatch, fake_systemd):
+    """Genuine app-owned decoder cleanup failure must remain retryable and fatal."""
     states, events = fake_systemd
     states.update({"readsb.service": "inactive", "tar1090.service": "inactive"})
     r = receiver()
     r.start()
-    def reject(action):
-        raise DataError("simulated denied Stop")
-    monkeypatch.setattr(control, "service_action", reject)
-    with pytest.raises(DataError, match="denied Stop"):
+    failures = []
+    cleanup = []
+
+    class UnreapedDirectChild:
+        def poll(self):
+            return None
+
+        def terminate(self):
+            failures.append("terminate")
+
+        def kill(self):
+            failures.append("kill")
+
+        def wait(self, *, timeout):
+            failures.append(("wait", timeout))
+            raise subprocess.TimeoutExpired(cmd="synthetic-direct-child", timeout=timeout)
+
+    r.mode = "Direct readsb"
+    r.process = UnreapedDirectChild()
+    r._directory = SimpleNamespace(cleanup=lambda: cleanup.append("cleaned"))
+    with pytest.raises(DataError, match="did not exit"):
         r.close(release_local_service=True)
-    assert r._service_units_started_by_app == set(control.UNITS)
+
+    assert failures == ["terminate", ("wait", 5), "kill", ("wait", 3)]
+    assert r.process is not None and cleanup == []
+    assert not r._closed
+    assert r._service_units_started_by_app == set(control.UNITS), (
+        "Incomplete private cleanup must retain provenance for a safe retry"
+    )
+    assert events == ["start"], "Never mask failure by stopping global services"
+    assert set(states.values()) == {"active"}
 
 
 def test_explicit_stop_remains_user_requested_paired_action(fake_systemd):
+    """Explicit shared service Stop remains available as a safe refusal."""
     states, events = fake_systemd
+    foreign_borrower = {"connected": True, "using_receiver": True}
     r = receiver()
-    r.stop()
-    assert events == ["stop"]
-    assert set(states.values()) == {"inactive"}
+    with pytest.raises(DataError, match="(?i)shared|borrow|busy"):
+        r.stop()
+    assert events == [], "Do not issue privileged Stop even when requested"
+    assert set(states.values()) == {"active"}
+    assert foreign_borrower["connected"] and foreign_borrower["using_receiver"]
