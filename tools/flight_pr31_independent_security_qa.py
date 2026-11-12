@@ -7,10 +7,11 @@ All mutating actions are confined to fresh directories below RUNNER_TEMP.
 """
 from __future__ import annotations
 
-import contextlib
+import json
 import os
 from pathlib import Path
-import shutil
+import subprocess
+import time
 import sys
 import tempfile
 import unittest
@@ -138,8 +139,8 @@ class PR31IndependentSecurityQA(unittest.TestCase):
             lab.switch("new")  # Returns success on the displaced original fd.
         self.assertTrue(injected[0])
         self.assertEqual((lab.root / "foreign-sentinel").read_bytes(), b"do-not-delete")
-        self.assertEqual((displaced / "state.json").read_bytes(),
-                         (displaced / "state.json").read_bytes())
+        self.assertEqual(json.loads((displaced / "state.json").read_text())["active"],
+                         "new", "Commit silently completed in displaced directory")
         with self.assertRaisesRegex(RuntimeError, "Fixture root inode changed"):
             lab.status()
         self.assertFalse((lab.root / "state.json").exists(),
@@ -161,7 +162,45 @@ class PR31IndependentSecurityQA(unittest.TestCase):
                                     -1)
         self.assertTrue(displaced.is_dir())
 
-    def test_06_quarantine_can_overshoot_claimed_256_slot_cap(self):
+    def test_06_lock_name_replacement_does_not_split_unchanged_base(self):
+        # Fresh child with no inherited flock fd: only the pinned runner-dir
+        # flock can serialize it after lab.lock inode has been replaced.
+        lab = self.prepared("lockswap")
+        child = None
+        try:
+            with self.assertRaisesRegex(RuntimeError,
+                                        "Lock entry replaced during transaction"):
+                with lab.locked():
+                    old = lab.root / ".saved-original-lock"
+                    lab.lock_path.rename(old)
+                    lab.lock_path.write_bytes(b"FOREIGN-LOCK-PATH")
+                    script = (
+                        "from pathlib import Path\\n"
+                        "import sys\\n"
+                        "from tools import flight_transaction_lab as tx\\n"
+                        "print('READY',flush=True)\\n"
+                        "with tx.TransactionLab(Path(sys.argv[1])).locked():\\n"
+                        " print('ENTERED',flush=True)\\n"
+                    )
+                    child = subprocess.Popen(
+                        [sys.executable, "-c", script, str(lab.root)],
+                        cwd=os.getcwd(), env=os.environ.copy(),
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                        close_fds=True)
+                    self.assertEqual(child.stdout.readline().strip(), b"READY")
+                    time.sleep(0.25)
+                    self.assertIsNone(child.poll(),
+                                      "Second critical section bypassed runner flock")
+            output, error = child.communicate(timeout=8)
+            self.assertEqual(child.returncode, 0, error.decode(errors="replace"))
+            self.assertIn(b"ENTERED", output)
+            self.assertEqual(lab.lock_path.read_bytes(), b"FOREIGN-LOCK-PATH")
+        finally:
+            if child is not None and child.poll() is None:
+                child.kill()
+                child.communicate()
+
+    def test_07_quarantine_can_overshoot_claimed_256_slot_cap(self):
         # Known P2: only pre-transaction count is bounded, not reservations
         # for up to three new entries created by the transaction.
         lab = self.prepared("cap")
@@ -175,7 +214,7 @@ class PR31IndependentSecurityQA(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "Retained transaction evidence limit"):
             lab.switch("old")
 
-    def test_07_corrupt_pending_journal_stays_intact(self):
+    def test_08_corrupt_pending_journal_stays_intact(self):
         lab = self.prepared("corrupt")
         with self.assertRaisesRegex(RuntimeError, "Injected fault"):
             lab.switch("new", fault="after_journal")
