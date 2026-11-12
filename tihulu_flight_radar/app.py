@@ -142,6 +142,10 @@ class RadarWindow(QMainWindow):
         super().__init__()
         self.controller = controller if controller is not None else ReceiverController()
         self._owns_receiver = owns_receiver
+        self._quit_requested = False
+        self._quit_done = False
+        self._quit_deadline = None
+        self._quit_warning_shown = False
         self._map_dialogs = []
         self.pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="tihulu-radar")
         self.snapshot_future = None
@@ -163,6 +167,9 @@ class RadarWindow(QMainWindow):
         self._build()
         self._load_config()
         self.timer = QTimer(self)
+        self._quit_retry = QTimer(self)
+        self._quit_retry.setInterval(200)
+        self._quit_retry.timeout.connect(self._retry_quit)
         self.timer.timeout.connect(self._tick)
         self.timer.start(2000)
         self._tick()
@@ -416,6 +423,8 @@ class RadarWindow(QMainWindow):
         self.rssi.setText("Average aircraft RSSI: —")
 
     def _action(self, operation: str):
+        if self._quit_requested:
+            return
         if self.action_future is not None:
             return
         self._invalidate_snapshot()
@@ -428,6 +437,8 @@ class RadarWindow(QMainWindow):
         self.action_future = self.pool.submit(methods[operation])
 
     def _toggle_boot(self, enabled: bool):
+        if self._quit_requested:
+            return
         if self._boot_updating or platform.system() != "Linux":
             return
         if self.action_future is not None:
@@ -441,6 +452,8 @@ class RadarWindow(QMainWindow):
         self.info.setText("Updating system startup preference…")
 
     def _tick(self):
+        if self._quit_requested:
+            return
         if self.map_future is not None and self.map_future.done():
             try:
                 url = self.map_future.result()
@@ -736,19 +749,69 @@ class RadarWindow(QMainWindow):
             except (OSError, DataError) as exc:
                 QMessageBox.warning(self, "Export failed", str(exc))
 
+    def _retry_quit(self):
+        if self._quit_requested and not self._quit_done:
+            self.close()
+
     def closeEvent(self, event):
+        if self._quit_done:
+            super().closeEvent(event)
+            return
+        # Stop accepting Start/Restart first, including queued Qt actions.
+        self._quit_requested = True
         self.timer.stop()
-        for dialog in list(self._map_dialogs):
-            dialog.close()
-        self.map_server.close()
+        if self._owns_receiver:
+            self.controller.request_quit()
+        if self._quit_deadline is None:
+            self._quit_deadline = time.monotonic() + 45
+        futures = (self.action_future, self.snapshot_future, self.map_future)
+        pending = []
+        for future in futures:
+            if future is not None and not future.done():
+                future.cancel()  # cancel queued work; running work is bounded
+                if not future.done():
+                    pending.append(future)
+        if pending:
+            event.ignore()
+            if time.monotonic() >= self._quit_deadline:
+                self._quit_retry.stop()
+                if not self._quit_warning_shown:
+                    self._quit_warning_shown = True
+                    QMessageBox.warning(
+                        self, "Quit still draining",
+                        "An app-owned receiver or map worker has not finished "
+                        "within 45 seconds. Quit is not complete; no new "
+                        "receiver start is permitted. Retry Quit after it stops."
+                    )
+                return
+            self._quit_retry.start()
+            return
+        self._quit_retry.stop()
+        # All submitted operations are now done/cancelled: executor shutdown
+        # cannot create a late readsb child or leave running Python threads.
+        self.pool.shutdown(wait=True, cancel_futures=True)
+        problems = []
         if self._owns_receiver:
             try:
                 self.controller.close(
                     release_local_service=self.release_checkbox.isChecked()
                 )
             except DataError as exc:
-                QMessageBox.warning(self, "Receiver release warning", str(exc))
-        self.pool.shutdown(wait=False, cancel_futures=True)
+                problems.append(str(exc))
+        try:
+            self.map_server.close()
+        except (OSError, RuntimeError) as exc:
+            problems.append("Local map listener: " + str(exc))
+        # PR #15 expressly permits a visible warning on mixed systemd
+        # ownership while preserving the unrelated service.
+        if problems:
+            QMessageBox.warning(self, "Quit cleanup incomplete", "\n".join(problems))
+            if any("mixed ownership" not in problem for problem in problems):
+                event.ignore()
+                return
+        for dialog in list(self._map_dialogs):
+            dialog.close()
+        self._quit_done = True
         super().closeEvent(event)
 
 
