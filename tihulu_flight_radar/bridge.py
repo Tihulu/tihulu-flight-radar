@@ -258,6 +258,11 @@ class DataProvider:
             return self._fresh_cached(), self._status(cached=bool(self.cached))
 
 
+# A hung local handler must not block the desktop's Quit indefinitely.
+BRIDGE_LOCK_TIMEOUT_SECONDS = 5.0
+BRIDGE_REQUEST_DRAIN_SECONDS = 3.0
+
+
 class Bridge:
     def __init__(self, *, token: str | None = None, allow_control: bool = False):
         self.token = token or secrets.token_urlsafe(32)
@@ -265,6 +270,8 @@ class Bridge:
         self.receiver = ReceiverController()
         self.receiver_lock = threading.RLock()
         self._quit_requested = threading.Event()
+        self._request_condition = threading.Condition()
+        self._active_requests = 0
         self.online = DataProvider()
         self.multi_online = MultiNetworkProvider()
         self.last_start_error: str | None = None
@@ -276,15 +283,66 @@ class Bridge:
                             / "map-search-location.json")
 
     def request_quit(self):
-        """Reject new receiver work before waiting for an active bridge call."""
+        """Immediately reject new local work; do not touch external services."""
         self._quit_requested.set()
         self.receiver.request_quit()
+        with self._request_condition:
+            self._request_condition.notify_all()
+
+    def _begin_request(self) -> bool:
+        """Register only app-owned handler threads admitted before STOPPING."""
+        with self._request_condition:
+            if self._quit_requested.is_set():
+                return False
+            self._active_requests += 1
+            return True
+
+    def _end_request(self):
+        with self._request_condition:
+            self._active_requests -= 1
+            self._request_condition.notify_all()
+
+    def _wait_for_requests(self, timeout: float = BRIDGE_REQUEST_DRAIN_SECONDS):
+        with self._request_condition:
+            if not self._request_condition.wait_for(
+                    lambda: self._active_requests == 0, timeout=timeout):
+                raise DataError(
+                    f"App-owned HTTP bridge still has {self._active_requests} "
+                    "active request(s); Quit incomplete, retry after drain."
+                )
 
     def close(self, *, release_local_service: bool = False):
-        """Close only the local receiver owned by this bridge."""
+        """Bounded app-owned receiver + HTTP drain; keep PR #15 safeguards."""
         self.request_quit()
-        with self.receiver_lock:
-            return self.receiver.close(release_local_service=release_local_service)
+        if not self.receiver_lock.acquire(timeout=BRIDGE_LOCK_TIMEOUT_SECONDS):
+            raise DataError(
+                "App-owned receiver bridge command is still running; "
+                "Quit incomplete, retry after it finishes."
+            )
+        receiver_error = None
+        try:
+            try:
+                self.receiver.close(release_local_service=release_local_service)
+            except DataError as exc:
+                receiver_error = exc
+        finally:
+            self.receiver_lock.release()
+
+        # Request handler threads may still be fetching independent Internet
+        # data. They own no remote server; wait only a bounded interval.
+        # This timeout has priority over a mixed-service warning: never claim
+        # all app-owned threads have stopped because external services survived.
+        self._wait_for_requests()
+
+        # Release transient in-memory aircraft caches only after request
+        # handlers are done. Never alter saved region/settings or exports.
+        with self.online.lock:
+            self.online.cached.clear()
+            self.online.cache_key = None
+        with self.multi_online.lock:
+            self.multi_online.records.clear()
+        if receiver_error is not None:
+            raise receiver_error
 
     def get_saved_search_place(self) -> dict | None:
         with self._place_lock:
@@ -428,6 +486,16 @@ def make_handler(bridge: Bridge, port: int):
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "TihuluBridge/0.1"
+
+        def handle(self):
+            # Track *whole* connections, including long request body reads.
+            # A late connection cannot join after Quit has been requested.
+            if not bridge._begin_request():
+                return
+            try:
+                super().handle()
+            finally:
+                bridge._end_request()
 
         def _origin_ok(self) -> bool:
             origin = self.headers.get("Origin")
