@@ -17,7 +17,8 @@ test("LIVE and BEST cards keep independent measured-unknown metadata",()=>{
   rfBest:{lat:50.938,lon:6.960,displayedExtentKm:80,rawExtentKm:76.5,
    aircraftCount:6,liveCount:4,historyCount:2,constraintsUsed:13,
    sampleCount:14,geometryStatus:"bounded-model",updatedAtMs:1720000},
-  coverageResult:()=>null});
+  coverageResult:()=>null,
+  window:{TihuluRFV2:{display:live=>live}}});
  vm.runInContext(source("rfModelCardData"),ctx);
  const rows=vm.runInContext(`
  const live={status:"region",count:5,liveCount:3,historyCount:2,
@@ -88,10 +89,11 @@ test("model marker respects visibility and right card has details",()=>{
   "rfPopupRadius","rfPopupDiameter","rfPopupAircraft",
   "rfPopupCoordinates","rfPopupConstraints","rfPopupFocus"])
   assert.match(html,new RegExp('id="'+id+'"'));
- assert.match(app,/!$("rfBestPin").checked||!rfBest/);
- assert.match(app,/!$("rfModelPin").checked\)return/);
- assert.doesNotMatch(app,/!$("rfBestPin").checked||!$("rfBestCircle").checked/);
- assert.match(app,/openRfModelPopup(modelKind)/);
- assert.match(app,/toggleAircraftOnMap(row)/);
+ // Assert current independent LIVE and BEST pin controls without obsolete patterns.
+ assert.ok(app.includes('!$("rfBestPin").checked||!rfBest'));
+ assert.ok(app.includes('!result.region||!$("rfModelPin").checked)return;'));
+ assert.ok(!app.includes('!$("rfBestPin").checked||!$("rfBestCircle").checked'));
+ assert.ok(app.includes("openRfModelPopup(modelKind)"));
+ assert.ok(app.includes("toggleAircraftOnMap(row)"));
  assert.match(html,/id="placeAddressOnline"/);
 });

@@ -141,14 +141,10 @@ class NativeRadarWindow(QMainWindow):
             lambda checked: self.settings.setValue("auto_start_receiver", checked)
         )
         menu.addAction(self.autostart_action)
-        self.release_action = QAction("Release local SDR on exit", self)
-        self.release_action.setCheckable(True)
-        self.release_action.setChecked(
-            self.settings.value("release_sdr_on_exit", True, type=bool)
-        )
-        self.release_action.toggled.connect(
-            lambda value: self.settings.setValue("release_sdr_on_exit", value)
-        )
+        # Exiting any radar window must never auto-stop shared readsb/tar1090.
+        # Keep an explanatory inert item instead of a misleading old toggle.
+        self.release_action = QAction("Shared readsb is never stopped on exit", self)
+        self.release_action.setEnabled(False)
         menu.addAction(self.release_action)
         reload_view = QAction("Reload radar view", self)
         reload_view.triggered.connect(self.web.reload)
@@ -347,9 +343,7 @@ class NativeRadarWindow(QMainWindow):
         self.server.server_close()
         self.server_thread.join(timeout=2)
         try:
-            self.bridge.receiver.close(
-                release_local_service=self.release_action.isChecked()
-            )
+            self.bridge.receiver.close(release_local_service=False)
         except Exception as exc:
             QMessageBox.warning(self, "Receiver release warning",
                                 "The receiver may still be occupied: " + str(exc))

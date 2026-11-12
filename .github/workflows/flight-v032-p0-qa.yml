@@ -1,0 +1,40 @@
+name: Flight v0.3.2 P0 Ownership and Complete JS QA
+on:
+  pull_request:
+    paths:
+      - "tihulu_flight_radar/control.py"
+      - "tihulu_flight_radar/native.py"
+      - "tihulu_flight_radar/app.py"
+      - "tests/**"
+      - ".github/workflows/flight-v032-p0-qa.yml"
+      - ".github/workflows/build.yml"
+      - "docs/FLIGHT_V032_P0_OWNERSHIP_QA.md"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  safety-and-full-js:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.3'
+      - name: Install app and tests in runner only
+        run: python -m pip install -e ".[test]"
+      - name: Receiver owner-guard regression tests
+        run: python -m pytest -q tests/test_control.py
+      - name: Entire JavaScript suite
+        run: node --test tests/*.test.cjs
+      - name: Source close path safety assertions
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          native=Path('tihulu_flight_radar/native.py').read_text()
+          classic=Path('tihulu_flight_radar/app.py').read_text()
+          control=Path('tihulu_flight_radar/control.py').read_text()
+          assert 'self.bridge.receiver.close(release_local_service=False)' in native
+          assert 'self.controller.close(release_local_service=False)' in classic
+          assert 'ownership_confirmed: bool = False' in control
+          print('PASS: GUI close cannot auto-stop shared readsb')
+          PY

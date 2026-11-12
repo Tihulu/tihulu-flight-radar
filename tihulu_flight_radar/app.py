@@ -314,12 +314,14 @@ class RadarWindow(QMainWindow):
         self.boot_checkbox.setVisible(platform.system() == "Linux")
         self.boot_checkbox.toggled.connect(self._toggle_boot)
         settings.addWidget(self.boot_checkbox)
-        self.release_checkbox = QCheckBox("Release local SDR when app closes")
-        self.release_checkbox.setChecked(
-            self.settings.value("release_sdr_on_exit", True, type=bool)
-        )
-        self.release_checkbox.toggled.connect(
-            lambda value: self.settings.setValue("release_sdr_on_exit", value)
+        # Shared systemd receiver services may be used by other TIHULU apps.
+        # Never auto-stop them on window close; show an unambiguous status.
+        self.release_checkbox = QCheckBox("Keep shared readsb running on exit")
+        self.release_checkbox.setChecked(True)
+        self.release_checkbox.setEnabled(False)
+        self.release_checkbox.setToolTip(
+            "App-owned direct readsb processes are always released on exit; "
+            "global readsb/tar1090 services are never stopped automatically."
         )
         settings.addWidget(self.release_checkbox)
         self.diagnostics_button = QPushButton("View receiver diagnostics")
@@ -743,9 +745,7 @@ class RadarWindow(QMainWindow):
         self.map_server.close()
         if self._owns_receiver:
             try:
-                self.controller.close(
-                    release_local_service=self.release_checkbox.isChecked()
-                )
+                self.controller.close(release_local_service=False)
             except DataError as exc:
                 QMessageBox.warning(self, "Receiver release warning", str(exc))
         self.pool.shutdown(wait=False, cancel_futures=True)

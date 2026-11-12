@@ -49,14 +49,14 @@ def test_tar_camera_authorized_receiver_precedes_germany_only_if_no_aircraft():
     assert q["tihuluFocusLon"] == ["27.100000"]
 
 
-def test_receiver_close_releases_preexisting_linux_readsb_when_requested(monkeypatch):
+def test_receiver_close_never_stops_preexisting_linux_readsb_even_when_requested(monkeypatch):
     monkeypatch.setattr(control.platform, "system", lambda: "Linux")
     monkeypatch.setattr(control, "_unit_active", lambda name: (True, "active"))
     called=[]
     monkeypatch.setattr(control,"service_action",lambda action: called.append(action) or "stopped")
     receiver=control.ReceiverController()
     receiver.close(release_local_service=True)
-    assert called == ["stop"]
+    assert called == [], "Externally running readsb is shared and must never be stopped on exit"
 
 
 def test_receiver_close_does_not_stop_unowned_services_without_explicit_release(monkeypatch):
@@ -77,14 +77,18 @@ def test_receiver_close_does_not_control_remote_receiver(monkeypatch):
     receiver.close(release_local_service=True)
 
 
-def test_failed_sdr_release_is_not_silently_reported_as_success(monkeypatch):
-    monkeypatch.setattr(control.platform, "system", lambda: "Linux")
-    monkeypatch.setattr(control, "_unit_active", lambda name: (True, "active"))
-    def fail(_action): raise DataError("insufficient service permission")
-    monkeypatch.setattr(control,"service_action",fail)
-    receiver=control.ReceiverController()
-    with pytest.raises(DataError,match="insufficient"):
+def test_failed_app_owned_direct_sdr_release_is_not_silently_success(monkeypatch):
+    receiver = control.ReceiverController()
+    receiver.configure("Direct readsb")
+    receiver.process = object()  # app-owned child sentinel, never a real process
+
+    def fail_direct_release():
+        raise DataError("direct SDR child did not terminate")
+
+    monkeypatch.setattr(receiver, "stop", fail_direct_release)
+    with pytest.raises(DataError, match="direct SDR child did not terminate"):
         receiver.close(release_local_service=True)
+
 
 def test_authorized_location_has_priority_over_nearest_radio_plane():
     data={"aircraft":[aircraft("3c1234", 50.9, 7.1)]}

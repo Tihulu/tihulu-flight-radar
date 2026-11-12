@@ -91,30 +91,43 @@ test("RF status panel never reads extentKm from absent region",()=>{
  assert.ok($("rfCoverageStatus").textContent.includes("1/4"));
 });
 
-test("Circles panel closes by outside click, Escape and Done",()=>{
- const inside={},outside={};
+test("Circles panel closes by outside pointerdown, Escape and Done",()=>{
+ const inside={belongsToDropdown:true},outside={};
  let focused=0,doneClick=null;
- const summary={focus:()=>focused++};
- const menu={open:false,querySelector:()=>summary,contains:t=>t===inside};
- const listeners={};
+ const handlers={},listeners={};
+ const summary={focus:()=>focused++,
+  getBoundingClientRect:()=>({left:200,top:270,bottom:310})};
+ const menu={open:false,
+  contains:t=>t===summary||t===menu,
+  querySelector:key=>key==="summary"?summary:dropdown,
+  addEventListener:(type,fn)=>{handlers[type]=fn},
+  appendChild:el=>{el.parentElement=menu}};
+ const dropdown={
+  parentElement:menu,style:{},scrollHeight:350,
+  classList:{add(){},remove(){}},
+  contains:t=>t===inside||t===dropdown};
+ const done={addEventListener:(name,fn)=>{if(name==="click")doneClick=fn}};
+ const body={appendChild:el=>{el.parentElement=body}};
  const ctx=vm.createContext({
-  $:id=>id==="rfCirclesMenu"?menu:{
-   addEventListener:(name,callback)=>{if(id==="rfCirclesDone"&&name==="click")doneClick=callback;}
-  },
-  document:{addEventListener:(name,callback)=>{listeners[name]=callback;}}
+  $:id=>id==="rfCirclesMenu"?menu:done,
+  document:{body,documentElement:{clientWidth:500},
+   addEventListener:(name,fn)=>{listeners[name]=fn}},
+  window:{innerWidth:500,innerHeight:560,addEventListener(){}}
  });
- vm.runInContext(source("bindRfCirclesMenu")+"
-bindRfCirclesMenu()",ctx);
- menu.open=true;listeners.click({target:inside});
- assert.equal(menu.open,true,"editing multiple options should keep panel open");
- listeners.click({target:outside});
- assert.equal(menu.open,false,"outside click must close the panel");
- menu.open=true;let prevented=false;
- listeners.keydown({key:"Escape",preventDefault:()=>{prevented=true;}});
+ vm.runInContext(source("bindRfCirclesMenu")+"\nbindRfCirclesMenu()",ctx);
+ menu.open=true;handlers.toggle();
+ assert.equal(dropdown.parentElement,body,"menu moves to portal");
+ listeners.pointerdown({target:inside});
+ assert.equal(menu.open,true,"editing multiple options must keep panel open");
+ listeners.pointerdown({target:outside});
+ assert.equal(menu.open,false,"outside pointerdown closes panel");
+ assert.equal(dropdown.parentElement,menu,"closing restores DOM parent");
+ menu.open=true;handlers.toggle();let prevented=false;
+ listeners.keydown({key:"Escape",preventDefault:()=>{prevented=true}});
  assert.equal(menu.open,false);
  assert.equal(prevented,true);
  assert.equal(focused,1);
- menu.open=true;doneClick();
+ menu.open=true;handlers.toggle();doneClick();
  assert.equal(menu.open,false);
  assert.equal(focused,2);
 });
