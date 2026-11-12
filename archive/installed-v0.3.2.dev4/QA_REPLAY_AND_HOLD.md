@@ -28,8 +28,10 @@
 | Correct original Git commit and source tree | GO |
 | Preserve all tracked files and unchanged byte content | GO |
 | Owner-reported 8-version Python package inventory | GO (observed, not independently fetched) |
-| Exact Python version and wheel resolution in disposable runner | WAIT FOR CI |
-| Original source unit/JS tests, guarded GUI smoke | WAIT FOR CI |
+| Exact Python 3.12.3 and 8-version inventory resolution in disposable runner | **PASS**, run 43191456766, no wheel hashes |
+| Original Python tests | **PASS**, run 43191456766, disposable runner |
+| Original JavaScript regressions (all tracked tests) | **HOLD: 175/179 passed, 4 failed** |
+| Guarded classic Qt GUI smoke | Pending dedicated run; initially skipped after JS failure |
 | Exact hashes of wheels installed on owner's PC | HOLD — never collected |
 | Original generated full tar1090 cache / maps / offline assets | HOLD — not archived |
 | Real Pop!_OS 24.04 + COSMIC + RTL-SDR and Hauppauge ownership | HOLD — not tested |
@@ -37,3 +39,17 @@
 | Release tag, public installer, any production deployment | HOLD — owner approval and QA required |
 
 **No GitHub Release, merge, pipx overwrite, readsb restart, RF device access or workstation change is authorized.**
+
+## Independent CI replay finding (2026-11-12)
+
+At Draft PR #23 head `72b66c8d0c8eb8dd301803961bf6b7b53509df55`, [snapshot replay run 43191456766](https://github.com/Tihulu/tihulu-flight-radar/actions/runs/43191456766) successfully provisioned the owner-observed **Python 3.12.3 and 8 installed distributions**, imported Qt WebEngine and radar module from archived source, and passed frozen Python tests. The subsequent **full original JavaScript test run failed 4 of 179 tests**. These are baseline failures in the original commit; do not rewrite the archived source or exclude failing tests to manufacture a pass.
+
+Failing original tests:
+1. `rf_five_layer_portal.test.cjs`: `two independent valid model rings and a weighted center point coexist` — expected 2 rings, actual 0.
+2. `rf_model_popup_offline.test.cjs`: `LIVE and BEST cards keep independent measured-unknown metadata` — `window is not defined`.
+3. `rf_model_popup_offline.test.cjs`: `model marker respects visibility and right card has details` — expected expression absent from input.
+4. `rf_null_region_desktop_regression.test.cjs` — historical test has a JavaScript syntax error near line 106.
+
+The original source CI's curated JS command did **not** exercise these three failing test files. A green generic preview CI does not override the full-archive regression failure. The replay workflow now records JS failure but continues guarded Qt smoke to gather independent GUI evidence, and the explicit final QA gate **fails the job** if any JS or Qt smoke failure persists.
+
+**Functional parity and release remain HOLD.** No physical malfunction on the owner's Pop!_OS desktop was claimed.

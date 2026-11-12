@@ -109,12 +109,15 @@ jobs:
           export XDG_DATA_HOME="$HOME/.local/share"
           cd "$GITHUB_WORKSPACE/archive/installed-v0.3.2.dev4/source"
           "$P" -m pytest -q
-      - name: Run archived JavaScript regression tests
+      - name: Run all archived JavaScript regressions (capture failure, do not hide it)
+        id: archived_js
+        continue-on-error: true
         shell: bash
         run: |
           cd "$GITHUB_WORKSPACE/archive/installed-v0.3.2.dev4/source"
           node --test tests/*.test.cjs
       - name: Guarded classic Qt GUI smoke; never control receiver
+        id: guarded_qt
         shell: bash
         run: |
           set -euo pipefail
@@ -125,3 +128,16 @@ jobs:
           cd "$RUNNER_TEMP"
           "$RUNNER_TEMP/installed-snapshot-venv/bin/python" \
             "$GITHUB_WORKSPACE/archive/installed-v0.3.2.dev4/tests/guarded_classic_qt_smoke.py"
+      - name: Final source-parity HOLD gate (never mask original test failures)
+        if: always()
+        shell: bash
+        run: |
+          if [[ "${{ steps.archived_js.outcome }}" != "success" ]]; then
+            echo "::error::Original archived JavaScript regression suite failed. Preservation remains GO, functional parity HOLD."
+            exit 1
+          fi
+          if [[ "${{ steps.guarded_qt.outcome }}" != "success" ]]; then
+            echo "::error::Guarded Qt smoke did not pass. Functional parity HOLD."
+            exit 1
+          fi
+          echo "Archived source and sandbox GUI tests passed; hardware and release remain HOLD."
