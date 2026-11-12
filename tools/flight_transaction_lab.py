@@ -154,6 +154,7 @@ def _write_new(fd, name, payload):
                      0o600, dir_fd=fd)
     try:
         _owned(os.fstat(handle))
+        created_inode = _inode(os.fstat(handle))
         with os.fdopen(handle, "wb", closefd=False) as stream:
             stream.write(payload)
             stream.flush()
@@ -161,7 +162,7 @@ def _write_new(fd, name, payload):
     finally:
         os.close(handle)
     _fsync(fd)
-    return _inode(_entry(fd, name))
+    return created_inode
 
 
 def _rename(fd, src, dst, flag):
@@ -232,6 +233,7 @@ class _View:
     """Root/release descriptors held under a single advisory transaction lock."""
     def __init__(self, root_fd, releases_fd):
         self.root_fd, self.releases_fd = root_fd, releases_fd
+        self.pending_proof = None
 
     def read_state(self):
         st = _entry(self.root_fd, "state.json")
@@ -333,7 +335,12 @@ class _View:
         # Journal must be durable BEFORE pointer or state changes.
         before = state
         journal = {"owner": OWNER, "before": before, "to": target}
-        _atomic_file(self.root_fd, "pending.json", _json_bytes(journal))
+        payload = _json_bytes(journal)
+        _atomic_file(self.root_fd, "pending.json", payload)
+        actual, inode = _read_file(self.root_fd, "pending.json")
+        if actual != payload:
+            fail("Pending journal changed after creation")
+        self.pending_proof = (inode, actual)
         return old_ino, old_raw
 
     def commit(self, target, before, old_ino, old_raw, fault=None):
@@ -352,11 +359,23 @@ class _View:
         state, _, _, _, _ = self.consistency(allow_pending=True)
         if state != expected_state:
             fail("Consistency failed: preserve pending journal")
-        # Ensure all earlier updates are durable before destroying evidence.
+        if self.pending_proof is None:
+            fail("Missing trusted journal proof")
+        original_inode, original_bytes = self.pending_proof
+        raw, inode = _read_file(self.root_fd, "pending.json")
+        if (inode, raw) != (original_inode, original_bytes):
+            fail("Pending journal was replaced: preserve evidence")
         _fsync(self.root_fd)
-        if _entry(self.root_fd, "pending.json") is None:
-            fail("Missing pending journal")
-        os.unlink("pending.json", dir_fd=self.root_fd)
+        retired = ".retired-journal-" + uuid.uuid4().hex
+        _rename(self.root_fd, "pending.json", retired, _NOREPLACE)
+        displaced, after_inode = _read_file(self.root_fd, retired)
+        if (after_inode, displaced) != (original_inode, original_bytes):
+            try:
+                _rename(self.root_fd, retired, "pending.json", _NOREPLACE)
+            except BaseException:
+                fail("Raced journal preserved in retired slot; HOLD")
+            fail("Foreign journal raced finalization")
+        os.unlink(retired, dir_fd=self.root_fd)
         _fsync(self.root_fd)
 
 
@@ -471,7 +490,7 @@ class TransactionLab:
         with self.locked() as view:
             if _entry(view.root_fd, "pending.json") is None:
                 return
-            raw, _ = _read_file(view.root_fd, "pending.json")
+            raw, journal_inode = _read_file(view.root_fd, "pending.json")
             journal = _decode_json(raw)
             if type(journal) is not dict or set(journal) != {"owner", "before", "to"}:
                 fail("Foreign or corrupt pending journal")
@@ -494,6 +513,7 @@ class TransactionLab:
             if current not in (before["active"], target):
                 fail("Recovery pointer conflicts with journal")
             # All validation occurs before the first mutation.
+            view.pending_proof = (journal_inode, raw)
             view.set_pointer(before["active"])
             _atomic_file(view.root_fd, "state.json", _json_bytes(before),
                          old_ino, old_raw)
