@@ -597,51 +597,80 @@ def test_remote_json_host_and_user_settings_survive_local_quit(
         bridge.control("start")
 
 
+def _qt_method(filename, class_name, method_name, **scope):
+    """Execute the *actual* Qt method AST with inert globals, no Qt import.
+
+    Linux CI intentionally installs libEGL only after Python unit tests;
+    importing the whole QWebEngine module here would exercise the runner,
+    not the mocked Quit state machine. No test is skipped.
+    """
+    import ast
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[1] / "tihulu_flight_radar" / filename
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    cls = next(x for x in tree.body
+               if isinstance(x, ast.ClassDef) and x.name == class_name)
+    fn = next(x for x in cls.body
+              if isinstance(x, (ast.FunctionDef, ast.AsyncFunctionDef))
+              and x.name == method_name)
+    namespace = {"__builtins__": __builtins__, **scope}
+    exec(compile(ast.Module(body=[fn], type_ignores=[]), str(path), "exec"),
+         namespace)
+    return namespace[method_name]
+
+
 def test_native_startup_timeout_warning_is_observed_without_second_close(
         monkeypatch):
-    from tihulu_flight_radar import native
+    import time
 
     dialogs = []
-    monkeypatch.setattr(native, "QMessageBox", SimpleNamespace(
-        warning=lambda *args: dialogs.append(args)
-    ))
+    check = _qt_method(
+        "native.py", "NativeRadarWindow", "_check_startup",
+        QMessageBox=SimpleNamespace(warning=lambda *args: dialogs.append(args)),
+        time=time,
+    )
     fake = SimpleNamespace(
         _startup_future=SimpleNamespace(done=lambda: False),
         _exit_requested=True,
         _quit_deadline=0.0,
         _quit_warning_shown=False,
     )
-    native.NativeRadarWindow._check_startup(fake)
-    native.NativeRadarWindow._check_startup(fake)
+    check(fake)
+    check(fake)
     assert len(dialogs) == 1 and "Quit still draining" in dialogs[0][1]
     assert fake._quit_warning_shown
 
 
 def test_native_local_listener_retryable_after_fake_thread_timeout():
-    from tihulu_flight_radar.native import NativeRadarWindow
-
+    close_listener = _qt_method(
+        "native.py", "NativeRadarWindow", "_close_local_listener",
+    )
     server = FakeServer()
     thread = FakeThread(alive=True)
     window = SimpleNamespace(
         server=server, server_thread=thread, _listener_closed=False
     )
     with pytest.raises(RuntimeError, match="still alive"):
-        NativeRadarWindow._close_local_listener(window)
+        close_listener(window)
     assert server.shutdowns == 1 and server.closes == 1
     assert window._listener_closed
     thread.alive = False
-    NativeRadarWindow._close_local_listener(window)
+    close_listener(window)
     assert server.shutdowns == 1 and server.closes == 1
     assert thread.joins == [2, 2]
 
 
 def test_native_combined_direct_failure_never_exits_as_mixed_only(monkeypatch):
-    from tihulu_flight_radar import native
+    import time
 
     warnings = []
-    monkeypatch.setattr(native, "QMessageBox", SimpleNamespace(
-        warning=lambda *args: warnings.append(args)
-    ))
+    close_window = _qt_method(
+        "native.py", "NativeRadarWindow", "closeEvent",
+        QMessageBox=SimpleNamespace(warning=lambda *args: warnings.append(args)),
+        MixedOwnershipWarning=control.MixedOwnershipWarning,
+        time=time,
+    )
     ignored = []
     event = SimpleNamespace(ignore=lambda: ignored.append("ignored"))
     fake_bridge = SimpleNamespace(
@@ -663,19 +692,23 @@ def test_native_combined_direct_failure_never_exits_as_mixed_only(monkeypatch):
         _close_local_listener=lambda: None,
         release_action=SimpleNamespace(isChecked=lambda: True),
     )
-    native.NativeRadarWindow.closeEvent(window, event)
+    close_window(window, event)
     assert ignored == ["ignored"]
     assert warnings and "did not exit" in warnings[0][2]
     assert not window._quit_done
 
 
 def test_classic_combined_failure_never_exits_as_mixed_only(monkeypatch):
-    from tihulu_flight_radar import app as classic
+    import time
 
     warnings = []
-    monkeypatch.setattr(classic, "QMessageBox", SimpleNamespace(
-        warning=lambda *args: warnings.append(args)
-    ))
+    close_window = _qt_method(
+        "app.py", "RadarWindow", "closeEvent",
+        QMessageBox=SimpleNamespace(warning=lambda *args: warnings.append(args)),
+        MixedOwnershipWarning=control.MixedOwnershipWarning,
+        DataError=DataError,
+        time=time,
+    )
     ignored = []
     event = SimpleNamespace(ignore=lambda: ignored.append("ignored"))
     receiver = SimpleNamespace(
@@ -694,7 +727,7 @@ def test_classic_combined_failure_never_exits_as_mixed_only(monkeypatch):
         release_checkbox=SimpleNamespace(isChecked=lambda: True),
         map_server=SimpleNamespace(close=lambda: None),
     )
-    classic.RadarWindow.closeEvent(window, event)
+    close_window(window, event)
     assert ignored == ["ignored"]
     assert warnings and "did not exit" in warnings[0][2]
     assert not window._quit_done
