@@ -389,7 +389,7 @@ class IndependentPR33QA(unittest.TestCase):
                 "size": len(modified)}))
             triggered.append(True)
         with patch.object(tx._View, "check_verified_snapshots",
-                          side_effect=late_change):
+                          new=late_change):
             pinned.switch("v1")
         self.assertTrue(triggered)
         with self.assertRaisesRegex(RuntimeError,
