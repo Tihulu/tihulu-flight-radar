@@ -1,0 +1,24 @@
+name: Flight Transaction Independent QA-27 (disposable CI only)
+on:
+  pull_request:
+    paths:
+      - "tests/test_flight_transaction_independent_qa27.py"
+      - ".github/workflows/flight-transaction-independent-qa27.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  independent-adversarial-fixtures:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pytest in ephemeral GitHub runner
+        run: python -m pip install "pytest>=8,<10"
+      - name: Reproduce adversarial states using tmp_path fixtures only
+        run: python -m pytest -q -ra tests/test_flight_transaction_independent_qa27.py
+      - name: Check source tree not modified by fixtures
+        run: git diff --exit-code
