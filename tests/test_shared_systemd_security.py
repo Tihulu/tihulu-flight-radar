@@ -72,9 +72,9 @@ def test_web_bridge_only_advertises_control_for_direct_process():
 
 
 def test_classic_ui_and_installer_do_not_offer_shared_service_controls():
-    classic = (REPO / "tihulu_flight_radar" / "app.py").read_text()
-    native = (REPO / "tihulu_flight_radar" / "native.py").read_text()
-    installer = (REPO / "scripts" / "install-linux.sh").read_text()
+    classic = (REPO / "tihulu_flight_radar" / "app.py").read_text(encoding="utf-8")
+    native = (REPO / "tihulu_flight_radar" / "native.py").read_text(encoding="utf-8")
+    installer = (REPO / "scripts" / "install-linux.sh").read_text(encoding="utf-8")
     assert 'self.boot_checkbox.setEnabled(False)' in classic
     assert 'mode == "Direct readsb"' in classic
     assert 'self.autostart_action.setEnabled(self.bridge.receiver.mode == "Direct readsb")' in native
