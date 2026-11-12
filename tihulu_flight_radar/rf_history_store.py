@@ -152,7 +152,7 @@ class RFHistoryStore:
                         # Keep informative flight-path fixes; avoid writing the
                         # same parked/unchanged position every polling interval.
                         _, old_stamp, old_lat, old_lon, *_ = old
-                        if (stamp <= old_stamp or
+                        if (stamp < old_stamp or
                                 _dist((lat,lon),(old_lat,old_lon)) < 5):
                             continue
                     self._last[hex_] = fix
