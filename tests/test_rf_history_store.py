@@ -54,6 +54,18 @@ class RFHistoryStoreTests(unittest.TestCase):
             self.assertNotEqual(sid,next_session)
             self.assertEqual(reopened.page(sid,0,100)["records"][0]["hex"],"a00001")
 
+    def test_same_millisecond_distant_fix_is_not_dropped(self):
+        # Reproduces intermittent Ubuntu CI failure without relying on timing.
+        with tempfile.TemporaryDirectory() as temp:
+            store = RFHistoryStore(Path(temp)/"rf.sqlite3")
+            sid = store.config("start")["activeSessionId"]
+            with patch("tihulu_flight_radar.rf_history_store.time.time",
+                       return_value=1700000000):
+                self.assertEqual(store.append([self.aircraft()]), 1)
+                self.assertEqual(store.append([self.aircraft()]), 0)
+                self.assertEqual(store.append([self.aircraft(lat=51.01)]), 1)
+            self.assertEqual(len(store.page(sid, 0, 10)["records"]), 2)
+
     def test_no_fixed_64_record_count_cap(self):
         with tempfile.TemporaryDirectory() as temp:
             store = RFHistoryStore(Path(temp)/"rf.sqlite3")
