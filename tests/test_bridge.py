@@ -283,3 +283,52 @@ def test_bridge_active_decoder_waits_for_first_json_without_inventing_aircraft()
     assert local["state"] == "decoder_waiting_for_json"
     assert "JSON output directory" in local["error"]
     assert result["aircraft"] == []
+
+
+# EXIT-01 ownership checks also run in the existing Pi ARM64 bridge job.
+# Every Linux/systemd operation is faked; no host service or radio is touched.
+
+
+def test_exit01_pi_bridge_quit_preserves_external_service_pair(monkeypatch):
+    import tihulu_flight_radar.control as control
+
+    monkeypatch.setattr(control.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(
+        control, "_unit_active", lambda unit: (True, "active"))
+    monkeypatch.setattr(
+        control, "service_action",
+        lambda action: pytest.fail("passive Quit cannot stop external services"),
+    )
+    bridge = Bridge(token="pi-exit01", allow_control=True)
+    bridge.close(release_local_service=True)
+    bridge.close(release_local_service=True)
+    with pytest.raises(DataError, match="shutting down"):
+        bridge.control("start")
+
+
+def test_exit01_pi_bridge_mixed_owner_warning_without_paired_stop(monkeypatch):
+    import tihulu_flight_radar.control as control
+
+    state = {"readsb.service": "inactive", "tar1090.service": "active"}
+    events = []
+    monkeypatch.setattr(control.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(
+        control, "_unit_active",
+        lambda unit: (state[unit] == "active", state[unit]),
+    )
+
+    def action(operation):
+        events.append(operation)
+        if operation == "start":
+            state.update({unit: "active" for unit in state})
+        elif operation == "stop":
+            pytest.fail("mixed ownership may not issue paired Stop")
+        return "synthetic " + operation
+
+    monkeypatch.setattr(control, "service_action", action)
+    bridge = Bridge(token="pi-mixed", allow_control=True)
+    bridge.control("start")
+    with pytest.raises(control.MixedOwnershipWarning, match="mixed ownership"):
+        bridge.close(release_local_service=True)
+    assert events == ["start"]
+    assert state["tar1090.service"] == "active"
