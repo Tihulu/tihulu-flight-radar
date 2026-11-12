@@ -54,6 +54,9 @@ def _synthetic_qt_window(filename, class_name, **namespace):
 def test_service_mode_quit_records_truthful_partial_release_without_service_io(
         monkeypatch):
     monkeypatch.setattr(control.platform, "system", lambda: "Linux")
+    # Positive proof that the shared pair is currently active justifies a
+    # visible advisory, never authority to stop it.
+    monkeypatch.setattr(control, "_unit_active", lambda _unit: (True, "active"))
     monkeypatch.setattr(
         control, "service_action",
         lambda _: pytest.fail("Global Stop must not be attempted"),
