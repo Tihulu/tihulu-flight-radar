@@ -113,58 +113,49 @@ def test_external_preexisting_service_start_is_read_only(monkeypatch):
 
 def test_external_service_refuses_stop_and_restart(monkeypatch):
     import tihulu_flight_radar.control as control
-
     monkeypatch.setattr(control.platform, "system", lambda: "Linux")
     monkeypatch.setattr(control, "_unit_active", lambda _: (True, "active"))
-    commands = []
-    monkeypatch.setattr(control, "service_action", lambda *a, **k: commands.append((a,k)))
     receiver = ReceiverController()
-    with pytest.raises(DataError, match="did not start"):
+    with pytest.raises(DataError, match="globally shared"):
         receiver.stop()
-    with pytest.raises(DataError, match="not started by this app"):
+    with pytest.raises(DataError, match="shared"):
         receiver.restart()
-    assert commands == []
 
 
-def test_explicit_stop_requires_owner_confirmation(monkeypatch):
+def test_explicit_ownership_flag_never_authorizes_shared_mutation(monkeypatch):
     import tihulu_flight_radar.control as control
-
     monkeypatch.setattr(control.platform, "system", lambda: "Linux")
-    with pytest.raises(DataError, match="explicit app ownership"):
-        control.service_action("stop")
-    assert control.ACTIONS == ("start", "stop", "enable", "disable")
+    commands = []
+    monkeypatch.setattr(control.subprocess, "run", lambda *a, **k: commands.append(a))
+    for action in control.ACTIONS:
+        for claimed in (False, True):
+            with pytest.raises(DataError, match="read-only"):
+                control.service_action(action, ownership_confirmed=claimed)
+    assert not commands
 
 
-def test_owned_manual_stop_is_allowed_but_close_never_stops(monkeypatch):
+def test_shared_service_start_when_inactive_is_refused(monkeypatch):
     import tihulu_flight_radar.control as control
-
     monkeypatch.setattr(control.platform, "system", lambda: "Linux")
-    states = [(False, "inactive"), (True, "active")]
-    monkeypatch.setattr(control, "_unit_active", lambda _: states.pop(0) if states else (True, "active"))
-    calls = []
-    monkeypatch.setattr(control, "service_action", lambda action, **k: calls.append((action,k)) or action)
+    monkeypatch.setattr(control, "_unit_active", lambda _: (False, "inactive"))
     receiver = ReceiverController()
-    assert receiver.start() == "start"
-    assert receiver._service_started_by_app
+    with pytest.raises(DataError, match="read-only"):
+        receiver.start()
+    assert not receiver._service_started_by_app
     receiver.close(release_local_service=True)
-    assert calls == [("start", {})], "App close must never stop even owned shared services"
-    with pytest.raises(DataError, match="did not start"):
-        receiver.stop()
 
 
-def test_manual_stop_is_only_permitted_for_same_controller(monkeypatch):
+def test_forged_in_process_owner_still_cannot_stop_or_restart_shared_service(monkeypatch):
     import tihulu_flight_radar.control as control
-
     monkeypatch.setattr(control.platform, "system", lambda: "Linux")
-    calls = []
-    monkeypatch.setattr(control, "service_action", lambda action, **kw: calls.append((action,kw)) or "stopped")
-    r = ReceiverController()
-    r._service_started_by_app = True
-    assert r.stop() == "stopped"
-    assert calls == [("stop", {"ownership_confirmed": True})]
-    assert not r._service_started_by_app
-    with pytest.raises(DataError, match="did not start"):
-        r.stop()
+    receiver = ReceiverController()
+    receiver._service_started_by_app = True
+    with pytest.raises(DataError, match="globally shared"):
+        receiver.stop()
+    with pytest.raises(DataError, match="shared"):
+        receiver.restart()
+    receiver.close(release_local_service=True)
+    assert not receiver._service_started_by_app
 
 
 def test_changing_mode_forfeits_shared_service_ownership(monkeypatch):
@@ -176,5 +167,5 @@ def test_changing_mode_forfeits_shared_service_ownership(monkeypatch):
     receiver.configure("Remote JSON", "http://127.0.0.1:8080/data/aircraft.json")
     assert not receiver._service_started_by_app
     receiver.configure("Linux services")
-    with pytest.raises(DataError, match="did not start"):
+    with pytest.raises(DataError, match="globally shared"):
         receiver.stop()

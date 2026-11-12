@@ -140,6 +140,9 @@ class NativeRadarWindow(QMainWindow):
         self.autostart_action.toggled.connect(
             lambda checked: self.settings.setValue("auto_start_receiver", checked)
         )
+        # Shared systemd remains read-only; auto-start is only meaningful for
+        # the receiver subprocess explicitly owned in Direct readsb mode.
+        self.autostart_action.setEnabled(self.bridge.receiver.mode == "Direct readsb")
         menu.addAction(self.autostart_action)
         # Exiting any radar window must never auto-stop shared readsb/tar1090.
         # Keep an explanatory inert item instead of a misleading old toggle.
@@ -190,7 +193,10 @@ class NativeRadarWindow(QMainWindow):
     def _start_receiver_if_needed(self):
         if (self._exit_requested or not self.autostart_action.isChecked()):
             return
-        if self.bridge.receiver.mode == "Remote JSON":
+        if self.bridge.receiver.mode != "Direct readsb":
+            self.statusBar().showMessage(
+                "Shared/remote receivers are read-only; no automatic systemd actions."
+            )
             return
         self.bridge.last_start_error = None
         self.statusBar().showMessage("Checking local receiver and USB ownership…")

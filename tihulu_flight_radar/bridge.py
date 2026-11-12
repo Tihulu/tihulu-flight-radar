@@ -401,7 +401,7 @@ class Bridge:
         with self.receiver_lock:
             active, detail = self.receiver.status()
             return {"active": active, "detail": detail, "mode": self.receiver.mode,
-                    "control_enabled": self.allow_control,
+                    "control_enabled": self.allow_control and self.receiver.mode == "Direct readsb",
                     "startup_error": self.last_start_error}
 
     def control(self, action: str) -> str:

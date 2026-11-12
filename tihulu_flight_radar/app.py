@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from . import __version__
-from .control import MODES, ReceiverController, service_action
+from .control import MODES, ReceiverController
 from .core import (DataError, detect_sdr_processes, export_json, find_tar1090_url,
                    lan_ip, summarize, recently_seen, position_is_fresh)
 from .map_server import LocalMapServer
@@ -310,9 +310,13 @@ class RadarWindow(QMainWindow):
         apply_button = QPushButton("Apply receiver configuration")
         apply_button.clicked.connect(self._apply_config)
         settings.addWidget(apply_button)
-        self.boot_checkbox = QCheckBox("Start readsb / tar1090 at system boot")
+        self.boot_checkbox = QCheckBox("Shared readsb/tar1090 boot state (read-only)")
         self.boot_checkbox.setVisible(platform.system() == "Linux")
-        self.boot_checkbox.toggled.connect(self._toggle_boot)
+        self.boot_checkbox.setEnabled(False)
+        self.boot_checkbox.setToolTip(
+            "Shared systemd services are managed outside Flight Radar; "
+            "changing another app's boot settings is not safe."
+        )
         settings.addWidget(self.boot_checkbox)
         # Shared systemd receiver services may be used by other TIHULU apps.
         # Never auto-stop them on window close; show an unambiguous status.
@@ -418,6 +422,9 @@ class RadarWindow(QMainWindow):
         self.rssi.setText("Average aircraft RSSI: —")
 
     def _action(self, operation: str):
+        if self.controller.mode == "Linux services":
+            self.info.setText("Shared readsb/tar1090 systemd services are read-only.")
+            return
         if self.action_future is not None:
             return
         self._invalidate_snapshot()
@@ -430,17 +437,9 @@ class RadarWindow(QMainWindow):
         self.action_future = self.pool.submit(methods[operation])
 
     def _toggle_boot(self, enabled: bool):
-        if self._boot_updating or platform.system() != "Linux":
-            return
-        if self.action_future is not None:
-            self._boot_updating = True
-            self.boot_checkbox.setChecked(not enabled)
-            self._boot_updating = False
-            return
-        self.action_future = self.pool.submit(
-            service_action, "enable" if enabled else "disable"
-        )
-        self.info.setText("Updating system startup preference…")
+        # Defensive compatibility: UI disabled, and external callers cannot
+        # mutate shared systemd boot settings through this legacy method.
+        self.info.setText("Shared systemd boot settings are read-only.")
 
     def _tick(self):
         if self.map_future is not None and self.map_future.done():
@@ -493,10 +492,11 @@ class RadarWindow(QMainWindow):
         self.state_label.style().unpolish(self.state_label)
         self.state_label.style().polish(self.state_label)
         self.detail_label.setText(detail)
-        self.start_button.setEnabled(not busy and not active and mode != "Remote JSON")
-        self.stop_button.setEnabled(not busy and active and mode != "Remote JSON")
-        self.restart_button.setEnabled(not busy and active and mode != "Remote JSON")
-        self.boot_checkbox.setEnabled(not busy and mode == "Linux services")
+        # Only app-owned Direct readsb can be started/stopped via this GUI.
+        self.start_button.setEnabled(not busy and not active and mode == "Direct readsb")
+        self.stop_button.setEnabled(not busy and active and mode == "Direct readsb")
+        self.restart_button.setEnabled(not busy and active and mode == "Direct readsb")
+        self.boot_checkbox.setEnabled(False)
         self.mode_select.setEnabled(not busy)
         self.diagnostics_button.setEnabled(not busy)
 
