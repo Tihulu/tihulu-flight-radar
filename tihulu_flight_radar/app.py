@@ -807,10 +807,18 @@ class RadarWindow(QMainWindow):
         except (OSError, RuntimeError) as exc:
             problems.append("Local map listener: " + str(exc))
             owned_cleanup_failed = True
-        # PR #15 expressly permits a visible warning on mixed systemd
-        # ownership while preserving the unrelated service.
+        # Even a successful owned-resource cleanup does not release global
+        # readsb/tar1090. Warn before completing the Quit so users do not
+        # assume a borrowed/shared SDR has become available.
+        shared_note = (getattr(self.controller, "last_service_release_note", None)
+                       if self._owns_receiver else None)
+        shared_only = bool(shared_note and not problems)
+        if shared_only:
+            problems.append(shared_note)
         if problems:
-            QMessageBox.warning(self, "Quit cleanup incomplete", "\n".join(problems))
+            QMessageBox.warning(
+                self, "Shared receiver preserved" if shared_only
+                else "Quit cleanup incomplete", "\n".join(problems))
             if owned_cleanup_failed:
                 event.ignore()
                 return

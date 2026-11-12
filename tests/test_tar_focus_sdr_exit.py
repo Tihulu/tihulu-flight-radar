@@ -78,21 +78,37 @@ def test_receiver_close_does_not_control_remote_receiver(monkeypatch):
 
 
 def test_failed_sdr_release_is_not_silently_reported_as_success(monkeypatch):
+    """A genuine Flight-owned lease release error must fail, not silently Quit."""
     monkeypatch.setattr(control.platform, "system", lambda: "Linux")
-    state = {unit: "inactive" for unit in control.UNITS}
-    monkeypatch.setattr(control, "_unit_active",
-                        lambda unit: (state[unit] == "active", state[unit]))
-    def action(name):
-        if name == "start":
-            state.update({unit: "active" for unit in control.UNITS})
-            return "started"
-        raise DataError("insufficient service permission")
-    monkeypatch.setattr(control, "service_action", action)
-    receiver=control.ReceiverController()
-    receiver.start()
-    assert receiver._service_units_started_by_app == set(control.UNITS)
-    with pytest.raises(DataError,match="insufficient"):
+    monkeypatch.setattr(
+        control, "service_action",
+        lambda _: pytest.fail("No global readsb/tar1090 Stop is authorized"),
+    )
+
+    class FlakyOwnedLease:
+        attempts = 0
+
+        def release(self):
+            self.attempts += 1
+            if self.attempts == 1:
+                raise OSError("synthetic private SDR lease release failed")
+
+    receiver = control.ReceiverController()
+    receiver.configure("Direct readsb")
+    lease = FlakyOwnedLease()
+    receiver._direct_lease = lease
+
+    with pytest.raises(DataError, match="private SDR lease release failed"):
         receiver.close(release_local_service=True)
+    assert lease.attempts == 1
+    assert receiver._direct_lease is lease
+    assert not receiver._closed, "A held Flight lease must not be reported freed"
+
+    receiver.close(release_local_service=True)
+    assert lease.attempts == 2
+    assert receiver._direct_lease is None
+    assert receiver._closed
+
 
 def test_authorized_location_has_priority_over_nearest_radio_plane():
     data={"aircraft":[aircraft("3c1234", 50.9, 7.1)]}

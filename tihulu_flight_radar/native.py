@@ -383,10 +383,19 @@ class NativeRadarWindow(QMainWindow):
             receiver_error = str(exc)
         except Exception as exc:
             receiver_error = str(exc)
-        if listener_error or receiver_error:
+        # A successful Quit can still leave a GLOBAL readsb/tar1090 receiver
+        # running for another application. Surface this independently of a
+        # fatal private-cleanup error; never claim the SDR was freed.
+        shared_note = getattr(
+            getattr(self.bridge, "receiver", None), "last_service_release_note", None
+        )
+        if listener_error or receiver_error or shared_note:
             problems = [x for x in (listener_error, receiver_error) if x]
-            QMessageBox.warning(self, "Quit cleanup incomplete",
-                                "\n".join(problems))
+            if shared_note and not receiver_error:
+                problems.append(shared_note)
+            title = ("Quit cleanup incomplete" if listener_error or receiver_error
+                     else "Shared receiver preserved")
+            QMessageBox.warning(self, title, "\n".join(problems))
             if listener_error or (receiver_error and not receiver_mixed_only):
                 event.ignore()
                 return  # No false success when a local resource remains.

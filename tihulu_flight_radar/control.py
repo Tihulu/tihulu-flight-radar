@@ -325,7 +325,7 @@ class ReceiverController:
         return read_local(Path(self._directory.name) / "aircraft.json")
 
     def close(self, release_local_service: bool = False):
-        """Idempotent bounded Quit, preserving PR #15's paired-service rules."""
+        """Bounded Quit releases private resources, never global service units."""
         self.request_quit()  # set before blocking on in-flight Start/Restart
         if not self._operation_lock.acquire(timeout=QUIT_OPERATION_TIMEOUT_SECONDS):
             raise DataError(
@@ -338,7 +338,8 @@ class ReceiverController:
             error = None
             self._inside_close = True
             try:
-                if self.process is not None or self._directory is not None:
+                if (self.process is not None or self._directory is not None
+                        or self._direct_lease is not None):
                     mode = self.mode
                     self.mode = "Direct readsb"
                     try:
@@ -348,15 +349,20 @@ class ReceiverController:
                     finally:
                         self.mode = mode
                 if (platform.system() == "Linux" and release_local_service
-                        and self._service_units_started_by_app):
-                    # Service units are globally shared. A foreign client may
-                    # join after Start, and systemd may replace a unit without
-                    # Flight observing its new InvocationID. Never auto-Stop.
+                        and (self._service_units_started_by_app
+                             or (self.mode == "Linux services" and any(
+                                 _unit_active(unit)[0] for unit in UNITS)))):
+                    # Global services remain independent. The historic start
+                    # ledger and even an empty lease registry cannot prove no
+                    # late or noncooperating consumers. Do not attempt Stop.
                     self.last_service_release_note = (
-                        "Shared readsb/tar1090 services preserved on Quit; "
-                        "Flight cannot verify exclusive receiver ownership."
+                        "Flight released only its own resources. Shared "
+                        "readsb/tar1090 services were not stopped and may "
+                        "remain active for other receiver applications. "
+                        "Verify service state separately before using the SDR."
                     )
-                    if self._service_units_started_by_app != set(UNITS):
+                    if (self._service_units_started_by_app
+                            and self._service_units_started_by_app != set(UNITS)):
                         # Keep #15/#16's typed mixed-ownership warning.
                         mixed = MixedOwnershipWarning(
                             "Automatic release skipped: readsb/tar1090 have mixed "
@@ -365,9 +371,10 @@ class ReceiverController:
                             "explicitly only when no other app is using it."
                         )
                         error = mixed if error is None else DataError(f"{error}; {mixed}")
-                    else:
-                        # Clear Flight's historical attribution on successful
-                        # private cleanup; never act on stale global identity.
+                    elif error is None:
+                        # Only complete Flight's provenance teardown when its
+                        # private cleanup has actually completed. On fatal
+                        # direct-child/lease errors retain data for a retry.
                         self._service_units_started_by_app.clear()
                         self._service_started_by_app = False
             finally:
