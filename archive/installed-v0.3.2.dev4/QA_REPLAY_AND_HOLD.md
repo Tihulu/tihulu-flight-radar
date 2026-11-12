@@ -31,7 +31,7 @@
 | Exact Python 3.12.3 and 8-version inventory resolution in disposable runner | **PASS**, run 43191456766, no wheel hashes |
 | Original Python tests | **PASS**, run 43191456766, disposable runner |
 | Original JavaScript regressions (all tracked tests) | **HOLD: 175/179 passed, 4 failed** |
-| Guarded classic Qt GUI smoke | Pending dedicated run; initially skipped after JS failure |
+| Guarded classic Qt GUI smoke | **PASS** run 43192017994, Qt offscreen, receiver management disabled |
 | Exact hashes of wheels installed on owner's PC | HOLD — never collected |
 | Original generated full tar1090 cache / maps / offline assets | HOLD — not archived |
 | Real Pop!_OS 24.04 + COSMIC + RTL-SDR and Hauppauge ownership | HOLD — not tested |
@@ -53,3 +53,9 @@ Failing original tests:
 The original source CI's curated JS command did **not** exercise these three failing test files. A green generic preview CI does not override the full-archive regression failure. The replay workflow now records JS failure but continues guarded Qt smoke to gather independent GUI evidence, and the explicit final QA gate **fails the job** if any JS or Qt smoke failure persists.
 
 **Functional parity and release remain HOLD.** No physical malfunction on the owner's Pop!_OS desktop was claimed.
+
+## Guarded GUI evidence (12 November 2026)
+
+At [source replay run 43192017994](https://github.com/Tihulu/tihulu-flight-radar/actions/runs/43192017994), the isolated pinned environment and original Python tests passed, **all 179 original JS tests ran (175 PASS, 4 FAIL)**, and the isolated **classic Qt GUI smoke PASS** after forcing all receiver control methods to fail-closed or no-op in the CI process. The final CI job reports **FAIL by design** because the untouched original JavaScript regressions still fail. That is a correct **functional parity HOLD**, not a failure to preserve the Git source.
+
+This smoke does not cover native Qt WebEngine's complete interactive flows, real Pop!_OS COSMIC environment, user-specific configuration, RTL-SDR, readsb/tar1090, or hardware parity. Neither the user's workstation nor a shared receiver was touched.
