@@ -264,6 +264,7 @@ class Bridge:
         self.allow_control = allow_control
         self.receiver = ReceiverController()
         self.receiver_lock = threading.RLock()
+        self._quit_requested = threading.Event()
         self.online = DataProvider()
         self.multi_online = MultiNetworkProvider()
         self.last_start_error: str | None = None
@@ -273,6 +274,17 @@ class Bridge:
         # the selected SEARCH region across ports, OS restarts and platforms.
         self._place_path = (Path.home() / ".config" / "tihulu-flight-radar"
                             / "map-search-location.json")
+
+    def request_quit(self):
+        """Reject new receiver work before waiting for an active bridge call."""
+        self._quit_requested.set()
+        self.receiver.request_quit()
+
+    def close(self, *, release_local_service: bool = False):
+        """Close only the local receiver owned by this bridge."""
+        self.request_quit()
+        with self.receiver_lock:
+            return self.receiver.close(release_local_service=release_local_service)
 
     def get_saved_search_place(self) -> dict | None:
         with self._place_lock:
@@ -301,6 +313,8 @@ class Bridge:
 
     def snapshot(self, mode: str, lat: float, lon: float, radius: int,
                  networks: tuple[str, ...] | None = None) -> dict:
+        if self._quit_requested.is_set():
+            raise DataError("Flight Radar bridge is shutting down.")
         if mode not in ("antenna", "internet", "hybrid", "auto"):
             raise DataError("Unknown source mode.")
         local: list[dict] = []
@@ -391,9 +405,13 @@ class Bridge:
                     "startup_error": self.last_start_error}
 
     def control(self, action: str) -> str:
+        if self._quit_requested.is_set():
+            raise DataError("Flight Radar bridge is shutting down.")
         if not self.allow_control:
             raise DataError("Hardware controls are disabled; launch with --allow-control to enable.")
         with self.receiver_lock:
+            if self._quit_requested.is_set():
+                raise DataError("Flight Radar bridge is shutting down.")
             if action == "start":
                 return self.receiver.start()
             if action == "stop":
@@ -578,6 +596,7 @@ def main(argv: list[str] | None = None):
         parser.error("--port must be between 1024 and 65535")
     bridge = Bridge(allow_control=args.allow_control)
     server = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(bridge, args.port))
+    server.daemon_threads = True
     print(f"Local radar UI: http://127.0.0.1:{args.port}/", flush=True)
     print(f"Bridge URL: http://127.0.0.1:{args.port}", flush=True)
     print(f"Session pairing token: {bridge.token}", flush=True)
@@ -596,8 +615,9 @@ def main(argv: list[str] | None = None):
     except KeyboardInterrupt:
         pass
     finally:
+        bridge.request_quit()
         server.server_close()
-        bridge.receiver.close()
+        bridge.close()
 
 
 if __name__ == "__main__":
