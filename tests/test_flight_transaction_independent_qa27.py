@@ -288,3 +288,20 @@ def test_sigkill_after_pointer_recovery(lab):
     lab.recover()
     assert lab.status()["active"] == "old"
     assert not lab.pending.exists()
+
+def test_raced_journal_finalization_preserves_foreign_bytes(lab, monkeypatch):
+    _prepare(lab)
+    rename = tx._rename
+    injected = []
+    def race(fd, src, dst, flag):
+        if src == "pending.json" and dst.startswith(".retired-journal-") and not injected:
+            lab.pending.unlink()
+            lab.pending.write_bytes(b"FOREIGN_PENDING_EVIDENCE")
+            injected.append(True)
+        return rename(fd, src, dst, flag)
+    monkeypatch.setattr(tx, "_rename", race)
+    with pytest.raises(RuntimeError, match="Foreign journal"):
+        lab.switch("new")
+    assert injected
+    assert lab.pending.read_bytes() == b"FOREIGN_PENDING_EVIDENCE"
+    assert lab.pending.exists()
