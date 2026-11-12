@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import sys
+import time
 import threading
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
@@ -122,6 +123,9 @@ class NativeRadarWindow(QMainWindow):
         self._startup_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="tihulu-rf-start")
         self._startup_future = None
         self._exit_requested = False
+        self._quit_done = False
+        self._quit_deadline = None
+        self._quit_warning_shown = False
         self._startup_timer = QTimer(self)
         self._startup_timer.setInterval(250)
         self._startup_timer.timeout.connect(self._check_startup)
@@ -147,6 +151,9 @@ class NativeRadarWindow(QMainWindow):
             lambda value: self.settings.setValue("release_sdr_on_exit", value)
         )
         menu.addAction(self.release_action)
+        quit_action = QAction("Quit Flight Radar (release owned resources)", self)
+        quit_action.triggered.connect(self.close)
+        menu.addAction(quit_action)
         reload_view = QAction("Reload radar view", self)
         reload_view.triggered.connect(self.web.reload)
         menu.addAction(reload_view)
@@ -294,28 +301,65 @@ class NativeRadarWindow(QMainWindow):
         )
 
     def closeEvent(self, event):
+        if self._quit_done:
+            super().closeEvent(event)
+            return
+        # Set both gates before waiting for a pending Start or HTTP request.
+        self._exit_requested = True
+        self.bridge.request_quit()
+        if self._quit_deadline is None:
+            self._quit_deadline = time.monotonic() + 45
         if self._startup_future is not None and not self._startup_future.done():
-            self._exit_requested = True
-            self.statusBar().showMessage("Finishing receiver startup before safe shutdown…")
+            self._startup_future.cancel()
             event.ignore()
+            self.statusBar().showMessage("Finishing app-owned receiver startup before Quit…")
+            if time.monotonic() >= self._quit_deadline and not self._quit_warning_shown:
+                self._quit_warning_shown = True
+                QMessageBox.warning(self, "Quit still draining",
+                    "A receiver start has not finished within 45 seconds. "
+                    "Quit is incomplete, but no new Start can be accepted.")
+            return
+        # The classic dashboard shares our receiver; it may still have an
+        # action/JSON/map future. It must close its own pool/port first.
+        if self.classic_window is not None and not self.classic_window.close():
+            event.ignore()
+            if time.monotonic() < self._quit_deadline:
+                QTimer.singleShot(250, self.close)
+            elif not self._quit_warning_shown:
+                self._quit_warning_shown = True
+                QMessageBox.warning(self, "Quit still draining",
+                    "The classic receiver dashboard has outstanding tasks. "
+                    "Quit is incomplete; retry after those workers finish.")
             return
         self._startup_timer.stop()
-        self._startup_pool.shutdown(wait=False, cancel_futures=True)
-        # Stop the app-owned direct child; optionally stop local readsb and
-        # tar1090 services to release the same USB tuner for other SDR apps.
-        if self.classic_window is not None:
-            self.classic_window.close()
-        self.web.setUrl(QUrl("about:blank"))
-        self.server.shutdown()
-        self.server.server_close()
-        self.server_thread.join(timeout=2)
+        self._startup_pool.shutdown(wait=True, cancel_futures=True)
         try:
-            self.bridge.receiver.close(
+            # Controller/bridge serializes with any HTTP control request and
+            # preserves PR #15's external and mixed-ownership safety contract.
+            self.bridge.close(
                 release_local_service=self.release_action.isChecked()
             )
         except Exception as exc:
             QMessageBox.warning(self, "Receiver release warning",
-                                "The receiver may still be occupied: " + str(exc))
+                                "Quit may be incomplete: " + str(exc))
+            if "mixed ownership" not in str(exc):
+                event.ignore()
+                return  # Leave UI/reporting alive for a safe retry.
+        # Tear down the app-owned page and loopback listener. External tar1090,
+        # user settings, cached map assets and browser tabs are untouched.
+        for popup in list(self.web._popups):
+            popup.close()
+        self.web.setUrl(QUrl("about:blank"))
+        self.server.shutdown()
+        self.server.server_close()
+        self.server_thread.join(timeout=2)
+        if self.server_thread.is_alive():
+            QMessageBox.warning(self, "Quit cleanup incomplete",
+                                "Local bridge HTTP thread has not stopped. "
+                                "No new controls will be accepted; retry Quit.")
+            event.ignore()
+            return
+        self._quit_done = True
         super().closeEvent(event)
 
 
