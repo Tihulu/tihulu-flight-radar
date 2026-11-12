@@ -21,6 +21,7 @@ from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import QApplication, QDialog, QMainWindow, QMessageBox, QVBoxLayout, QFileDialog
 
 from .bridge import Bridge, make_handler
+from .control import MixedOwnershipWarning
 
 
 class EmbeddedRadarView(QWebEngineView):
@@ -371,19 +372,22 @@ class NativeRadarWindow(QMainWindow):
         except (OSError, RuntimeError) as exc:
             listener_error = str(exc)
         receiver_error = None
+        receiver_mixed_only = False
         try:
             # Controller/bridge preserves PR #15's external/mixed ownership.
             self.bridge.close(
                 release_local_service=self.release_action.isChecked()
             )
+        except MixedOwnershipWarning as exc:
+            receiver_mixed_only = True
+            receiver_error = str(exc)
         except Exception as exc:
             receiver_error = str(exc)
         if listener_error or receiver_error:
             problems = [x for x in (listener_error, receiver_error) if x]
             QMessageBox.warning(self, "Quit cleanup incomplete",
-                                "\\n".join(problems))
-            if listener_error or (receiver_error and
-                                  "mixed ownership" not in receiver_error):
+                                "\n".join(problems))
+            if listener_error or (receiver_error and not receiver_mixed_only):
                 event.ignore()
                 return  # No false success when a local resource remains.
         # External tar1090, user settings and saved exports are untouched.
