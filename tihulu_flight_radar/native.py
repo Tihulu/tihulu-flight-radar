@@ -103,6 +103,7 @@ class NativeRadarWindow(QMainWindow):
             name="tihulu-native-radar", daemon=True,
         )
         self.server_thread.start()
+        self._listener_closed = False
         self.local_url = f"http://127.0.0.1:{self.server.server_port}"
 
         self.web = EmbeddedRadarView(self)
@@ -214,7 +215,21 @@ class NativeRadarWindow(QMainWindow):
 
     def _check_startup(self):
         f = self._startup_future
-        if f is None or not f.done():
+        if f is None:
+            return
+        if not f.done():
+            # This timer runs while a worker is pending. A single closeEvent
+            # cannot observe a 45-second timeout without this check.
+            if (self._exit_requested and self._quit_deadline is not None
+                    and time.monotonic() >= self._quit_deadline
+                    and not self._quit_warning_shown):
+                self._quit_warning_shown = True
+                QMessageBox.warning(
+                    self, "Quit still draining",
+                    "App-owned receiver startup has not completed within "
+                    "45 seconds. No new Start is admitted; Quit remains "
+                    "incomplete until the worker finishes or is resolved."
+                )
             return
         self._startup_timer.stop()
         self._startup_future = None
@@ -300,6 +315,21 @@ class NativeRadarWindow(QMainWindow):
             "Receiver start/stop requires an explicit click and confirmation."
         )
 
+    def _close_local_listener(self):
+        """Bounded, retryable shutdown for this window's loopback HTTP socket."""
+        if not self._listener_closed:
+            try:
+                self.server.shutdown()
+            finally:
+                self.server.server_close()
+            self._listener_closed = True
+        self.server_thread.join(timeout=2)
+        if self.server_thread.is_alive():
+            raise RuntimeError(
+                "The app-owned local HTTP listener thread is still alive "
+                "after 2 seconds; retry Quit."
+            )
+
     def closeEvent(self, event):
         if self._quit_done:
             super().closeEvent(event)
@@ -333,32 +363,33 @@ class NativeRadarWindow(QMainWindow):
             return
         self._startup_timer.stop()
         self._startup_pool.shutdown(wait=True, cancel_futures=True)
+        # Stop new HTTP connections before attempting receiver close. The
+        # bridge then verifies that admitted request-handler threads drained.
+        listener_error = None
         try:
-            # Controller/bridge serializes with any HTTP control request and
-            # preserves PR #15's external and mixed-ownership safety contract.
+            self._close_local_listener()
+        except (OSError, RuntimeError) as exc:
+            listener_error = str(exc)
+        receiver_error = None
+        try:
+            # Controller/bridge preserves PR #15's external/mixed ownership.
             self.bridge.close(
                 release_local_service=self.release_action.isChecked()
             )
         except Exception as exc:
-            QMessageBox.warning(self, "Receiver release warning",
-                                "Quit may be incomplete: " + str(exc))
-            if "mixed ownership" not in str(exc):
+            receiver_error = str(exc)
+        if listener_error or receiver_error:
+            problems = [x for x in (listener_error, receiver_error) if x]
+            QMessageBox.warning(self, "Quit cleanup incomplete",
+                                "\\n".join(problems))
+            if listener_error or (receiver_error and
+                                  "mixed ownership" not in receiver_error):
                 event.ignore()
-                return  # Leave UI/reporting alive for a safe retry.
-        # Tear down the app-owned page and loopback listener. External tar1090,
-        # user settings, cached map assets and browser tabs are untouched.
+                return  # No false success when a local resource remains.
+        # External tar1090, user settings and saved exports are untouched.
         for popup in list(self.web._popups):
             popup.close()
         self.web.setUrl(QUrl("about:blank"))
-        self.server.shutdown()
-        self.server.server_close()
-        self.server_thread.join(timeout=2)
-        if self.server_thread.is_alive():
-            QMessageBox.warning(self, "Quit cleanup incomplete",
-                                "Local bridge HTTP thread has not stopped. "
-                                "No new controls will be accepted; retry Quit.")
-            event.ignore()
-            return
         self._quit_done = True
         super().closeEvent(event)
 
