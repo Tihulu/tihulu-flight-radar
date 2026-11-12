@@ -85,9 +85,11 @@ def _verify_transition(action: str, timeout_seconds: float = 8.0) -> None:
     )
 
 
-def service_action(action: str) -> str:
+def service_action(action: str, *, ownership_confirmed: bool = False) -> str:
     if action not in ACTIONS:
         raise DataError("Unsupported service action.")
+    if action == "stop" and not ownership_confirmed:
+        raise DataError("Refusing to stop shared systemd readsb without explicit app ownership.")
     if platform.system() != "Linux":
         raise DataError("Systemd service management is Linux-only.")
     if action == "start" and not _unit_active("readsb.service")[0]:
@@ -130,6 +132,9 @@ class ReceiverController:
             raise DataError("Unknown receiver mode.")
         if self.process is not None and self.process.poll() is None and mode != self.mode:
             raise DataError("Stop direct readsb before changing source.")
+        if mode != self.mode:
+            # Switching modes forfeits any earlier claim over a shared systemd unit.
+            self._service_started_by_app = False
         self.mode = mode
         self.remote_url = remote_url.strip()
         self.decoder_path = decoder_path.strip()
@@ -157,10 +162,10 @@ class ReceiverController:
         if self.mode == "Remote JSON":
             raise DataError("Remote receiver must be started on its own computer.")
         if self.mode == "Linux services":
-            preexisting = _unit_active("readsb.service")[0]
+            if _unit_active("readsb.service")[0]:
+                return "Shared readsb is already running; monitoring without service ownership."
             outcome = service_action("start")
-            if not preexisting:
-                self._service_started_by_app = True
+            self._service_started_by_app = True
             return outcome
         if self.process is not None and self.process.poll() is None:
             return "Direct receiver is already running."
@@ -199,6 +204,8 @@ class ReceiverController:
         """Stop and start the selected receiver, surfacing start failures."""
         if self.mode == "Remote JSON":
             raise DataError("Remote receiver restart must happen on its own computer.")
+        if self.mode == "Linux services" and not self._service_started_by_app:
+            raise DataError("Refusing to restart an existing shared readsb service not started by this app.")
         self.stop()
         return self.start()
 
@@ -206,7 +213,9 @@ class ReceiverController:
         if self.mode == "Remote JSON":
             raise DataError("Remote receiver must be stopped on its own computer.")
         if self.mode == "Linux services":
-            result = service_action("stop")
+            if not self._service_started_by_app:
+                raise DataError("Refusing to stop shared readsb: this app did not start the service.")
+            result = service_action("stop", ownership_confirmed=True)
             self._service_started_by_app = False
             return result
         if self.process is not None and self.process.poll() is None:
@@ -232,13 +241,13 @@ class ReceiverController:
         return read_local(Path(self._directory.name) / "aircraft.json")
 
     def close(self, release_local_service: bool = False):
-        """Release direct app-owned child and optionally shared Linux services.
+        """Always release an app-owned direct child; never auto-stop shared services.
 
-        Systemd readsb/tar1090 can outlive the desktop when the user unchecks
-        "Release local SDR on exit". Merely having been started by this app
-        must never override that explicit preference. Direct readsb uses an
-        app-owned temporary directory and must always stop on exit.
-        Remote JSON is never controlled by the local app.
+        The legacy release_local_service argument is accepted for compatibility
+        but NEVER authorizes shutdown of global readsb/tar1090 systemd services.
+        Multiple apps can consume these units, and there is no safe exclusive
+        ownership proof at GUI exit. Explicit user-directed stop() remains
+        limited to a service successfully started by this controller instance.
         """
         error = None
         if self.process is not None:
@@ -250,14 +259,8 @@ class ReceiverController:
                 error = exc
             finally:
                 self.mode = mode
-        if (platform.system() == "Linux"
-                and self.mode == "Linux services"
-                and release_local_service
-                and _unit_active("readsb.service")[0]):
-            try:
-                service_action("stop")
-                self._service_started_by_app = False
-            except DataError as exc:
-                error = exc
+        # Deliberately never stop a shared service on window/app exit, even
+        # when the old preference is True or this instance started the unit.
+        self._service_started_by_app = False
         if error:
             raise DataError(f"SDR release on exit was incomplete: {error}") from error

@@ -59,7 +59,7 @@ test("two independent valid model rings and a weighted center point coexist",()=
   },
   canvas:{clientWidth:700,clientHeight:350}
  });
- vm.runInContext(source("paintRfComparisons"),context);
+ vm.runInContext(source("paintRfComparisons")+"\npaintRfComparisons()",context);
  assert.equal(rings.length,2,"only actual feasible-region circles may be drawn");
  assert.deepEqual(rings.map(x=>x.r.radiusKm),[160,72]);
  assert.equal(hits.length,3,"all 3 selected model centers are clickable");
