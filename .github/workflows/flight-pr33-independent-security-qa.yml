@@ -1,4 +1,4 @@
-name: Agent 06 independent Flight PR33 negative security QA (disposable)
+name: Flight PR34 after-validation race acceptance (disposable)
 
 on:
   pull_request:

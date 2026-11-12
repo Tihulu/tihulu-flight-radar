@@ -252,6 +252,10 @@ class _View:
         self.root_fd, self.releases_fd = root_fd, releases_fd
         self.external_pins = external_pins
         self.pending_proof = None
+        # Bytes come from the SAME read that passed manifest and external pin
+        # checks. They are an immutable in-process snapshot, never a path to
+        # reopen later. This is NOT a signed or production artifact handoff.
+        self.verified_snapshots = {}
 
     def read_state(self):
         st = _entry(self.root_fd, "state.json")
@@ -297,9 +301,38 @@ class _View:
                 pin = self.external_pins.get(name)
                 if pin is None or not hmac.compare_digest(pin, expected["sha256"]):
                     fail("Externally pinned artifact digest mismatch: HOLD")
+            validated = bytes(raw)
+            prior = self.verified_snapshots.get(name)
+            if prior is not None and prior != validated:
+                fail("Verified fixture bytes changed after validation: HOLD")
+            self.verified_snapshots[name] = validated
             return expected
         finally:
             os.close(release_fd)
+
+    def verified_bytes(self, name):
+        """Return only bytes previously read and checked under this view.
+
+        Never return an unverified path or reopen image.bin for installation.
+        A production counterpart would use sealed memfd/FD handoff and verify
+        actual signatures from a trusted keyring, NOT this CI-only bytes API.
+        """
+        try:
+            return self.verified_snapshots[name]
+        except KeyError:
+            fail("No validated byte snapshot for requested release")
+
+    def check_verified_snapshots(self):
+        """Fail closed if any source changed between initial check and exit.
+
+        A hostile same-UID actor can mutate after this last check or restore
+        bytes before it; that is a permanent threat-model HOLD. Independent
+        byte snapshots remain intact for a future sealed-FD handoff design.
+        """
+        for name, original_bytes in tuple(self.verified_snapshots.items()):
+            self.verify_release(name)
+            if self.verified_snapshots[name] != original_bytes:
+                fail("Verified fixture bytes changed after validation: HOLD")
 
     def consistency(self, *, allow_pending=False):
         state, ino, raw = self.read_state()
@@ -490,19 +523,42 @@ class TransactionLab:
                                     fail("Fixture root inode changed")
 
                                 def check_namespace():
-                                    # Compare both reachable pathnames with
-                                    # the still-held descriptors at EXIT.
-                                    # A post-open swap must NEVER be reported
-                                    # as a successful transaction to the user.
-                                    try:
-                                        live_base = _open_chain(self._base)
+                                    # Two independently reopened path walks,
+                                    # not just a stale name resolved ONCE.
+                                    # This catches swaps injected after the
+                                    # first _open_chain returned its FD. Still
+                                    # not an atomic snapshot or a guarantee
+                                    # against a hostile same-UID actor.
+                                    for _round in range(2):
                                         try:
-                                            if _inode(os.fstat(live_base)) != self._base_inode:
-                                                fail("Runner base inode differs")
-                                        finally:
-                                            os.close(live_base)
-                                    except (OSError, RuntimeError):
-                                        fail("Validated runner base namespace changed during transaction")
+                                            live_base = _open_chain(self._base)
+                                            try:
+                                                if _inode(os.fstat(live_base)) != self._base_inode:
+                                                    fail("Validated runner base namespace changed during transaction")
+                                                live_parent = _dir_open(
+                                                    live_base, "flight-transaction-lab")
+                                                try:
+                                                    if _inode(os.fstat(live_parent)) != _inode(os.fstat(parentfd)):
+                                                        fail("Fixture parent namespace changed during transaction")
+                                                    live_root = _dir_open(live_parent, self.root.name)
+                                                    try:
+                                                        if _inode(os.fstat(live_root)) != root_identity:
+                                                            fail("Fixture root namespace changed during transaction")
+                                                    finally:
+                                                        os.close(live_root)
+                                                finally:
+                                                    os.close(live_parent)
+                                            finally:
+                                                os.close(live_base)
+                                        except (OSError, RuntimeError) as exc:
+                                            if isinstance(exc, RuntimeError) and (
+                                                "Fixture parent namespace changed" in str(exc)
+                                                or "Fixture root namespace changed" in str(exc)
+                                            ):
+                                                raise
+                                            fail("Validated runner base namespace changed during transaction")
+                                    # Also compare identities under held parent
+                                    # descriptor; do not trust a detached root.
                                     parent_entry = _entry(
                                         basefd, "flight-transaction-lab")
                                     if (parent_entry is None or
@@ -528,14 +584,20 @@ class TransactionLab:
                                             rootfd, "releases", create=True)
                                         try:
                                             check_namespace()
+                                            view = _View(rootfd, releasesfd,
+                                                         self._external_pins)
                                             try:
-                                                yield _View(rootfd, releasesfd,
-                                                            self._external_pins)
+                                                yield view
                                             finally:
-                                                # Even if the body raised or
-                                                # committed on a detached fd,
-                                                # propagate HOLD, not success.
-                                                check_namespace()
+                                                # A source swapped AFTER
+                                                # _View.finish must not be
+                                                # silently reported as valid.
+                                                # The immutable snapshot was
+                                                # captured at first verification.
+                                                try:
+                                                    view.check_verified_snapshots()
+                                                finally:
+                                                    check_namespace()
                                         finally:
                                             os.close(releasesfd)
                                             final = _entry(rootfd, "lab.lock")

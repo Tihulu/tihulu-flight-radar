@@ -117,11 +117,10 @@ class IndependentPR33QA(unittest.TestCase):
         self.assertEqual(json.loads((saved / "flight-transaction-lab" /
                                      "baseswap" / "state.json").read_text())["active"], "new")
 
-    def test_04_final_base_check_reopen_is_toctou_positive_reproducer(self):
-        # NEW INDEPENDENT P1: at EXIT, _open_chain returns an FD referring
-        # to the expected base inode, then a hostile same-UID writer renames
-        # the base before check_namespace() uses that FD. Parent and root
-        # checks continue relative to the stale basefd and can all pass.
+    def test_04_final_base_reopen_after_fd_swap_fails_closed(self):
+        # A hostile actor renames the base after the FIRST exit walk has
+        # reopened it, so the SECOND independent walk must notice drift.
+        # Later swaps or namespace ABA remain security HOLD.
         lab = self.prepared("endrace")
         saved = self.top / "detached-validated-base"
         original = tx._open_chain
@@ -130,14 +129,16 @@ class IndependentPR33QA(unittest.TestCase):
             fd = original(path, create=create)
             if os.fspath(path) == os.fspath(self.base):
                 checks.append(len(checks) + 1)
-                if len(checks) == 3:
+                if len(checks) == 4:
                     self.base.rename(saved)
                     self.base.mkdir(mode=0o700)
                     (self.base / "foreign-marker").write_bytes(b"NEW-PATH")
             return fd
         with patch.object(tx, "_open_chain", side_effect=attack):
-            lab.switch("new")  # Current code reports success: security HOLD.
-        self.assertEqual(len(checks), 3, "Exit-check interleaving not reached")
+            with self.assertRaisesRegex(RuntimeError,
+                                        "Validated runner base namespace changed"):
+                lab.switch("new")
+        self.assertEqual(len(checks), 5, "Second exit-check not reached")
         self.assertEqual((self.base / "foreign-marker").read_bytes(), b"NEW-PATH")
         self.assertFalse((self.base / "flight-transaction-lab" / "endrace").exists())
         self.assertEqual(json.loads((saved / "flight-transaction-lab" /
@@ -178,9 +179,10 @@ class IndependentPR33QA(unittest.TestCase):
         pinned.switch("v1")
         self.assertEqual(pinned.status()["active"], "v1")
 
-    def test_07_verified_pin_can_be_invalidated_after_finish_positive_reproducer(self):
-        # Known residual same-UID TOCTOU: pin verified before finish; foreign
-        # same-account write after finish but before context exit is not checked.
+    def test_07_verified_pin_after_finish_mutation_fails_closed(self):
+        # The original exact-head QA reproduced false SUCCESS here. The new
+        # best-effort exit recheck must reject changed source bytes. A hostile
+        # same-UID writer can still mutate after the last check: HOLD.
         good = b"known-identity"
         approved = hashlib.sha256(good).hexdigest()
         lab = self.lab("postpin")
@@ -198,7 +200,9 @@ class IndependentPR33QA(unittest.TestCase):
                 "sha256": hashlib.sha256(changed).hexdigest(), "size": len(changed)}))
             hit.append(True)
         with patch.object(tx._View, "finish", attack):
-            pinned.switch("v1")  # Current lab success, later pin check fails.
+            with self.assertRaisesRegex(RuntimeError,
+                                        "Externally pinned artifact"):
+                pinned.switch("v1")
         self.assertTrue(hit)
         with self.assertRaisesRegex(RuntimeError, "Externally pinned artifact"):
             pinned.status()
@@ -276,6 +280,122 @@ class IndependentPR33QA(unittest.TestCase):
             if child is not None and child.poll() is None:
                 child.kill()
                 child.communicate()
+
+    def test_12_verified_byte_snapshot_survives_mutation(self):
+        # The verified object handed to a hypothetical installer must not be
+        # a user-writable path reopened after verification. This CI-only
+        # bytes object demonstrates immutable handoff, NOT signed provenance.
+        trusted = b"verified-immutable-source"
+        approved = hashlib.sha256(trusted).hexdigest()
+        lab = self.lab("snapshot")
+        lab.stage_fixture("v1", trusted)
+        pinned = self.lab("snapshot", pins={"v1": approved})
+        release = lab.releases / "v1"
+        with self.assertRaisesRegex(RuntimeError,
+                                    "Externally pinned artifact"):
+            with pinned.locked() as view:
+                view.verify_release("v1")
+                snapshot = view.verified_bytes("v1")
+                self.assertIs(type(snapshot), bytes)
+                self.assertEqual(snapshot, trusted)
+                tampered = b"post-verify-path-content"
+                (release / "image.bin").write_bytes(tampered)
+                (release / "manifest.json").write_text(json.dumps({
+                    "owner": tx.OWNER, "name": "v1",
+                    "sha256": hashlib.sha256(tampered).hexdigest(),
+                    "size": len(tampered)}))
+                self.assertEqual(snapshot, trusted,
+                                 "Verified bytes must not change with source")
+        self.assertEqual(snapshot, trusted)
+
+    def test_13_snapshot_rejects_unverified_release(self):
+        lab = self.lab("notverified")
+        lab.stage_fixture("v1", b"stored")
+        with lab.locked() as view:
+            with self.assertRaisesRegex(RuntimeError,
+                                        "No validated byte snapshot"):
+                view.verified_bytes("v1")
+            view.verify_release("v1")
+            self.assertEqual(view.verified_bytes("v1"), b"stored")
+
+    def test_14_unpinned_snapshot_detects_in_place_change_at_exit(self):
+        # Unpinned dummy fixtures still lack origin authentication but can
+        # detect post-validation changes within one cooperative transaction.
+        lab = self.lab("unpinexit")
+        lab.stage_fixture("v1", b"initial")
+        with self.assertRaisesRegex(RuntimeError,
+                                    "Verified fixture bytes changed"):
+            with lab.locked() as view:
+                view.verify_release("v1")
+                old = view.verified_bytes("v1")
+                changed = b"changed"
+                path = lab.releases / "v1"
+                (path / "image.bin").write_bytes(changed)
+                (path / "manifest.json").write_text(json.dumps({
+                    "owner": tx.OWNER, "name": "v1",
+                    "sha256": hashlib.sha256(changed).hexdigest(),
+                    "size": len(changed)}))
+        self.assertEqual(old, b"initial")
+
+
+    def test_15_residual_last_reopen_same_uid_race_is_still_hold(self):
+        # Honest residual red-team demonstration. Two re-open rounds are not
+        # atomic: swap just AFTER the final live-base FD was acquired.
+        # A PASS HERE MEANS THE REMAINING THREAT WAS REPRODUCED, NOT FIXED.
+        lab = self.prepared("lastopen")
+        moved = self.top / "lastopen-displaced"
+        original = tx._open_chain
+        checks = []
+        def attack(path, *, create=False):
+            fd = original(path, create=create)
+            if os.fspath(path) == os.fspath(self.base):
+                checks.append(True)
+                if len(checks) == 5:
+                    self.base.rename(moved)
+                    self.base.mkdir(mode=0o700)
+                    (self.base / "foreign-marker").write_bytes(b"HOLD-TOCTOU")
+            return fd
+        with patch.object(tx, "_open_chain", side_effect=attack):
+            lab.switch("new")
+        self.assertEqual(len(checks), 5)
+        self.assertEqual((self.base / "foreign-marker").read_bytes(),
+                         b"HOLD-TOCTOU")
+        self.assertEqual(json.loads((moved / "flight-transaction-lab" /
+                                     "lastopen" / "state.json").read_text())["active"],
+                         "new")
+        with self.assertRaisesRegex(RuntimeError,
+                                    "Validated runner base inode changed"):
+            lab.status()
+
+    def test_16_residual_after_last_snapshot_check_is_still_hold(self):
+        # Source-of-truth never becomes protected by a cooperating lock.
+        # A malicious same-UID writer may mutate AFTER the last byte check.
+        # A PASS HERE IS A CONFIRMED RESIDUAL LIMITATION, NOT ACCEPTANCE.
+        original = b"known-checked"
+        pin = hashlib.sha256(original).hexdigest()
+        lab = self.lab("latewrite")
+        lab.stage_fixture("v1", original)
+        pinned = self.lab("latewrite", pins={"v1": pin})
+        release = lab.releases / "v1"
+        original_check = tx._View.check_verified_snapshots
+        triggered = []
+        def late_change(view):
+            original_check(view)
+            modified = b"after-snapshot-check"
+            (release / "image.bin").write_bytes(modified)
+            (release / "manifest.json").write_text(json.dumps({
+                "owner": tx.OWNER, "name": "v1",
+                "sha256": hashlib.sha256(modified).hexdigest(),
+                "size": len(modified)}))
+            triggered.append(True)
+        with patch.object(tx._View, "check_verified_snapshots",
+                          new=late_change):
+            pinned.switch("v1")
+        self.assertTrue(triggered)
+        with self.assertRaisesRegex(RuntimeError,
+                                    "Externally pinned artifact"):
+            pinned.status()
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
