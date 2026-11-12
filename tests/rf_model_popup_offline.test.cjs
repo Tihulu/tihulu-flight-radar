@@ -89,17 +89,11 @@ test("model marker respects visibility and right card has details",()=>{
   "rfPopupRadius","rfPopupDiameter","rfPopupAircraft",
   "rfPopupCoordinates","rfPopupConstraints","rfPopupFocus"])
   assert.match(html,new RegExp('id="'+id+'"'));
- // Verify the actual independent BEST/LIVE pin guards, not an outdated
- // checkbox expression. Use literal matching to avoid regexp '
- assert.match(app,/openRfModelPopup(modelKind)/);
- assert.match(app,/toggleAircraftOnMap(row)/);
- assert.match(html,/id="placeAddressOnline"/);
-});
- anchors.
+ // Assert current independent LIVE and BEST pin controls without obsolete patterns.
  assert.ok(app.includes('!$("rfBestPin").checked||!rfBest'));
  assert.ok(app.includes('!result.region||!$("rfModelPin").checked)return;'));
  assert.ok(!app.includes('!$("rfBestPin").checked||!$("rfBestCircle").checked'));
- assert.match(app,/openRfModelPopup(modelKind)/);
- assert.match(app,/toggleAircraftOnMap(row)/);
+ assert.ok(app.includes("openRfModelPopup(modelKind)"));
+ assert.ok(app.includes("toggleAircraftOnMap(row)"));
  assert.match(html,/id="placeAddressOnline"/);
 });
