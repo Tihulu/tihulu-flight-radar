@@ -29,7 +29,7 @@ STATE = BASE / "state.json"
 LAUNCHER = HOME / ".local" / "bin" / "tihulu-flight-stable-first"
 DESKTOP = HOME / ".local" / "share" / "applications" / "tihulu-flight-stable-first.desktop"
 VERSION = "0.3.1"
-PINNED_QT = ("PySide6==6.8.3", "PySide6-WebEngine==6.8.3")
+PINNED_QT = ("PySide6==6.12.0", "PySide6-WebEngine==6.12.0.140")
 
 
 def fail(message):
