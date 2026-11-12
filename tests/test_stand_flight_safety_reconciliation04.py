@@ -69,6 +69,21 @@ def test_service_mode_quit_records_truthful_partial_release_without_service_io(
     assert "other receiver" in controller.last_service_release_note
 
 
+@pytest.mark.parametrize("state", ["inactive", "unknown"])
+def test_unobserved_shared_service_does_not_block_headless_quit(monkeypatch, state):
+    """Never open a modal warning during offscreen smoke with no active unit."""
+    monkeypatch.setattr(control.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(control, "_unit_active", lambda _unit: (False, state))
+    monkeypatch.setattr(
+        control, "service_action",
+        lambda _: pytest.fail("Quit must never Stop global readsb/tar1090"),
+    )
+    controller = control.ReceiverController()
+    controller.close(release_local_service=True)
+    assert controller._closed
+    assert controller.last_service_release_note is None
+
+
 def test_native_ui_displays_shared_receiver_preservation_warning_on_clean_quit():
     notices, events = [], []
     QMessageBox = SimpleNamespace(
