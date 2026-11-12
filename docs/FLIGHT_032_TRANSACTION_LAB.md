@@ -54,3 +54,57 @@ of any rollback/restore retains HOLD. Real installer/uninstaller, service
 lifetime, sudoers policy, physical machine validation, package signing and
 release approval stay **HOLD**. Independent Agent 06 exact-head review is
 required; do not merge or deploy this Draft PR.
+
+
+## Agent 07 PR #30 follow-up — retained-evidence race hardening (new Draft only)
+
+This isolated follow-up is stacked on Agent 06 independent audit-only Draft PR #30,
+not on a deployed application. Its threat model **does not claim any absolute
+same-UID adversary resistance**: a malicious same-account process can rewrite an
+owner-controlled directory, create or remove entries, swap trusted paths, and
+forge the public OWNER/sha256 metadata. A full non-deletion guarantee against
+such an actor is impossible if the actor controls the mutable namespace.
+Production remains HOLD until a stronger privileged/trusted-path boundary and
+authenticated artifacts are architected, tested, and independently approved.
+
+- **No automated pathname unlink** remains in the transaction laboratory.
+  After RENAME_EXCHANGE, displaced state/pointer data stays at a distinct
+  `.tx-*` or `.pointer-*` quarantine name. Deactivation retains
+  `.retired-*`; successful journal finalization retains
+  `.retired-journal-*` evidence. Failed temporary paths remain for manual
+  review as well. If another same-UID writer races with those names, no
+  check-then-unlink code can destroy their newly substituted bytes.
+  The program does not recursively clean any external path.
+- **Bounded retention:** when retained slots reach 256, a new switch or
+  rollback fails closed with an explicit manual-review error; entries are
+  never silently deleted. Until a privileged and verified cleanup policy is
+  designed, this deliberate conservative strategy can accumulate a small
+  amount of metadata and impede transactions.
+- **Immutable constructor root:** `locked()` uses the original validated
+  base path and fails if RUNNER_TEMP changes. Base and root inode
+  fingerprints are checked against the constructor/first-open values;
+  ancestor links are refused by descriptor-relative opens.
+- **Layered, cooperative lock:** a flock on the original RUNNER_TEMP
+  *directory descriptor* spans the full critical section, including
+  rollback target selection, while the existing lab.lock flock remains.
+  Replacing only lab.lock no longer creates parallel critical sections
+  when the base directory is unchanged. Revalidation after the operation
+  raises on lock path replacement (without trying to delete foreign
+  entries). Renaming/replacing the base directory itself is **not** solved
+  against a malicious same-UID process; a genuine trusted anchor is still
+  a production release blocker.
+- Independent PR #30's former six deliberately vulnerable-behavior
+  assertions were turned into **negative acceptance tests** in the new
+  follow-up branch. These require no path-unlink, retained journal/state
+  evidence, rejection of RUNNER_TEMP drift, and no overlapping critical
+  section after lab.lock replacement. Corrupt journal and two-process
+  cooperative rollback controls remain.
+- Old-source scope is unchanged; no owner machine, pipx, legacy v0.3.1,
+  QSettings, sudoers, readsb/tar1090, SDR, or live installation is accessed.
+  CI workflow flags may be spoofed and are **not** production authorization.
+
+**Still HOLD:** independent Agent 06 re-review of this exact branch SHA,
+same-UID hostile replacement of parent/root directories, production release
+provenance/signature, actual side-by-side installation/uninstall, power-loss
+atomicity, and real hardware/service isolation. Green synthetic CI does
+not waive any of these gates.
