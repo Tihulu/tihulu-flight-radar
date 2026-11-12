@@ -50,3 +50,78 @@ jobs:
               compile(f.read_bytes(), str(f), "exec")
           print(f"Syntax compiled: {len(paths)} Python files")
           PY
+
+  replay-observed-python-linux:
+    name: Rebuild owner-observed Python pins in disposable CI (not workstation)
+    needs: verify-source-only
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      PIP_NO_INPUT: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PYTHONNOUSERSITE: "1"
+      QT_QPA_PLATFORM: offscreen
+      QTWEBENGINE_CHROMIUM_FLAGS: --disable-gpu
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.3'
+      - name: Install sandbox Qt runtime dependencies (CI runner only)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libegl1 libgl1 libxkbcommon0 libxkbcommon-x11-0 libdbus-1-3 libnss3 libnspr4 libxcomposite1 libxdamage1 libxrandr2 libgbm1 libxtst6 libxkbfile1 libxss1 libxshmfence1 libasound2t64
+      - name: Create separate venv and replay eight owner-reported package versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m venv "$RUNNER_TEMP/installed-snapshot-venv"
+          P="$RUNNER_TEMP/installed-snapshot-venv/bin/python"
+          "$P" -m pip install --no-cache-dir "pip==26.3"
+          "$P" -m pip install --no-cache-dir \
+            "PySide6==6.12.0" \
+            "PySide6_Addons==6.12.0" \
+            "PySide6_Essentials==6.12.0" \
+            "PySide6_Pdf==6.12.0.140" \
+            "PySide6_WebEngine==6.12.0.140" \
+            "shiboken6==6.12.0"
+          "$P" -m pip install --no-cache-dir --no-deps "$GITHUB_WORKSPACE/archive/installed-v0.3.2.dev4/source"
+      - name: Verify the eight observed package versions BEFORE installing test-only tools
+        shell: bash
+        run: |
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/installed-snapshot-venv/bin/python" \
+            "$GITHUB_WORKSPACE/archive/installed-v0.3.2.dev4/tests/verify_rebuilt_environment.py"
+      - name: Run archived Python tests with only additional test tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          P="$RUNNER_TEMP/installed-snapshot-venv/bin/python"
+          "$P" -m pip install 'pytest>=8,<10'
+          mkdir -p "$RUNNER_TEMP/installed-snapshot-home/.config" \
+                   "$RUNNER_TEMP/installed-snapshot-home/.cache" \
+                   "$RUNNER_TEMP/installed-snapshot-home/.local/share"
+          export HOME="$RUNNER_TEMP/installed-snapshot-home"
+          export XDG_CONFIG_HOME="$HOME/.config"
+          export XDG_CACHE_HOME="$HOME/.cache"
+          export XDG_DATA_HOME="$HOME/.local/share"
+          cd "$GITHUB_WORKSPACE/archive/installed-v0.3.2.dev4/source"
+          "$P" -m pytest -q
+      - name: Run archived JavaScript regression tests
+        shell: bash
+        run: |
+          cd "$GITHUB_WORKSPACE/archive/installed-v0.3.2.dev4/source"
+          node --test tests/*.test.cjs
+      - name: Guarded classic Qt GUI smoke; never control receiver
+        shell: bash
+        run: |
+          set -euo pipefail
+          export HOME="$RUNNER_TEMP/installed-snapshot-home"
+          export XDG_CONFIG_HOME="$HOME/.config"
+          export XDG_CACHE_HOME="$HOME/.cache"
+          export XDG_DATA_HOME="$HOME/.local/share"
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/installed-snapshot-venv/bin/python" \
+            "$GITHUB_WORKSPACE/archive/installed-v0.3.2.dev4/tests/guarded_classic_qt_smoke.py"
