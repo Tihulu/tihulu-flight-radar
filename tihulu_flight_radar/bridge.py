@@ -10,6 +10,7 @@ import json
 import math
 import mimetypes
 import secrets
+import sys
 import threading
 import time
 from http import HTTPStatus
@@ -20,7 +21,7 @@ from urllib.parse import parse_qs, urlsplit, unquote
 from urllib.request import ProxyHandler, Request, build_opener
 
 from .network_sources import MultiNetworkProvider, parse_provider_selection
-from .control import ReceiverController
+from .control import ReceiverController, MixedOwnershipWarning
 from .core import DataError, position_is_fresh, recently_seen
 
 GERMANY = (51.1657, 10.4515)
@@ -684,8 +685,17 @@ def main(argv: list[str] | None = None):
         pass
     finally:
         bridge.request_quit()
-        server.server_close()
-        bridge.close()
+        try:
+            server.server_close()
+        finally:
+            # The headless browser companion has no saved exit checkbox.
+            # True Quit releases only the paired units that THIS bridge
+            # explicitly started; PR #15 still protects external/mixed units.
+            try:
+                bridge.close(release_local_service=True)
+            except MixedOwnershipWarning as exc:
+                print("Flight Radar Quit warning: " + str(exc),
+                      file=sys.stderr, flush=True)
 
 
 if __name__ == "__main__":
