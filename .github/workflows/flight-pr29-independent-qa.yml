@@ -1,4 +1,4 @@
-name: AGENT 06 independent Flight PR29 race evidence (disposable Linux only)
+name: Flight PR30 independent race acceptance (disposable Linux only)
 
 on:
   pull_request:
@@ -25,7 +25,7 @@ jobs:
           test -f tools/flight_pr29_independent_race_evidence.py
           test -f tools/flight_transaction_lab.py
           python -m py_compile tools/flight_pr29_independent_race_evidence.py
-      - name: Reproduce known post-validation unlink races (PASS = unsafe behavior evidenced)
+      - name: Verify fail-closed transaction acceptance (PASS = negative security assertions)
         run: python -m tools.flight_pr29_independent_race_evidence
       - name: Verify repository remains unmodified by synthetic fixtures
         run: git diff --exit-code
