@@ -387,7 +387,8 @@ def test_headless_bridge_quit_closes_only_its_local_listener(monkeypatch):
         def request_quit(self):
             events.append("quit-requested")
 
-        def close(self):
+        def close(self, **kwargs):
+            assert kwargs == {"release_local_service": True}
             events.append("receiver-closed")
 
     class SyntheticHTTPServer:
@@ -761,3 +762,68 @@ def test_map_handler_request_registry_cannot_underflow_after_repeated_quit():
     listener.close()
     assert listener._active_requests == 0
     assert not listener._begin_request()
+
+
+def test_headless_quit_external_service_safety_and_mixed_warning(
+        monkeypatch, services, capsys):
+    """CLI exits do not invoke paired Stop for foreign/mixed service units."""
+    states, events = services
+    states["tar1090.service"] = "inactive"
+    instances = []
+
+    class FakeBridge(bridge_module.Bridge):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            instances.append(self)
+
+    class FakeHTTP:
+        daemon_threads = True
+
+        def __init__(self, addr, handler):
+            self.server_port = addr[1]
+
+        def serve_forever(self, **kwargs):
+            # A user explicitly pressed Start before companion Quit.
+            instances[-1].control("start")
+
+        def server_close(self):
+            pass
+
+    monkeypatch.setattr(bridge_module, "Bridge", FakeBridge)
+    monkeypatch.setattr(bridge_module, "ThreadingHTTPServer", FakeHTTP)
+    bridge_module.main(["--port", "8510", "--allow-control"])
+    assert events == ["start"], "Mixed ownership cannot use paired Stop"
+    assert states["readsb.service"] == "active"
+    assert "mixed ownership" in capsys.readouterr().err
+    assert instances[0].receiver._quit_requested.is_set()
+
+
+def test_headless_quit_releases_app_owned_paired_systemd_only(
+        monkeypatch, services):
+    states, events = services
+    states.update({name: "inactive" for name in states})
+    instances = []
+
+    class FakeBridge(bridge_module.Bridge):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            instances.append(self)
+
+    class FakeHTTP:
+        daemon_threads = True
+
+        def __init__(self, addr, handler):
+            self.server_port = addr[1]
+
+        def serve_forever(self, **kwargs):
+            instances[-1].control("start")
+
+        def server_close(self):
+            pass
+
+    monkeypatch.setattr(bridge_module, "Bridge", FakeBridge)
+    monkeypatch.setattr(bridge_module, "ThreadingHTTPServer", FakeHTTP)
+    bridge_module.main(["--port", "8510", "--allow-control"])
+    assert events == ["start", "stop"]
+    assert set(states.values()) == {"inactive"}
+    assert instances[0].receiver._quit_requested.is_set()
