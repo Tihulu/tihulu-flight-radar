@@ -1,4 +1,4 @@
-name: Agent 06 Flight PR31 independent security QA (disposable)
+name: Flight PR32 P1-P2 fail-closed acceptance (disposable)
 
 on:
   pull_request:
@@ -24,7 +24,7 @@ jobs:
         run: |
           python -m py_compile tools/flight_transaction_lab.py tools/flight_pr31_independent_security_qa.py
           test -f tools/flight_pr31_independent_security_qa.py
-      - name: Independently reproduce corrected controls and known release blockers
+      - name: Validate namespace-fail-closed, lock nonoverlap, evidence cap and external digest pins
         run: python -m tools.flight_pr31_independent_security_qa
       - name: Ensure repository files were not modified
         run: git diff --exit-code

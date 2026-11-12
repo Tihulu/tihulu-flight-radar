@@ -108,3 +108,101 @@ same-UID hostile replacement of parent/root directories, production release
 provenance/signature, actual side-by-side installation/uninstall, power-loss
 atomicity, and real hardware/service isolation. Green synthetic CI does
 not waive any of these gates.
+
+
+## Agent 07 continuation on Agent 06 PR #32: P1/P2 containment and source trust
+
+**Scope:** Synthetic Linux-only fixture transaction laboratory. The original
+PR #32 independent QA branch remains frozen. This new stacked Draft changes
+no production installer, application, sudoers, user files or SDR/services.
+
+### P1-F31-01 — detached root must not report success
+
+On entering a transaction, descriptor-bound root, parent and base identities
+are checked. On leaving the `locked()` context, including when the body raises,
+the *currently reachable* base pathname, parent entry and root entry are
+recompared against the held descriptors while locks are still held. A
+root-directory rename followed by creating a new directory at the original
+path now returns an explicit `Fixture root namespace changed during transaction`
+error rather than reporting a successful switch. Committed bytes in the
+displaced original directory are **retained**. A caller must treat a failed
+operation as an indeterminate transaction and inspect the preserved journal
+before attempting recovery. This is detection, **not rollback or protection**
+against same-UID hostile namespace manipulation.
+
+### P1-F31-02 — cooperating base-directory flock split
+
+The CI-only laboratory now takes a flock on the root-owned filesystem root
+directory descriptor `/` before taking the original RUNNER_TEMP directory
+flock and inner `lab.lock`. This stable shared **cooperative** anchor prevents
+two compliant laboratory clients from taking independent locks on separately
+replaced RUNNER_TEMP base inodes, provided they run in the same mounted
+filesystem/root namespace. A hostile same-UID process may ignore advisory
+flock, or manipulate mount namespaces when permitted. The broad root-directory
+lock is an intentionally conservative *disposable test technique*, not an
+approved production locking protocol. No production installer should adopt
+global `/` locking.
+
+### P1-F31-03 — verified-origin design versus self-hash
+
+The public `owner` field and SHA-256 hash embedded inside `manifest.json`
+are **content self-consistency only**. Neither field certifies who published the
+payload. The lab supports an **optional immutable per-instance external
+`external_pins={"release_name": "64lowercasehexdigest"}` registry**, copied
+from the caller rather than loaded from the mutable release tree. When a
+test supplies this pin, a self-consistent but altered payload is rejected
+before activation, and missing pins fail closed. A test also confirms the
+legacy unpinned *CI-only* fixture can still accept the forged self-hash.
+
+This registry does **not** implement authenticated provenance: a malicious
+same-UID process may control the caller, code, environment or pin source.
+A real production path needs a separately reviewed trust bootstrap:
+
+1. Reproducible/build-identity inventory and release manifest containing
+   exact artifact SHA-256, length, platform, architecture, version, signing key
+   identifier and protected source commit/build-attestation references.
+2. Canonical signed metadata and Ed25519 (or equivalent audited) detached
+   signatures, verified **offline** against a versioned pinned trusted keyring
+   distributed through an independently authenticated channel. The signer
+   private key must never reside in the repository, owner-writable
+   installation root, CI fixture or downloadable artifact bundle.
+3. Fail-closed checks for unknown/revoked signer, expired or rollbacked
+   metadata, unapproved artifact name, hash/size disagreement, bad signature,
+   replay and key rotation. A signature downloaded from the same untrusted
+   location without a separately anchored public key provides no origin proof.
+4. Verify bytes obtained under a trusted acquisition boundary and transfer
+   them to installation without re-opening an attacker-writable path. Record
+   digest and metadata identity in the transaction journal; independently
+   security-review the entire installer and failure/recovery boundaries.
+
+**None of these signature / trust-bootstrap / real artifact operations has
+been implemented in this lab. Real package provenance: P1 HOLD.**
+
+### P2-F31-04 — quarantine accounting
+
+For every switch or rollback, reserve four potential retained names **before
+writing the pending journal**. Each temporary state/pointer/retirement step
+checks its own remaining slot before creating or renaming entries. Recovery
+also reserves headroom before changing state. Exactly 255 retained names
+blocks a new switch without creating a journal; 252 may complete a
+representative transaction without exceeding 256. No file is deleted to
+satisfy the bound; manual evidence inspection remains required. Concurrent
+uncooperative same-UID writers may still add new entries; 256 is a
+**cooperative laboratory bound**, not a filesystem-wide quota.
+
+### QA and independent approval
+
+Agent 06's original PR #32 tests intentionally **passed when P1/P2 weaknesses
+were reproduced**. The new Draft's tests invert those into fail-closed
+acceptance assertions for root replacement, directory-lock overlap and cap
+accounting. The public-manifest forgery reproduction is **retained** as a
+deliberate HOLD; separate tests verify a caller-provided pin rejects that
+mutation. Prior foreign-entry retention, corrupt journal, rollback and
+cross-platform CI remain required.
+
+**HOLD:** adversarial same-UID arbitrary manipulation, process control or
+mount/root namespace changes; physical power loss and actual installed
+application rollback; fully authenticated signatures and source trust;
+genuine user-host interactions with pipx/v0.3.1, QSettings/XDG, sudoers,
+readsb/tar1090 and SDR. Independent Agent 06 exact-HEAD re-review required.
+No merge, installation or public release authorization.

@@ -120,9 +120,11 @@ class PR31IndependentSecurityQA(unittest.TestCase):
                                     for p in lab.root.iterdir()),
                                 "Foreign retired-path bytes were lost")
 
-    def test_04_root_path_replacement_can_hide_committed_operation(self):
-        # Known remaining P1 threat-model gap: the lock and root fd bind the
-        # original inode, but no post-operation path-to-inode check exists.
+    def test_04_root_path_replacement_fails_closed_not_success(self):
+        # Verify detached root cannot yield a false successful transaction.
+        # Changes to the old, pinned directory MAY have happened; only an
+        # independent privileged boundary could prevent hostile same-UID
+        # namespace writes altogether.
         lab = self.prepared("rootswap")
         original_rename = tx._rename
         injected = [False]
@@ -136,31 +138,61 @@ class PR31IndependentSecurityQA(unittest.TestCase):
                 lab.root.mkdir(mode=0o700)
                 (lab.root / "foreign-sentinel").write_bytes(b"do-not-delete")
         with patch.object(tx, "_rename", side_effect=interfere):
-            lab.switch("new")  # Returns success on the displaced original fd.
+            with self.assertRaisesRegex(RuntimeError,
+                                        "Fixture root namespace changed"):
+                lab.switch("new")
         self.assertTrue(injected[0])
         self.assertEqual((lab.root / "foreign-sentinel").read_bytes(), b"do-not-delete")
         self.assertEqual(json.loads((displaced / "state.json").read_text())["active"],
-                         "new", "Commit silently completed in displaced directory")
+                         "new", "Detached FD can still mutate evidence; HOLD")
+        self.assertTrue(any(x.name.startswith(".retired-journal-")
+                            for x in displaced.iterdir()),
+                        "Retired recovery evidence must remain preserved")
         with self.assertRaisesRegex(RuntimeError, "Fixture root inode changed"):
             lab.status()
         self.assertFalse((lab.root / "state.json").exists(),
                          "New path must not be mistaken for committed original")
 
-    def test_05_base_directory_replacement_splits_directory_locks(self):
-        # Known remaining P1: flock on an inode is not a namespace lock.
+    def test_05_base_directory_replacement_cannot_overlap_lab_clients(self):
+        # Independent process and fresh FD: never inherit the parent flock.
+        # A root-owned "/" directory inode serializes cooperating lab clients
+        # despite two separate, same-named RUNNER_TEMP directories.
         first = self.prepared("baseswap")
         displaced = self.anchor / "runner-original"
-        with first.locked() as view_old:
-            self.runner.rename(displaced)
-            self.runner.mkdir(mode=0o700)
-            second = self.new_lab("baseswap")
-            # Both contexts acquire exclusive flocks on different base inodes.
-            with second.locked() as view_new:
-                self.assertNotEqual(os.fstat(view_old.root_fd).st_ino,
-                                    os.fstat(view_new.root_fd).st_ino)
-                self.assertNotEqual(os.fstat(view_old.root_fd).st_dev,
-                                    -1)
-        self.assertTrue(displaced.is_dir())
+        child = None
+        try:
+            with self.assertRaisesRegex(RuntimeError,
+                                        "Validated runner base namespace changed"):
+                with first.locked() as view_old:
+                    self.runner.rename(displaced)
+                    self.runner.mkdir(mode=0o700)
+                    code = (
+                        "from pathlib import Path\n"
+                        "import sys\n"
+                        "from tools import flight_transaction_lab as tx\n"
+                        "print('READY',flush=True)\n"
+                        "with tx.TransactionLab(Path(sys.argv[1])).locked():\n"
+                        " print('ENTERED',flush=True)\n"
+                    )
+                    child = subprocess.Popen(
+                        [sys.executable, "-c", code, str(self.runner /
+                            "flight-transaction-lab" / "baseswap")],
+                        cwd=os.getcwd(), env=os.environ.copy(),
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                        close_fds=True)
+                    self.assertEqual(child.stdout.readline().strip(), b"READY")
+                    time.sleep(0.25)
+                    self.assertIsNone(child.poll(),
+                        "Second critical section must not enter replaced base")
+            output, error = child.communicate(timeout=8)
+            self.assertEqual(child.returncode, 0,
+                             error.decode(errors="replace"))
+            self.assertIn(b"ENTERED", output)
+            self.assertTrue(displaced.is_dir())
+        finally:
+            if child is not None and child.poll() is None:
+                child.kill()
+                child.communicate()
 
     def test_06_lock_name_replacement_does_not_split_unchanged_base(self):
         # Fresh child with no inherited flock fd: only the pinned runner-dir
@@ -200,18 +232,33 @@ class PR31IndependentSecurityQA(unittest.TestCase):
                 child.kill()
                 child.communicate()
 
-    def test_07_quarantine_can_overshoot_claimed_256_slot_cap(self):
-        # Known P2: only pre-transaction count is bounded, not reservations
-        # for up to three new entries created by the transaction.
+    def test_07_quarantine_never_overshoots_256_and_preserves_journal(self):
         lab = self.prepared("cap")
         current = self.retained_count(lab)
         self.assertLess(current, 255)
         for index in range(255 - current):
             (lab.root / (".tx-seed-" + str(index))).write_bytes(b"fixture")
         self.assertEqual(self.retained_count(lab), 255)
+        before = lab.state_path.read_bytes()
+        with self.assertRaisesRegex(RuntimeError,
+                                    "Retained transaction evidence limit"):
+            lab.switch("new")
+        self.assertEqual(self.retained_count(lab), 255)
+        self.assertEqual(lab.state_path.read_bytes(), before)
+        self.assertFalse(lab.pending.exists(), "Limit must fail before journal")
+
+    def test_07b_quarantine_headroom_allows_bounded_commit(self):
+        lab = self.prepared("capbounded")
+        current = self.retained_count(lab)
+        for index in range(252 - current):
+            (lab.root / (".tx-seed-" + str(index))).write_bytes(b"fixture")
+        self.assertEqual(self.retained_count(lab), 252)
         lab.switch("new")
-        self.assertGreater(self.retained_count(lab), tx.RETAINED_MAX)
-        with self.assertRaisesRegex(RuntimeError, "Retained transaction evidence limit"):
+        self.assertEqual(lab.status()["active"], "new")
+        self.assertLessEqual(self.retained_count(lab), tx.RETAINED_MAX)
+        # A further switch has insufficient reserved evidence headroom.
+        with self.assertRaisesRegex(RuntimeError,
+                                    "Retained transaction evidence limit"):
             lab.switch("old")
 
     def test_08_corrupt_pending_journal_stays_intact(self):
@@ -256,6 +303,35 @@ class PR31IndependentSecurityQA(unittest.TestCase):
         lab.switch("one")
         self.assertEqual(lab.status()["active"], "one")
         self.assertEqual((release / "image.bin").read_bytes(), forged)
+
+    def test_11_external_artifact_pin_rejects_self_hash_forgery(self):
+        import hashlib
+        lab = self.new_lab("pinregistry")
+        genuine = b"genuine-with-offline-owner-pin"
+        lab.stage_fixture("one", genuine)
+        approved = hashlib.sha256(genuine).hexdigest()
+        pinned = tx.TransactionLab(lab.root, external_pins={"one": approved})
+        pinned.switch("one")
+        self.assertEqual(pinned.status()["active"], "one")
+        release = lab.releases / "one"
+        forged = b"tampered-self-hash-valid"
+        (release / "image.bin").write_bytes(forged)
+        (release / "manifest.json").write_text(json.dumps({
+            "owner": tx.OWNER, "name": "one",
+            "sha256": hashlib.sha256(forged).hexdigest(),
+            "size": len(forged)
+        }), encoding="utf-8")
+        with self.assertRaisesRegex(RuntimeError, "Externally pinned artifact"):
+            pinned.status()
+        # The original CI-only lab STILL accepts self-consistent local bytes
+        # without pins: this MUST NOT be called authenticated provenance.
+        self.assertEqual(lab.status()["active"], "one")
+
+    def test_12_invalid_external_pins_fail_closed(self):
+        with self.assertRaisesRegex(RuntimeError, "Invalid externally pinned"):
+            tx.TransactionLab(
+                self.runner / "flight-transaction-lab" / "badpins",
+                external_pins={"one": "not-a-verified-digest"})
 
 
 if __name__ == "__main__":
