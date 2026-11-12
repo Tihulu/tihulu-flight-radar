@@ -62,10 +62,15 @@ def test_app_started_pair_stops_once_on_repeated_quit(services):
     receiver = control.ReceiverController()
     receiver.start()
     assert receiver._service_units_started_by_app == set(control.UNITS)
+    # A second app may begin consuming readsb after the first Start; a
+    # previously inactive systemd pair is never proof of exclusivity.
+    foreign_borrower = {"running": True, "using_readsb": True}
     receiver.close(release_local_service=True)
     receiver.close(release_local_service=True)
-    assert events == ["start", "stop"]
-    assert set(state.values()) == {"inactive"}
+    assert events == ["start"], "Quit must not stop a late external borrower"
+    assert set(state.values()) == {"active"}
+    assert foreign_borrower["running"] and foreign_borrower["using_readsb"]
+    assert receiver.last_service_release_note
     assert receiver._closed
 
 
@@ -236,52 +241,59 @@ def test_concurrent_start_and_quit_cannot_resurrect_services(monkeypatch, servic
         # The gate is already set; the existing Start will eventually complete.
         if receiver._quit_requested.is_set():
             raise DataError("Receiver is shutting down")
+    # A foreign application joins while Start has the controller lock.
+    borrower = {"connected": True}
     allow_start.set()
     startup.join(3)
     closer.join(3)
     assert not startup.is_alive() and not closer.is_alive()
     assert errors == []
-    assert events == ["start", "stop"]
-    assert set(state.values()) == {"inactive"}
+    assert events == ["start"], "Quit must not globally stop a late borrower"
+    assert set(state.values()) == {"active"} and borrower["connected"]
+    assert receiver.last_service_release_note
     with pytest.raises(DataError, match="shutting down"):
         receiver.start()
 
 
 def test_restart_interrupted_by_quit_cannot_issue_late_start(monkeypatch, services):
+    """A queued Restart must respect the Quit gate, without stopping a borrower."""
     state, events = services
-    entered_stop = threading.Event()
-    allow_stop = threading.Event()
-    errors = []
+    owner = control.ReceiverController()
+    borrowed = {"external_decoder_reader": True}
+    lock_held = threading.Event()
+    unlock = threading.Event()
+    restart_errors = []
 
-    def fake_action(op):
-        events.append(op)
-        if op == "stop":
-            entered_stop.set()
-            if not allow_stop.wait(2):
-                raise DataError("mock Stop expired")
-            state.update({name: "inactive" for name in state})
-        return "fake " + op
+    def hold_controller_lock():
+        with owner._operation_lock:
+            lock_held.set()
+            assert unlock.wait(2), "synthetic operation barrier was not released"
 
-    monkeypatch.setattr(control, "service_action", fake_action)
-    receiver = control.ReceiverController()
-
-    def restart():
+    def queued_restart():
         try:
-            receiver.restart()
-        except Exception as exc:
-            errors.append(exc)
+            owner.restart()
+        except DataError as exc:
+            restart_errors.append(str(exc))
 
-    thread = threading.Thread(target=restart, daemon=True)
-    thread.start()
-    assert entered_stop.wait(1)
-    receiver.request_quit()
-    allow_stop.set()
-    thread.join(3)
-    receiver.close(release_local_service=True)
-    assert not thread.is_alive()
-    assert len(errors) == 1 and isinstance(errors[0], DataError)
-    assert "shutting down" in str(errors[0])
-    assert events == ["stop"], "No service re-start after a Quit request"
+    holder = threading.Thread(target=hold_controller_lock, daemon=True)
+    holder.start()
+    assert lock_held.wait(1)
+    owner.request_quit()
+    restarted = threading.Thread(target=queued_restart, daemon=True)
+    restarted.start()
+    try:
+        assert owner._quit_requested.is_set()
+    finally:
+        unlock.set()
+        holder.join(3)
+        restarted.join(3)
+
+    assert not holder.is_alive() and not restarted.is_alive()
+    assert len(restart_errors) == 1
+    assert "shutting down" in restart_errors[0]
+    owner.close(release_local_service=True)
+    assert events == [], "Neither Stop nor subsequent Start may run"
+    assert set(state.values()) == {"active"} and borrowed["external_decoder_reader"]
 
 
 def test_bridge_blocks_controls_and_snapshots_after_quit(monkeypatch):
@@ -494,8 +506,9 @@ def test_quit_receiver_operation_lock_timeout_is_retryable(monkeypatch, services
         worker.join(2)
     assert not worker.is_alive() and errors == []
     receiver.close(release_local_service=True)
-    assert calls == ["start", "stop"]
-    assert set(states.values()) == {"inactive"}
+    assert calls == ["start"], "Retry must preserve the shared receiver"
+    assert set(states.values()) == {"active"}
+    assert receiver._closed and receiver.last_service_release_note
 
 
 def test_bridge_request_handler_ownership_registration_is_balanced(monkeypatch):
@@ -824,9 +837,10 @@ def test_headless_quit_releases_app_owned_paired_systemd_only(
     monkeypatch.setattr(bridge_module, "Bridge", FakeBridge)
     monkeypatch.setattr(bridge_module, "ThreadingHTTPServer", FakeHTTP)
     bridge_module.main(["--port", "8510", "--allow-control"])
-    assert events == ["start", "stop"]
-    assert set(states.values()) == {"inactive"}
+    assert events == ["start"], "Headless Quit cannot stop shared systemd units"
+    assert set(states.values()) == {"active"}
     assert instances[0].receiver._quit_requested.is_set()
+    assert instances[0].receiver.last_service_release_note
 
 
 def test_queued_start_is_rejected_after_quit_even_if_executor_runs_it(
@@ -1051,7 +1065,9 @@ def test_explicit_start_claims_pair_but_second_observer_quit_only_borrows(servic
     assert states == {"readsb.service": "active", "tar1090.service": "active"}
     assert events == ["start", "start"]
     owner.close(release_local_service=True)
-    assert events == ["start", "start", "stop"]
+    assert events == ["start", "start"], "Owner Quit must preserve observers"
+    assert set(states.values()) == {"active"}
+    assert owner.last_service_release_note
 
 
 def test_local_direct_child_quit_does_not_touch_foreign_direct_child(monkeypatch):
