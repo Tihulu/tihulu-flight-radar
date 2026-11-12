@@ -3,7 +3,12 @@ from pathlib import Path
 import hashlib
 import json
 import os
+import sys
 import pytest
+
+# Security fixture is deliberately POSIX/Linux-only; import collection on Windows
+# must succeed without weakening any Linux assertions.
+pytestmark = pytest.mark.skipif(sys.platform != 'linux', reason='Linux-only transaction lab')
 
 from tools.flight_transaction_lab import TransactionLab
 
