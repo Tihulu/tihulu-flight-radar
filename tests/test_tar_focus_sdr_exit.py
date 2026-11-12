@@ -49,14 +49,14 @@ def test_tar_camera_authorized_receiver_precedes_germany_only_if_no_aircraft():
     assert q["tihuluFocusLon"] == ["27.100000"]
 
 
-def test_receiver_close_releases_preexisting_linux_readsb_when_requested(monkeypatch):
+def test_receiver_close_preserves_preexisting_linux_readsb_even_when_release_requested(monkeypatch):
     monkeypatch.setattr(control.platform, "system", lambda: "Linux")
     monkeypatch.setattr(control, "_unit_active", lambda name: (True, "active"))
     called=[]
     monkeypatch.setattr(control,"service_action",lambda action: called.append(action) or "stopped")
     receiver=control.ReceiverController()
     receiver.close(release_local_service=True)
-    assert called == ["stop"]
+    assert called == [], "Passive exit cannot stop an externally owned receiver"
 
 
 def test_receiver_close_does_not_stop_unowned_services_without_explicit_release(monkeypatch):
@@ -79,10 +79,18 @@ def test_receiver_close_does_not_control_remote_receiver(monkeypatch):
 
 def test_failed_sdr_release_is_not_silently_reported_as_success(monkeypatch):
     monkeypatch.setattr(control.platform, "system", lambda: "Linux")
-    monkeypatch.setattr(control, "_unit_active", lambda name: (True, "active"))
-    def fail(_action): raise DataError("insufficient service permission")
-    monkeypatch.setattr(control,"service_action",fail)
+    state = {unit: "inactive" for unit in control.UNITS}
+    monkeypatch.setattr(control, "_unit_active",
+                        lambda unit: (state[unit] == "active", state[unit]))
+    def action(name):
+        if name == "start":
+            state.update({unit: "active" for unit in control.UNITS})
+            return "started"
+        raise DataError("insufficient service permission")
+    monkeypatch.setattr(control, "service_action", action)
     receiver=control.ReceiverController()
+    receiver.start()
+    assert receiver._service_units_started_by_app == set(control.UNITS)
     with pytest.raises(DataError,match="insufficient"):
         receiver.close(release_local_service=True)
 
