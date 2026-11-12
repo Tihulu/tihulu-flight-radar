@@ -98,11 +98,21 @@ def check(home: Path, old_sudoers: Path = OLD_SUDOERS) -> dict:
             if stat.S_IMODE(s.st_mode) & 0o022:
                 blockers.append(f"Group/other-writable ancestor: {path}")
 
-    if _exists(old_sudoers):
-        # Metadata only; intentionally do not read privileged file contents.
+    # The sudoers directory is often non-searchable to ordinary accounts.
+    # Treat inaccessible/unknown as a blocker, NEVER as proof of absence.
+    try:
+        sudoers_present = _exists(old_sudoers)
+    except OSError:
+        sudoers_present = None
+    if sudoers_present is True:
         blockers.append(
             "Historical sudoers policy exists; review and revoke only with "
             "separate explicit approval, never automatically."
+        )
+    elif sudoers_present is None:
+        blockers.append(
+            "Historical sudoers path is inaccessible; cannot prove no old "
+            "NOPASSWD grant. Request an explicitly approved read-only admin review."
         )
     if os.name != "posix":
         warnings.append("Installation targets Linux only; other OS results are advisory.")
@@ -127,7 +137,7 @@ def check(home: Path, old_sudoers: Path = OLD_SUDOERS) -> dict:
         "managed_names": managed_view,
         "existing_protected_names": protected_view,
         "isolated_xdg_targets": {key: str(path) for key, path in xdg.items()},
-        "sudoers_policy_present": _exists(old_sudoers),
+        "sudoers_policy_present": sudoers_present,
         "blockers": blockers,
         "warnings": warnings,
     }
@@ -146,7 +156,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Safe candidate:  {REVIEWED_SECURITY_COMMIT}")
         print(f"Proposed name:   {SAFE_NAME}")
         print(f"Current pipx protected: {result['existing_protected_names']['installed_pipx']['present']}")
-        print(f"Historic sudoers present: {result['sudoers_policy_present']}")
+        print(f"Historic sudoers present: {result['sudoers_policy_present']} (None=unknown/HOLD)")
         print(f"Blockers: {len(result['blockers'])}")
         for reason in result["blockers"]:
             print("HOLD: " + reason)

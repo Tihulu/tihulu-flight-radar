@@ -97,3 +97,19 @@ def test_zero_hidden_changes_during_preflight(tmp_path):
         result = check(tmp_path, tmp_path.parent / ("no-policy-" + tmp_path.name))
         assert result["ready_for_installer_qa"]
     assert _tree(tmp_path) == baseline
+
+
+def test_unreadable_sudoers_is_unknown_and_blocks(monkeypatch, tmp_path):
+    policy = tmp_path.parent / ("unreadable-policy-" + tmp_path.name)
+    original = Path.is_symlink
+
+    def denied(self):
+        if self == policy:
+            raise PermissionError("permission denied while inspecting parent directory")
+        return original(self)
+
+    monkeypatch.setattr(Path, "is_symlink", denied)
+    result = check(tmp_path, policy)
+    assert result["sudoers_policy_present"] is None
+    assert not result["ready_for_installer_qa"]
+    assert any("inaccessible" in message for message in result["blockers"])

@@ -32,7 +32,16 @@ jobs:
               assert forbidden not in text, forbidden
           print("Preflight read-only source guard PASS")
           PY
-      - name: Recheck no git working tree changes from preflight
+      - name: Verify CLI emits complete read-only JSON, even when sudoers is inaccessible
+        shell: bash
         run: |
-          python tools/flight_safe_preflight.py --json
+          set +e
+          result="$(python tools/flight_safe_preflight.py --json)"
+          rc=$?
+          set -e
+          if [[ "$rc" != "0" && "$rc" != "2" ]]; then
+            echo "::error::Unexpected preflight exit status: $rc"
+            exit 1
+          fi
+          printf '%s\n' "$result" | python -c 'import json,sys; d=json.load(sys.stdin); assert d["ready_for_installation"] is False; assert d["check_mode"]=="read-only-no-side-effects"; assert isinstance(d["blockers"],list); assert d["sudoers_policy_present"] in (True,False,None)'
           git diff --exit-code

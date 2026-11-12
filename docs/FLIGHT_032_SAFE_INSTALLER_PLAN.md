@@ -37,3 +37,5 @@ Never use historical `scripts/install-linux.sh` or `scripts/popos-version-switch
 Validate offline map assets, Qt on Pop!_OS 24.04 COSMIC/NVIDIA, original installed-wheel parity, persistent QSettings isolation, tar1090 availability, SDR access arbitration across Media Center/Flight Radar/Satellite Center, rollback, reinstall, uninstall and last-resort recovery on a **disposable account/device first**. No simulation or CI can substitute for real hardware QA.
 
 **No PR merge, release, installer execution or live receiver service operation is authorized.**
+
+**Non-searchable sudoers directories:** A normal user may not be permitted to stat `/etc/sudoers.d/tihulu-flight-radar`. Preflight reports `sudoers_policy_present: null` and a HOLD blocker, **not** an assumed absence. The GitHub CI runner exercises this fail-closed outcome, validates JSON and checks the working tree remains untouched.
