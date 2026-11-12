@@ -1,0 +1,108 @@
+name: Stable First archive acceptance (review only)
+
+on:
+  pull_request:
+    paths:
+      - "archive/stable-first/**"
+      - ".github/workflows/stable-first-archive.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frozen-source:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify exact SHA-256 tree and synthetic safety negatives
+        run: |
+          python archive/stable-first/installer/stable_first.py --check
+          python archive/stable-first/installer/stable_first.py --dry-run
+          python -m unittest discover -s archive/stable-first/tests -v
+      - name: Verify installer compiles
+        run: |
+          python -m py_compile archive/stable-first/installer/stable_first.py
+          python -m py_compile archive/stable-first/installer/safe_entry.py
+
+  ubuntu-native:
+    runs-on: ubuntu-24.04
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install native Qt runtime libraries IN DISPOSABLE CI ONLY
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libegl1 libgl1 libxkbcommon0 libdbus-1-3 libnss3 libnspr4 libxcomposite1 libxdamage1 libxrandr2 libgbm1 libxtst6 libxkbfile1 libxss1 libxshmfence1 libasound2t64
+      - name: Install exact archived source in CI venv
+        run: python -m pip install -e "archive/stable-first/source[test]"
+      - name: Original legacy Python regressions
+        working-directory: archive/stable-first/source
+        run: python -m pytest -q
+      - name: Original JS/browser regressions
+        working-directory: archive/stable-first/source
+        run: node --test tests/*.test.cjs
+      - name: Original classic native Qt smoke
+        working-directory: archive/stable-first/source
+        run: python scripts/qt_smoke.py
+      - name: Native embedded Qt import
+        run: python -c "from tihulu_flight_radar.native import NativeRadarWindow; print(NativeRadarWindow.__name__)"
+      - name: Archive safety unit tests
+        run: python -m unittest discover -s archive/stable-first/tests -v
+
+  ubuntu-clean-install:
+    runs-on: ubuntu-24.04
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Prepare disposable HOME with existing-app/user-data sentinels
+        run: |
+          echo "HOME=$RUNNER_TEMP/stable-first-ci-home" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/stable-first-ci-home/.local/bin" "$RUNNER_TEMP/stable-first-ci-home/.config/Tihulu"
+          printf 'ORIGINAL_PIPX_APP_DO_NOT_TOUCH\n' > "$RUNNER_TEMP/stable-first-ci-home/.local/bin/tihulu-flight-radar"
+          printf 'ORIGINAL_SETTINGS_DO_NOT_TOUCH\n' > "$RUNNER_TEMP/stable-first-ci-home/.config/Tihulu/FlightRadar.conf"
+          printf 'ORIGINAL_RECORDING_DO_NOT_TOUCH\n' > "$RUNNER_TEMP/stable-first-ci-home/recording.wav"
+      - name: Install opt-in in isolated runner, repeat and check
+        run: |
+          python archive/stable-first/installer/stable_first.py --dry-run
+          python archive/stable-first/installer/stable_first.py --install
+          python archive/stable-first/installer/stable_first.py --install
+          python archive/stable-first/installer/stable_first.py --check
+          test -x "$HOME/.local/bin/tihulu-flight-stable-first"
+          grep -Fxq ORIGINAL_PIPX_APP_DO_NOT_TOUCH "$HOME/.local/bin/tihulu-flight-radar"
+          grep -Fxq ORIGINAL_SETTINGS_DO_NOT_TOUCH "$HOME/.config/Tihulu/FlightRadar.conf"
+          grep -Fxq ORIGINAL_RECORDING_DO_NOT_TOUCH "$HOME/recording.wav"
+      - name: Safe uninstall without service access
+        run: |
+          python archive/stable-first/installer/stable_first.py --uninstall
+          python archive/stable-first/installer/stable_first.py --check
+          test ! -e "$HOME/.local/bin/tihulu-flight-stable-first"
+          grep -Fxq ORIGINAL_PIPX_APP_DO_NOT_TOUCH "$HOME/.local/bin/tihulu-flight-radar"
+          grep -Fxq ORIGINAL_SETTINGS_DO_NOT_TOUCH "$HOME/.config/Tihulu/FlightRadar.conf"
+          grep -Fxq ORIGINAL_RECORDING_DO_NOT_TOUCH "$HOME/recording.wav"
+
+  debian12-source:
+    runs-on: ubuntu-24.04
+    container: debian:12
+    steps:
+      - name: CI-only Python setup
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git python3 python3-venv ca-certificates
+      - uses: actions/checkout@v4
+      - name: Verify SHA-256 and pure-stdlib negative tests on Debian 12
+        run: |
+          python3 archive/stable-first/installer/stable_first.py --check
+          python3 archive/stable-first/installer/stable_first.py --dry-run
+          python3 -m unittest discover -s archive/stable-first/tests -v
