@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import multiprocessing
 import os
 from pathlib import Path
 import shutil
@@ -155,6 +156,52 @@ class IndependentPR29Evidence(unittest.TestCase):
             "sha256": hashlib.sha256(raw).hexdigest(), "size": len(raw)}))
         self.lab.switch("one")
         self.assertEqual(self.lab.status()["active"], "one")
+
+    def test_control_two_concurrent_rollbacks_are_serializable(self):
+        self.prepare()
+        self.lab.switch("new")
+        ctx = multiprocessing.get_context("fork")
+        start = ctx.Event()
+        results = ctx.Queue()
+        root = self.lab.root
+        def worker():
+            try:
+                if not start.wait(timeout=5):
+                    raise RuntimeError("start barrier timed out")
+                tx.TransactionLab(root).rollback()
+                results.put("PASS")
+            except BaseException as exc:
+                results.put("FAIL:" + repr(exc))
+        processes = [ctx.Process(target=worker) for _ in range(2)]
+        for process in processes:
+            process.start()
+        start.set()
+        for process in processes:
+            process.join(timeout=10)
+            if process.is_alive():
+                process.terminate()
+                process.join()
+                self.fail("Concurrent rollback deadlocked")
+            self.assertEqual(process.exitcode, 0)
+        self.assertEqual([results.get(timeout=3) for _ in processes],
+                         ["PASS", "PASS"])
+        # Two serialized rollback transactions toggle new -> old -> new.
+        self.assertEqual(self.lab.status()["active"], "new")
+        self.assertEqual(self.lab.status()["previous"], "old")
+
+    def test_control_corrupt_state_refuses_recovery_without_deleting_journal(self):
+        self.prepare()
+        with self.assertRaisesRegex(RuntimeError, "Injected fault"):
+            self.lab.switch("new", fault="after_pointer")
+        self.lab.state_path.write_text(json.dumps({
+            "owner": "FOREIGN", "active": "old", "previous": None}))
+        journal_before = self.lab.pending.read_bytes()
+        state_before = self.lab.state_path.read_bytes()
+        with self.assertRaisesRegex(RuntimeError, "Foreign or corrupt"):
+            self.lab.recover()
+        self.assertEqual(self.lab.pending.read_bytes(), journal_before)
+        self.assertEqual(self.lab.state_path.read_bytes(), state_before)
+        self.assertEqual(os.readlink(self.lab.current), "releases/new")
 
 
 if __name__ == "__main__":
