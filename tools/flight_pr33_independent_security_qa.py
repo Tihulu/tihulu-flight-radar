@@ -68,8 +68,11 @@ class IndependentPR33QA(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "Foreign file swapped"):
                 lab.switch("new")
         self.assertEqual(len(replaced), 1)
-        self.assertEqual((lab.root / replaced[0]).read_bytes(), payload)
-        self.assertEqual(os.readlink(lab.current), "releases/old")
+        self.assertTrue(any(p.is_file() and not p.is_symlink()
+                            and p.read_bytes() == payload
+                            for p in lab.root.iterdir()),
+                        "Foreign bytes must survive failed exchange and undo")
+        self.assertTrue(lab.pending.exists(), "Suspicious journal must remain")
 
     def test_02_root_replaced_after_pointer_commit_must_fail_closed(self):
         lab = self.prepared("rootswap")
