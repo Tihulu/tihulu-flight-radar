@@ -1,0 +1,31 @@
+name: AGENT 06 independent Flight PR29 race evidence (disposable Linux only)
+
+on:
+  pull_request:
+    paths:
+      - 'tools/flight_pr29_independent_race_evidence.py'
+      - '.github/workflows/flight-pr29-independent-qa.yml'
+      - 'tools/flight_transaction_lab.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  independent-pr29-evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CI: 'true'
+      GITHUB_ACTIONS: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Confirm no installed-flight or SDR/service operations requested
+        run: |
+          test -f tools/flight_pr29_independent_race_evidence.py
+          test -f tools/flight_transaction_lab.py
+          python -m py_compile tools/flight_pr29_independent_race_evidence.py
+      - name: Reproduce known post-validation unlink races (PASS = unsafe behavior evidenced)
+        run: python -m tools.flight_pr29_independent_race_evidence
+      - name: Verify repository remains unmodified by synthetic fixtures
+        run: git diff --exit-code
