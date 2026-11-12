@@ -6,6 +6,7 @@ it does not prove resistance to a malicious same-UID actor or power loss.
 """
 import hashlib
 import json
+import multiprocessing
 import os
 import stat
 import sys
@@ -107,7 +108,7 @@ def test_foreign_state_swap_is_not_overwritten(lab, monkeypatch):
             injected.append(True)
         return rename(fd, src, dst, flag)
     monkeypatch.setattr(tx, "_rename", race)
-    with pytest.raises(RuntimeError, match="Foreign"):
+    with pytest.raises(RuntimeError, match="Foreign|Changed protected state"):
         lab.switch("new")
     assert injected
     assert lab.state_path.read_bytes() == b"FOREIGN_STATE_DATA"
@@ -230,6 +231,60 @@ def test_recovery_after_interrupted_switch_and_after_state(lab):
     _prepare(lab)
     with pytest.raises(RuntimeError, match="Injected fault"):
         lab.switch("new", fault="after_state")
+    lab.recover()
+    assert lab.status()["active"] == "old"
+    assert not lab.pending.exists()
+
+def test_parallel_processes_serialize_switches(lab):
+    _prepare(lab)
+    lab.stage_fixture("third", b"third")
+    ctx = multiprocessing.get_context("fork")
+    start = ctx.Event()
+    results = ctx.Queue()
+    root = lab.root
+    def worker(name):
+        try:
+            start.wait(timeout=4)
+            tx.TransactionLab(root).switch(name)
+            results.put("PASS")
+        except BaseException as exc:
+            results.put(repr(exc))
+    workers = [ctx.Process(target=worker, args=(name,)) for name in ("new", "third")]
+    for process in workers:
+        process.start()
+    start.set()
+    for process in workers:
+        process.join(timeout=8)
+        if process.is_alive():
+            process.terminate()
+            process.join()
+            pytest.fail("Parallel worker blocked after lock acquisition")
+        assert process.exitcode == 0
+    assert [results.get(timeout=2) for _ in workers] == ["PASS", "PASS"]
+    assert lab.status()["active"] in ("new", "third")
+
+
+def test_sigkill_after_pointer_recovery(lab):
+    _prepare(lab)
+    ctx = multiprocessing.get_context("fork")
+    root = lab.root
+    def crash_after_pointer():
+        original = tx._rename
+        def terminate_after_swap(fd, src, dst, flag):
+            original(fd, src, dst, flag)
+            if dst == "current" and flag == tx._EXCHANGE:
+                os._exit(66)  # Killed disposable child after durable pointer.
+        tx._rename = terminate_after_swap
+        tx.TransactionLab(root).switch("new")
+    process = ctx.Process(target=crash_after_pointer)
+    process.start()
+    process.join(timeout=8)
+    if process.is_alive():
+        process.terminate()
+        process.join()
+        pytest.fail("Crash-injection child deadlocked")
+    assert process.exitcode == 66
+    assert lab.pending.exists()
     lab.recover()
     assert lab.status()["active"] == "old"
     assert not lab.pending.exists()
