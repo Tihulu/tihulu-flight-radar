@@ -69,7 +69,7 @@ def test_shared_service_stays_running_when_exit_release_disabled(monkeypatch):
     assert operations == [], "User disabled service release; app ownership must not override it"
 
 
-def test_shared_service_stops_when_exit_release_enabled(monkeypatch):
+def test_external_shared_service_survives_exit_release_enabled(monkeypatch):
     import tihulu_flight_radar.control as control
 
     monkeypatch.setattr(control.platform, "system", lambda: "Linux")
@@ -79,7 +79,7 @@ def test_shared_service_stops_when_exit_release_enabled(monkeypatch):
     receiver = ReceiverController()
     receiver.configure("Linux services")
     receiver.close(release_local_service=True)
-    assert operations == ["stop"]
+    assert operations == [], "Passive exit must preserve externally owned services"
 
 
 def test_exit_never_stops_external_remote_json_services(monkeypatch):
