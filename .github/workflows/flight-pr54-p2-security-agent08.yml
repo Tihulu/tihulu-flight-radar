@@ -1,0 +1,62 @@
+name: Agent08 PR54 P2 disconnected-client continuity and root-authorized recovery
+
+on:
+  push:
+    branches:
+      - remediation/flight-pr54-p2-security-agent08-20261113
+  pull_request:
+    paths:
+      - 'tools/flight_p1_broker_pr52_remediation_ci.py'
+      - 'tools/flight_pr54_p2_remediation_tests.py'
+      - 'docs/FLIGHT_PR54_P2_BROKER_REMEDIATION.md'
+      - '.github/workflows/flight-pr54-p2-security-agent08.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  disposable_linux_root_uid_boundary:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    env:
+      CI: 'true'
+      GITHUB_ACTIONS: 'true'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - name: Checkout exact remediation head without persistent credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Checkout FROZEN independent PR54 QA witnesses at immutable SHA in a separate directory
+        uses: actions/checkout@v4
+        with:
+          ref: ce13e5d6ce3c33ead3e665c2143cfff4dcb821a9
+          path: frozen-pr54
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Pinned disposable-only signature verifier
+        run: |
+          python -m pip install --disable-pip-version-check --only-binary=:all: 'cryptography==46.0.3'
+      - name: Compile changed CI-only broker and new hostile tests
+        run: |
+          python -m py_compile tools/flight_p1_broker_pr52_remediation_ci.py tools/flight_pr54_p2_remediation_tests.py
+      - name: REAL root vs UID65534 socket continuity and authenticated handoff negative suite
+        run: |
+          sudo --non-interactive env CI=true GITHUB_ACTIONS=true RUNNER_TEMP="$RUNNER_TEMP" PYTHONPATH="$GITHUB_WORKSPACE" PYTHONDONTWRITEBYTECODE=1 "$(command -v python)" -m tools.flight_pr54_p2_remediation_tests
+      - name: Preserved ORIGINAL 16/15/20/33/28/18 regression suites on remediated head
+        run: |
+          sudo --non-interactive env CI=true GITHUB_ACTIONS=true RUNNER_TEMP="$RUNNER_TEMP" PYTHONPATH="$GITHUB_WORKSPACE" PYTHONDONTWRITEBYTECODE=1 "$(command -v python)" -m tools.flight_p1_broker_pr52_remediation_tests
+          sudo --non-interactive env CI=true GITHUB_ACTIONS=true RUNNER_TEMP="$RUNNER_TEMP" PYTHONPATH="$GITHUB_WORKSPACE" PYTHONDONTWRITEBYTECODE=1 "$(command -v python)" -m tools.flight_pr51_independent_os_broker_qa
+          sudo --non-interactive env CI=true GITHUB_ACTIONS=true RUNNER_TEMP="$RUNNER_TEMP" PYTHONPATH="$GITHUB_WORKSPACE" PYTHONDONTWRITEBYTECODE=1 "$(command -v python)" -m tools.flight_p1_broker_os_boundary_tests
+          python -m tools.flight_pr47_independent_broker_qa
+          python -m tools.flight_p1_broker_ci_tests
+          python -m tools.flight_pr41_independent_security_qa
+      - name: Preserve QA PR54 exact original 28-case POSITIVE vulnerability evidence on FROZEN SHA only
+        run: |
+          cd frozen-pr54
+          sudo --non-interactive env CI=true GITHUB_ACTIONS=true RUNNER_TEMP="$RUNNER_TEMP" PYTHONPATH="$PWD" PYTHONDONTWRITEBYTECODE=1 "$(command -v python)" -m tools.flight_pr53_independent_security_qa
+      - name: Ensure remediation source files not modified by CI
+        run: git diff --exit-code
