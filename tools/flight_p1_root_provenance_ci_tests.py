@@ -59,7 +59,8 @@ class P1RootProvenanceCI(unittest.TestCase):
             "issued_at": NOW-1000, "expires_at": NOW+1000,
             "root_keys": dict(self.root_keys),
             "role_keys": {r: dict(v) for r, v in self.role_keys.items()},
-            "revoked_key_ids": [], "source_repo": REPO,
+            "revoked_key_ids": [], "revoked_key_fingerprints": {},
+            "source_repo": REPO,
             "source_ref": REF, "builder_workflow": WORKFLOW,
         }
         self.pins = gate.pin_bootstrap_roots(
@@ -73,6 +74,9 @@ class P1RootProvenanceCI(unittest.TestCase):
                 format=serialization.PublicFormat.Raw).hex()
             for id_ in ids
         }
+
+    def fingerprint(self, key_id):
+        return gate.key_fingerprint(bytes.fromhex(self.public_map(key_id)[key_id]))
 
     def signed_policy(self, policy=None, endorsers=None):
         raw = gate.canonical(self.root_policy if policy is None else policy)
@@ -167,6 +171,10 @@ class P1RootProvenanceCI(unittest.TestCase):
                 **self.role_keys, "release": self.public_map("release2"),
             },
             "revoked_key_ids": ["release1", "root1"],
+            "revoked_key_fingerprints": {
+                "release1": self.fingerprint("release1"),
+                "root1": self.fingerprint("root1"),
+            },
         }
         return policy
 
@@ -274,6 +282,7 @@ class P1RootProvenanceCI(unittest.TestCase):
     def test_12_rotation_requires_explicit_revocation_of_removed_keys(self):
         policy=self.rotated_policy()
         policy["revoked_key_ids"]=["root1"]
+        policy["revoked_key_fingerprints"].pop("release1")
         with self.assertRaisesRegex(gate.TrustRejected,"Retired"):
             self.authenticate_root(policy,("root1","root2","root4"),
                                    previous=self.root,minimum=2)
