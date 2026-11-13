@@ -311,19 +311,16 @@ class DisposableBrokerStore:
               or pointer["release"] != state["release"]):
             reject("activation doesn't match broker journal; recover first")
 
-    def install(self, signed_meta, data, *, cut=None):
-        """One CI blob per signed release; NO unpack, launcher or elevation."""
+    def install(self, fd, metadata, signature, pinned_test_roots, *, now, cut=None):
+        """Broker-verifies transferred FD WHILE locked; no caller-trusted object."""
         ci_only()
-        if (type(data) is not bytes or
-                hashlib.sha256(data).hexdigest() != signed_meta.artifact_sha256
-                or len(data) != signed_meta.artifact_size):
-            reject("unsigned content passed to broker store")
         with self.transaction():
             oldraw, old = self.state()
             _, current = self.pointer()
             self._assert_pointer(old, current)
-            if old and signed_meta.sequence <= old["seq"]:
-                reject("replay or rollback requires independent approval")
+            signed_meta, data = verify_received_fd(
+                fd, metadata, signature, pinned_test_roots,
+                minimum_sequence=old["seq"] + 1 if old else 0, now=now)
             release = safe_component(
                 "rel-" + str(signed_meta.sequence) + "-" +
                 signed_meta.artifact_sha256[:24] + ".bin")
