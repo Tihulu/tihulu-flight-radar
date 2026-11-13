@@ -171,8 +171,10 @@ from pathlib import Path
 s=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET)
 s.settimeout(8)
 s.connect(sys.argv[1])
+release_r,release_w=os.pipe()
 child=os.fork()
 if child==0:
+  os.close(release_w)
   try:
     data=Path(sys.argv[3]).read_bytes()
     frame=Path(sys.argv[2]).read_bytes()
@@ -182,11 +184,15 @@ if child==0:
     fcntl.fcntl(fd,fcntl.F_ADD_SEALS,flags)
     s.sendmsg([frame],[(socket.SOL_SOCKET,socket.SCM_RIGHTS,array.array("i",[fd]))])
     os.close(fd)
+    os.read(release_r,1)  # keep the actual SENDER PID alive for /proc verification
     os._exit(0)
   except BaseException:
     os._exit(42)
-_,status=os.waitpid(child,0)
+os.close(release_r)
 ans=json.loads(s.recv(4096))
+os.write(release_w,b"x")
+os.close(release_w)
+_,status=os.waitpid(child,0)
 print(json.dumps({"response":ans,"child":child,"status":status}),flush=True)
 s.close()
 """
@@ -493,7 +499,38 @@ finally:
         self.assertIn("KERNEL_REJECTED_FORGED_PID",result.stdout)
         self.assertIsNone(self.active())
         self.assertEqual(self.ledger(),[])
-        self.assertTrue(self.resume(approved)["ok"])
+        # A closed malformed client may also terminate this disposable
+        # broker. That availability defect is independently tested in #26.
+
+
+    def test_26_POSITIVE_GAP_ordinary_unprivileged_disconnect_crashes_root_broker(self):
+        """Independently identified P2 availability attack against the
+        EPHEMERAL CI V2 server: even without ticket, SCM_RIGHTS or any
+        signing key, UID65534 can connect then shutdown its socket.
+        server() catches receive exceptions but its conn.sendall(reply)
+        lies OUTSIDE that exception handler. BrokenPipeError exits the
+        privileged test-broker process. A GREEN POSITIVE test means the
+        denial-of-service was REPRODUCED, not remediated.
+        """
+        self.assertIsNone(self.worker.poll())
+        code=r"""
+import socket,sys
+s=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET)
+s.settimeout(4)
+s.connect(sys.argv[1])
+s.shutdown(socket.SHUT_RDWR)
+s.close()
+print("UNPRIVILEGED_DISCONNECTED",flush=True)
+"""
+        cp=self.unpriv_action(code,self.sock)
+        self.assertEqual(cp.returncode,0,cp.stderr)
+        self.assertIn("UNPRIVILEGED_DISCONNECTED",cp.stdout)
+        self.worker.wait(timeout=5)
+        self.assertIsNotNone(self.worker.returncode)
+        stderr=self.worker.stderr.read()
+        self.assertIn("BrokenPipeError",stderr)
+        self.assertEqual(self.ledger(),[])
+        self.assertIsNone(self.active())
 
 
 if __name__=="__main__":
