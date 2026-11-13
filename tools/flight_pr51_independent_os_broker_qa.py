@@ -208,7 +208,7 @@ print(json.dumps({"result":r,"parent":initiator,"child":pid,"status":status}),fl
     def test_10_foreign_release_collision_preserved_no_signed_activation(self):
         self.stop_server()
         release=self._release_path(50,BLOB)
-        release.write_bytes(b"FOREIGN ROOT FIXTURE — DO NOT OVERWRITE")
+        release.write_bytes(b"FOREIGN ROOT FIXTURE - DO NOT OVERWRITE")
         old=release.read_bytes()
         self.start_server()
         frame,data,_=self.payload()
