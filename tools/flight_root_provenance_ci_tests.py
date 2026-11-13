@@ -365,5 +365,21 @@ class RootProvenanceTests(unittest.TestCase):
         self.assertEqual(accepted.root_id,"ci-root")
         # Hence true OS-attested root bootstrap is P1 HOLD.
 
+    def test_29_signer_key_must_not_share_release_builder_authority(self):
+        same_key = {**self.root, "signers": [
+            self.root["signers"][0],
+            self.rule("builder-key", self.release_key, "builder")
+        ]}
+        self.reject(envelopes=self.envelopes(root=same_key),
+                    pattern="distinct")
+
+    def test_30_root_key_must_not_be_used_as_release_signer(self):
+        reused = {**self.root, "signers": [
+            self.rule("release-key", self.root_key, "release"),
+            self.root["signers"][1]
+        ]}
+        self.reject(envelopes=self.envelopes(root=reused),
+                    pattern="distinct")
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
