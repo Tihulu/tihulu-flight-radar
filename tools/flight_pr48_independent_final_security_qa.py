@@ -211,6 +211,7 @@ class PR48RootHistoryIndependentQA(unittest.TestCase):
         """Direct port of PR46 POSITIVE #31, valid old/new 2/3 quorums.
         New r4 is byte-identical to old revoked r1, name cannot launder it.
         """
+        self.keys["r4"]=self.keys["r1"]  # SAME old secret, NEW root signer ID
         p=self.v2_policy(roots={"r2":"r2","r3":"r3","r4":"r1"})
         with self.assertRaisesRegex(model.TrustRejected,
                                     "Revoked Ed25519 key material"):
@@ -271,6 +272,7 @@ class PR48RootHistoryIndependentQA(unittest.TestCase):
 
     def test_08_three_epoch_old_builder_material_fails_reenrollment_as_new_root(self):
         v2=self.v2()
+        self.keys["r5"]=self.keys["b1"]  # exactly valid new-root signature
         p=self.v3_policy(roots={"r3":"r3","r4":"r4","r5":"b1"})
         with self.assertRaisesRegex(model.TrustRejected,
                                     "Revoked Ed25519 key material"):
@@ -430,14 +432,13 @@ class PR48RootHistoryIndependentQA(unittest.TestCase):
             model.verify_provenance_bundle(**dict(proof,artifact=b"OTHER BYTES"))
 
     def test_25_attacker_self_pin_remains_positive_P1_LIMIT(self):
-        rogue={"newroot1":self.phex("rogue1"),
-               "newroot2":self.phex("rogue2"),
-               "newroot3":self.phex("rogue3")}
+        rogue={"rogue1":self.phex("rogue1"),
+               "rogue2":self.phex("rogue2"),
+               "rogue3":self.phex("rogue3")}
         fake_pins=model.pin_bootstrap_roots(
             rogue,2,model.pin_digest(rogue,2))
         fake_policy=self.policy(1,
-            {k:{"newroot1":"rogue1","newroot2":"rogue2",
-                "newroot3":"rogue3"}[k] for k in rogue},
+            {"rogue1":"rogue1","rogue2":"rogue2","rogue3":"rogue3"},
             {"source":{"s1":"s1"},"builder":{"b1":"b1"},
              "release":{"l1":"l1"}},{},issued_at=NOW-800)
         good=self.verify(fake_policy,("rogue1","rogue2"),
