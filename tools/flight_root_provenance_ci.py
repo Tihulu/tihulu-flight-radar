@@ -162,6 +162,7 @@ def _parse_root(raw):
         deny("Invalid root signed revocation set")
     signers = []
     keys = set()
+    public_keys = set()
     roles = set()
     for rule in p["signers"]:
         if type(rule) is not dict or set(rule) != SIGNER_FIELDS:
@@ -174,10 +175,14 @@ def _parse_root(raw):
                 or rule["architecture"] != "x86_64"
                 or not _integer(rule["expires_at"], minimum=1)):
             deny("Malformed, duplicated or revoked signer role")
+        signer_pub = _public(rule["public_key"])
+        if signer_pub in public_keys or signer_pub == pub:
+            deny("Signer keys must be distinct from root and each other")
         keys.add(rule["key_id"])
+        public_keys.add(signer_pub)
         roles.add(rule["role"])
         signers.append(AuthoritySigner(
-            rule["key_id"], _public(rule["public_key"]),
+            rule["key_id"], signer_pub,
             rule["role"], rule["platform"], rule["architecture"],
             rule["expires_at"]))
     if roles != {"release", "builder"}:
