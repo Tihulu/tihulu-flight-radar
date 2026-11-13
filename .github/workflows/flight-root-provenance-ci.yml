@@ -36,5 +36,8 @@ jobs:
       - name: Root bootstrap, signer authority, revocation, rotation and provenance negative fixtures
         run: |
           python -m tools.flight_root_provenance_ci_tests
+      - name: Preserve original Ed25519, immutable metadata and sealed FD author suite
+        run: |
+          python -m tools.flight_signed_installer_ci_tests
       - name: Check that hosted fixture did not edit tracked source
         run: git diff --exit-code
