@@ -355,9 +355,11 @@ class IndependentPR44QA(unittest.TestCase):
                     self.check(self.bundle(source_updates={field:val}))
 
     def test_19_builder_workflow_and_attestation_link_rejected(self):
+        # Actual authorizer-pinned workflow and signed source reference
+        # MUST fail closed. Recipe hashes are DIFFERENT: signed claims
+        # without independently trusted expected recipe (positive test 29).
         for change in ({"builder_workflow":"github.com/attacker/build"},
-                       {"source_attestation_sha256":"0"*64},
-                       {"recipe_sha256":"0"*64}):
+                       {"source_attestation_sha256":"0"*64}):
             with self.subTest(change=change):
                 with self.assertRaises(gate.TrustRejected):
                     self.check(self.bundle(builder_updates=change))
@@ -451,6 +453,27 @@ class IndependentPR44QA(unittest.TestCase):
         self.assertNotEqual(
             self.keys["root1"].private_bytes_raw(),
             self.keys["root2"].private_bytes_raw())
+
+
+    def test_29_POSITIVE_LIMIT_signed_recipe_materials_are_not_independent_provenance(self):
+        """Authorized test builder and release signers can agree on a FALSE
+        recipe/materials SHA. Those digests are signed and linked but the
+        verifier has no independently reviewed expected recipe/materials.
+        This tests the P1 'real provenance' blocker; NOT a P2 cryptobypass.
+        """
+        b=self.bundle(builder_updates={
+            "recipe_sha256":"0"*64,
+            "materials_sha256":"1"*64,
+        })
+        accepted=self.check(b)
+        self.assertEqual(accepted.source_commit,COMMIT)
+        self.assertEqual(accepted.artifact_sha256,hashlib.sha256(CONTENT).hexdigest())
+        signed_builder=json.loads(b["builder_raw"])
+        signed_release=json.loads(b["release_raw"])
+        self.assertEqual(signed_builder["recipe_sha256"],"0"*64)
+        self.assertEqual(signed_release["recipe_sha256"],"0"*64)
+        self.assertEqual(signed_builder["materials_sha256"],"1"*64)
+        self.assertEqual(signed_release["materials_sha256"],"1"*64)
 
 
 if __name__=="__main__":
