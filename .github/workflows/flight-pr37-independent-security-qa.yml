@@ -1,6 +1,12 @@
 name: Agent 06 independent Flight PR37 signed-FD security QA (disposable)
 
 on:
+  push:
+    branches:
+      - audit/flight-pr37-independent-signed-qa-20261113
+    paths:
+      - 'tools/flight_pr37_independent_security_qa.py'
+      - '.github/workflows/flight-pr37-independent-security-qa.yml'
   pull_request:
     paths:
       - 'tools/flight_pr37_independent_security_qa.py'
