@@ -1,0 +1,49 @@
+name: Agent 08 Flight P1 broker same-UID CI-only contract QA
+
+on:
+  push:
+    branches:
+      - prototype/flight-p1-broker-sameuid-agent08-20261113
+  pull_request:
+    paths:
+      - 'tools/flight_p1_broker_ci_contract.py'
+      - 'tools/flight_p1_broker_ci_tests.py'
+      - 'docs/FLIGHT_P1_BROKER_SAMEUID_ARCHITECTURE.md'
+      - '.github/workflows/flight-p1-broker-sameuid-agent08.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  disposable_broker_contract_qa:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      CI: 'true'
+      GITHUB_ACTIONS: 'true'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - name: Checkout exact tested source (no production credentials)
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned test-only Ed25519 library
+        run: |
+          python -m pip install --disable-pip-version-check --only-binary=:all: 'cryptography==46.0.3'
+      - name: Compile CI-only model and frozen PR42 independent QA
+        run: |
+          python -m py_compile tools/flight_p1_broker_ci_contract.py tools/flight_p1_broker_ci_tests.py tools/flight_signed_installer_ci_prototype.py tools/flight_pr41_independent_security_qa.py
+      - name: Run 28 new hostile broker contract and P1 same-UID witness tests
+        run: |
+          python -m tools.flight_p1_broker_ci_tests
+      - name: Preserve frozen PR42 18-test independent baseline
+        run: |
+          python -m tools.flight_pr41_independent_security_qa
+      - name: Guard against accidentally committed test artifacts
+        run: |
+          git diff --exit-code
