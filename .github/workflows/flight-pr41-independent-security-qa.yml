@@ -1,0 +1,35 @@
+name: Agent 06 Flight PR41 independent constructor-FD security QA
+
+on:
+  push:
+    branches:
+      - audit/flight-pr41-independent-qa-20261113
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  independent_constructor_fd_qa:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CI: 'true'
+      GITHUB_ACTIONS: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned CI-only Ed25519 verifier
+        run: |
+          python -m pip install --disable-pip-version-check --only-binary=:all: 'cryptography==46.0.3'
+      - name: Compile exact-source and independent audit
+        run: |
+          python -m py_compile tools/flight_signed_installer_ci_prototype.py tools/flight_pr41_independent_security_qa.py
+      - name: Independent signed-object, FD identity and lifecycle negative attacks
+        run: |
+          python -m tools.flight_pr41_independent_security_qa
+      - name: Confirm source tree remained unchanged
+        run: git diff --exit-code
