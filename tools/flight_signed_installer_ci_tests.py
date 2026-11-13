@@ -234,7 +234,7 @@ class SignedFixtureCI(unittest.TestCase):
             self.verify()
 
     def test_19_external_source_path_is_rejected(self):
-        outsider = self.root.parent / "not-in-disposable-" + Path("fixture.bin")
+        outsider = self.root.parent / "not-in-disposable" / "fixture.bin"
         # Test a sibling path only; never create or modify this path.
         with self.assertRaisesRegex(gate.TrustRejected, "inside disposable"):
             self.verify(file=outsider)
