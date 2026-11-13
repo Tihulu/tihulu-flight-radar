@@ -282,7 +282,10 @@ class Broker:
     def publish(self, entry):
         """Only root-owned namespace: atomic switch; never accept foreign pointer."""
         record = {k:entry[k] for k in ("seq", "release", "digest")}
-        name = "next-%020d.tmp" % entry["seq"]
+        # Random, exclusive broker-owned temporary name lets fresh restart
+        # recover even if a crash left an earlier, uncommitted temp file.
+        # Never delete unknown or orphaned data automatically.
+        name = "next-%020d-%s.tmp" % (entry["seq"], secrets.token_hex(12))
         write_new(self.dirs["active"], name, self.signed_record(record))
         # os.replace is safe against ordinary SAME-UID attacker ONLY because
         # all directory/ancestor write and rename authority belongs to root.
@@ -466,9 +469,12 @@ def receive(sock):
         peer = struct.unpack("3i", sock.getsockopt(
             socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i")))
         # peercreds are ONLY channel telemetry, never an authorization ticket.
+        # Decode before releasing ownership of the received descriptor.
+        # On malformed frame the finally handler closes all received FDs.
+        fields = tuple(decode(k) for k in
+            ("metadata", "release_sig", "ticket", "ticket_sig"))
         selected = fds.pop()
-        return selected, tuple(decode(k) for k in
-            ("metadata", "release_sig", "ticket", "ticket_sig")), peer
+        return selected, fields, peer
     finally:
         for f in fds:
             os.close(f)
@@ -489,6 +495,10 @@ def server(root_path):
         while True:
             conn, _ = s.accept()
             with conn:
+                # Prevent an ordinary peer from hanging this test broker
+                # indefinitely by connecting without submitting a frame.
+                # Production still needs quotas, rate limits and auditing.
+                conn.settimeout(3)
                 fd = None
                 try:
                     fd, fields, peer = receive(conn)
