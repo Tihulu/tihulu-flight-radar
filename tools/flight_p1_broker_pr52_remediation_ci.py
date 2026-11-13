@@ -204,7 +204,7 @@ class BrokerV2(old.Broker):
             "previous_seq":previous["seq"] if previous else None,
             "previous_digest":previous["digest"] if previous else None}
 
-    def stage_or_retry(self, record, data):
+    def stage_or_retry(self, record, data, *, cut=None):
         """Adopt only protected signed-prepared orphan; foreign bytes untouched.
 
         Receipt is HMAC-authenticated and committed BEFORE blob creation, so a
@@ -218,6 +218,8 @@ class BrokerV2(old.Broker):
             if existing is not None:
                 old.reject("foreign release exists without protected prepare receipt")
             old.write_new(self.dirs["prepared"], name, self.signed_record(record))
+            if cut == "after_prepare":
+                raise old.Cut("authenticated prepare without staged bytes")
         else:
             authenticated = self.verify_record(previous, PREPARED_FIELDS)
             if authenticated != record:
@@ -254,7 +256,7 @@ class BrokerV2(old.Broker):
                 meta.sequence, meta.artifact_sha256[:16])
             receipt = self.prepared_record(
                 obj, manifest, release_sig, ticket, meta, release, previous)
-            self.stage_or_retry(receipt, data)
+            self.stage_or_retry(receipt, data, cut=cut)
             if cut == "after_release":
                 raise old.Cut("prepared release without journal")
             commit = {
