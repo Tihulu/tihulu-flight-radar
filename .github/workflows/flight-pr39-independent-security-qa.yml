@@ -1,4 +1,4 @@
-name: Agent 06 Flight PR39 independent metadata-FD QA
+name: Flight PR40 API/FD ownership fail-closed acceptance
 
 on:
   push:
@@ -28,7 +28,7 @@ jobs:
       - name: Compile isolated QA and exact PR39 prototype
         run: |
           python -m py_compile tools/flight_pr39_independent_security_qa.py tools/flight_signed_installer_ci_prototype.py
-      - name: Independent metadata, FD length and lifecycle attack/acceptance
+      - name: Audit-derived 17 negative controls and documented same-process limits
         run: |
           python -m tools.flight_pr39_independent_security_qa
       - name: Verify no tracked application files changed

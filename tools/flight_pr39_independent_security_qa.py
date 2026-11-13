@@ -4,9 +4,10 @@
 Hosted disposable Linux CI ONLY. Never installs software or accesses the
 owner workstation, SDR hardware, pipx, sudoers, or host services.
 
-IMPORTANT: Tests 15, 16, and 17 deliberately PASS when residual prototype
-trust/API weaknesses are reproduced. A passing negative/positive test suite
-does NOT authorize public release or indicate production security.
+Tests 15 and 16 were POSITIVE P2 reproductions in frozen PR #40, but
+are NEGATIVE fail-closed acceptance in this new isolated remediation branch.
+Test 17 intentionally remains a POSITIVE demonstration of hostile Python
+same-process attribute bypass, NOT a production security authorization.
 """
 from __future__ import annotations
 
@@ -166,14 +167,14 @@ class IndependentPR39QA(unittest.TestCase):
             with patch.object(gate.os,"pread",new=spy):
                 data=f.read()
             self.assertEqual(data,GOOD)
-            self.assertEqual(calls,[(f.fd,len(GOOD),0)])
+            self.assertEqual(calls,[(f._fd,len(GOOD),0)])
 
     def test_07_fd_stat_length_drift_is_refused(self):
         with self.accept() as f:
             original=os.fstat
             def corrupt(fd):
                 result=original(fd)
-                if fd!=f.fd:
+                if fd!=f._fd:
                     return result
                 class Fake:
                     st_size=result.st_size+1
@@ -194,13 +195,13 @@ class IndependentPR39QA(unittest.TestCase):
         with self.accept() as f:
             required=(fcntl.F_SEAL_WRITE|fcntl.F_SEAL_GROW|
                       fcntl.F_SEAL_SHRINK|fcntl.F_SEAL_SEAL)
-            self.assertEqual(fcntl.fcntl(f.fd,fcntl.F_GET_SEALS)&required,required)
+            self.assertEqual(fcntl.fcntl(f._fd,fcntl.F_GET_SEALS)&required,required)
             with self.assertRaises(OSError):
-                os.pwrite(f.fd,b"bad",0)
+                os.pwrite(f._fd,b"bad",0)
             with self.assertRaises(OSError):
-                os.ftruncate(f.fd,0)
+                os.ftruncate(f._fd,0)
             with self.assertRaises((OSError,ValueError)):
-                mmap.mmap(f.fd,len(GOOD),access=mmap.ACCESS_WRITE)
+                mmap.mmap(f._fd,len(GOOD),access=mmap.ACCESS_WRITE)
             self.assertEqual(f.read(),GOOD)
 
     def test_10_source_path_swap_after_single_open_preserves_signed_bytes(self):
@@ -235,7 +236,7 @@ class IndependentPR39QA(unittest.TestCase):
 
     def test_12_close_is_idempotent_and_read_after_close_fails(self):
         obj=self.accept()
-        old=obj.fd
+        old=obj._fd
         self.assertEqual(obj.read(),GOOD)
         obj.close()
         obj.close()
@@ -243,17 +244,20 @@ class IndependentPR39QA(unittest.TestCase):
             os.fstat(old)
         with self.assertRaisesRegex(gate.TrustRejected,"closed"):
             obj.read()
-        with self.assertRaisesRegex(gate.TrustRejected,"closed"):
-            _=obj.fd
+        self.assertIsNone(obj._fd)
+        self.assertFalse(hasattr(obj, "fd"))
 
     def test_13_verified_fixture_length_and_metadata_mismatch_constructor_rejects(self):
+        # All public constructor calls now refuse, regardless of argument
+        # validity; only verify_and_seal can issue a trusted handle.
         with self.accept() as f:
-            with self.assertRaisesRegex(gate.TrustRejected,"Inconsistent"):
-                gate.SealedFixture(f.fd,f.metadata,1)
-            with self.assertRaisesRegex(gate.TrustRejected,"Inconsistent"):
-                gate.SealedFixture(f.fd,{"artifact_size":len(GOOD)},len(GOOD))
-            with self.assertRaisesRegex(gate.TrustRejected,"Inconsistent"):
-                gate.SealedFixture(f.fd,f.metadata,True)
+            for args in ((f._fd,f.metadata,1),
+                         (f._fd,{"artifact_size":len(GOOD)},len(GOOD)),
+                         (f._fd,f.metadata,True),
+                         (f._fd,f.metadata,len(GOOD))):
+                with self.subTest(args=args):
+                    with self.assertRaisesRegex(gate.TrustRejected,"verified signature"):
+                        gate.SealedFixture(*args)
             self.assertEqual(f.read(),GOOD)
 
     def test_14_original_20_attacks_still_present_and_new_negative_18(self):
@@ -266,41 +270,50 @@ class IndependentPR39QA(unittest.TestCase):
         self.assertIn("test_08_external_caller_key_origin_is_a_trust_boundary",source)
         self.assertIn("test_19_trusted_time_is_caller_policy",source)
 
-    def test_15_public_constructor_can_wrap_unsigned_unsealed_fd_positive_gap(self):
-        # POSITIVE P2: a direct constructor accepts a fabricated "verified"
-        # metadata record with no signature check and a REGULAR FILE FD
-        # without inspecting required seal flags or matching digest.
-        # No production installer uses it; a future trust API MUST NOT
-        # equate the object type with an authenticated/sealed provenance.
-        forged=gate.VerifiedMetadata(**{**self.fields,"platform":"windows",
-                                        "artifact_sha256":"0"*64})
+    def test_15_direct_constructor_unsigned_fd_rejected_negative_acceptance(self):
+        # This was a POSITIVE unsealed fabricated-object reproduction in
+        # frozen QA PR #40. NEW remediation: the public constructors refuse
+        # unsigned claims, and do not steal/close caller-owned foreign FD.
+        with self.assertRaisesRegex(gate.TrustRejected,"Ed25519"):
+            gate.VerifiedMetadata(**{**self.fields,"platform":"windows",
+                                      "artifact_sha256":"0"*64})
         ordinary=os.open(self.file,os.O_RDONLY|os.O_CLOEXEC)
-        with gate.SealedFixture(ordinary,forged,len(GOOD)) as fabricated:
-            self.assertEqual(fabricated.metadata.platform,"windows")
-            self.assertEqual(fabricated.read(),GOOD)
-            with self.assertRaises(OSError):
-                fcntl.fcntl(fabricated.fd,fcntl.F_GET_SEALS)
-
-    def test_16_closed_exposed_fd_reuse_returns_foreign_bytes_positive_gap(self):
-        # POSITIVE P2: downstream can os.close(exposed_fd), and the kernel
-        # may recycle the descriptor number for an unrelated unsealed file.
-        # read() checks ONLY length, not FD identity/seals/digest on every
-        # call. This is NOT a bypass of a still-open sealed memfd.
-        forged_path=self.root/"foreign-reused-fd"
-        forged_bytes=b"X"*len(GOOD)
-        forged_path.write_bytes(forged_bytes)
+        try:
+            with self.assertRaisesRegex(gate.TrustRejected,"verified signature"):
+                gate.SealedFixture(ordinary,dict(self.fields),len(GOOD))
+            self.assertEqual(os.pread(ordinary,len(GOOD),0),GOOD)
+        finally:
+            os.close(ordinary)
         with self.accept() as artifact:
-            number=artifact.fd
-            os.close(number)
-            foreign=os.open(forged_path,os.O_RDONLY|os.O_CLOEXEC)
-            if foreign!=number:
-                os.dup2(foreign,number)
-                os.close(foreign)
+            self.assertFalse(hasattr(artifact,"fd"))
+            self.assertEqual(artifact.read(),GOOD)
+
+    def test_16_private_fd_number_reuse_fail_closed_preserves_foreign_fd(self):
+        # Also originally POSITIVE in frozen #40. The public .fd is GONE;
+        # here a white-box malicious same-interpreter actor reaches _fd.
+        # Refuse foreign bytes and do not close the reused foreign number.
+        foreign_path=self.root/"foreign-reused-fd"
+        foreign_bytes=b"X"*len(GOOD)
+        foreign_path.write_bytes(foreign_bytes)
+        artifact=self.accept()
+        self.assertFalse(hasattr(artifact,"fd"))
+        number=artifact._fd
+        os.close(number)
+        foreign=os.open(foreign_path,os.O_RDONLY|os.O_CLOEXEC)
+        if foreign!=number:
+            os.dup2(foreign,number)
+            os.close(foreign)
+        try:
             self.assertEqual(os.fstat(number).st_size,len(GOOD))
-            self.assertEqual(artifact.read(),forged_bytes)
-            artifact.close()
-            with self.assertRaises(OSError):
-                os.fstat(number)
+            with self.assertRaisesRegex(gate.TrustRejected,"FD"):
+                artifact.read()
+            with self.assertRaisesRegex(gate.TrustRejected,"foreign FD preserved"):
+                artifact.close()
+            self.assertEqual(os.pread(number,len(GOOD),0),foreign_bytes)
+            artifact.close()  # repeated close cannot close foreign
+            self.assertEqual(os.pread(number,len(GOOD),0),foreign_bytes)
+        finally:
+            os.close(number)
 
     def test_17_frozen_python_fields_low_level_setattr_is_not_os_security(self):
         # POSITIVE documented threat boundary: dataclass frozen is an

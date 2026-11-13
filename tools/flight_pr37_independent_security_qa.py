@@ -85,15 +85,15 @@ class PR37IndependentSignedQA(unittest.TestCase):
                              hashlib.sha256(CLEAN).hexdigest())
             seals = (fcntl.F_SEAL_WRITE | fcntl.F_SEAL_GROW |
                      fcntl.F_SEAL_SHRINK | fcntl.F_SEAL_SEAL)
-            self.assertEqual(fcntl.fcntl(data.fd, fcntl.F_GET_SEALS) & seals, seals)
+            self.assertEqual(fcntl.fcntl(data._fd, fcntl.F_GET_SEALS) & seals, seals)
             with self.assertRaises(OSError):
-                os.pwrite(data.fd, b"tamper", 0)
+                os.pwrite(data._fd, b"tamper", 0)
             with self.assertRaises(OSError):
-                os.ftruncate(data.fd, 0)
+                os.ftruncate(data._fd, 0)
             with self.assertRaises((OSError, ValueError)):
-                mmap.mmap(data.fd, len(CLEAN), access=mmap.ACCESS_WRITE)
-            self.assertEqual(os.pread(data.fd, len(CLEAN), 0), CLEAN)
-            fd = data.fd
+                mmap.mmap(data._fd, len(CLEAN), access=mmap.ACCESS_WRITE)
+            self.assertEqual(os.pread(data._fd, len(CLEAN), 0), CLEAN)
+            fd = data._fd
         with self.assertRaises(OSError):
             os.fstat(fd)
         with self.assertRaises(gate.TrustRejected):
@@ -232,7 +232,7 @@ class PR37IndependentSignedQA(unittest.TestCase):
         with self.accept() as artifact:
             self.file.write_bytes(WRONG)
             self.assertEqual(artifact.read(),CLEAN)
-            fd2=os.dup(artifact.fd)
+            fd2=os.dup(artifact._fd)
             try:
                 self.assertEqual(os.pread(fd2,len(CLEAN),0),CLEAN)
                 with self.assertRaises(OSError):
@@ -324,7 +324,7 @@ class PR37IndependentSignedQA(unittest.TestCase):
             self.assertNotIn("nested", artifact.metadata)
             self.assertEqual(artifact.verified_length, len(CLEAN))
             self.assertEqual(artifact.read(), CLEAN)
-            self.assertEqual(os.pread(artifact.fd, len(CLEAN), 0), CLEAN)
+            self.assertEqual(os.pread(artifact._fd, len(CLEAN), 0), CLEAN)
 
     def test_18b_signed_nested_metadata_is_denied(self):
         # The signature may be valid, but arbitrary mutable nested objects

@@ -45,7 +45,7 @@ class TrustRejected(RuntimeError):
     """Refuse unsigned, untrusted, malformed, or inconsistent fixture bytes."""
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, init=False)
 class VerifiedMetadata(Mapping):
     """Immutable, flat, typed snapshot of previously signature-verified policy.
 
@@ -68,6 +68,12 @@ class VerifiedMetadata(Mapping):
     expires_at: int
     source_commit: str
     key_id: str
+
+    def __init__(self, *_args, **_kwargs):
+        # An arbitrary caller-provided record is NOT evidence of a verified
+        # signature. Only verify_metadata() may mint this API-level record.
+        # Hostile code in the same interpreter can still use Python reflection.
+        reject("VerifiedMetadata requires an Ed25519 signature verification")
 
     def __iter__(self):
         return iter(field.name for field in fields(self))
@@ -178,7 +184,10 @@ def verify_metadata(raw, signature, trust_roots, *, expected_platform,
         reject("Ed25519 signature verification failed")
     # Create a detached typed record; never publish the mutable JSON parser
     # dict, even transiently, as downstream authorisation metadata.
-    return VerifiedMetadata(**value)
+    result = object.__new__(VerifiedMetadata)
+    for field in fields(VerifiedMetadata):
+        object.__setattr__(result, field.name, value[field.name])
+    return result
 
 
 def _open_source_once(source, runner):
@@ -214,63 +223,122 @@ def _write_all(fd, data):
         position += written
 
 
-@dataclass(frozen=True, slots=True)
-class SealedFixture:
-    """Frozen verified-FD handle; close() is the only internal state change.
+_REQUIRED_SEALS = (fcntl.F_SEAL_WRITE | fcntl.F_SEAL_GROW
+                   | fcntl.F_SEAL_SHRINK | fcntl.F_SEAL_SEAL)
 
-    Neither metadata nor the verified byte count can be reassigned through
-    normal Python attribute writes. A hostile same-process user can bypass
-    Python language immutability; this remains CI-only, NOT an OS trust wall.
+
+@dataclass(frozen=True, slots=True, init=False)
+class SealedFixture:
+    """CI-only verified artifact, never directly constructible.
+
+    Its numeric OS descriptor is private and NEVER returned by the public
+    API. White-box tests can access _fd only to exercise hostile interpreter
+    behaviour; this is NOT a process/same-UID isolation boundary.
     """
     _fd: int | None
     metadata: VerifiedMetadata
     _verified_length: int
+    _owned_identity: tuple[int, int]
+    _sealed_digest: str
 
-    def __post_init__(self):
-        if (type(self.metadata) is not VerifiedMetadata
-                or type(self._verified_length) is not int
-                or self._verified_length <= 0
-                or self._verified_length != self.metadata.artifact_size):
-            reject("Inconsistent immutable sealed fixture length/metadata")
-
-    @property
-    def fd(self):
-        if self._fd is None:
-            reject("Verified descriptor has been closed")
-        return self._fd
+    def __init__(self, *_args, **_kwargs):
+        reject("SealedFixture requires verified signature and sealed FD")
 
     @property
     def verified_length(self):
-        """Validated length of the copied, sealed bytes (not mutable metadata)."""
         return self._verified_length
 
     def metadata_copy(self):
-        """Editable downstream *copy*, never used as an authorisation source."""
         return self.metadata.to_dict()
 
+    def _checked_owned_fd(self):
+        fd = self._fd
+        if fd is None:
+            reject("Verified descriptor has been closed")
+        try:
+            info = os.fstat(fd)
+            seals = fcntl.fcntl(fd, fcntl.F_GET_SEALS)
+            identity = (info.st_dev, info.st_ino)
+            length = info.st_size
+        except (OSError, AttributeError, TypeError):
+            reject("Owned sealed FD identity/seals/length invalid or replaced")
+        if (identity != self._owned_identity
+                or length != self._verified_length
+                or (seals & _REQUIRED_SEALS) != _REQUIRED_SEALS):
+            reject("Owned sealed FD identity/seals/length mismatch")
+        return fd
+
     def read(self):
-        fd = self.fd
-        # Bind reads to the verified byte count, not a user-editable
-        # manifest mapping or a caller-controlled length argument.
-        if os.fstat(fd).st_size != self._verified_length:
-            reject("Sealed FD no longer matches verified length")
-        raw = os.pread(fd, self._verified_length, 0)
+        fd = self._checked_owned_fd()
+        try:
+            raw = os.pread(fd, self._verified_length, 0)
+        except OSError:
+            reject("Owned sealed FD read failed")
         if len(raw) != self._verified_length:
             reject("Truncated sealed FD read")
+        if hashlib.sha256(raw).hexdigest() != self._sealed_digest:
+            reject("Owned sealed FD digest mismatch")
+        # Catch a deterministic replacement during the read, too.
+        self._checked_owned_fd()
         return raw
 
     def close(self):
         fd = self._fd
-        if fd is not None:
-            # Internal lifetime transition of this otherwise frozen record.
-            object.__setattr__(self, "_fd", None)
-            os.close(fd)
+        if fd is None:
+            return
+        # Remove the owner's pointer before OS close, preventing accidental
+        # double-close on the same object. If a *private* FD was stolen and
+        # reused, do not close another party's FD. There remains an inherent
+        # cross-thread close/check race in hostile same-process Python.
+        object.__setattr__(self, "_fd", None)
+        try:
+            info = os.fstat(fd)
+            seals = fcntl.fcntl(fd, fcntl.F_GET_SEALS)
+        except OSError:
+            reject("Owned FD already closed/replaced; foreign FD preserved")
+        if ((info.st_dev, info.st_ino) != self._owned_identity
+                or info.st_size != self._verified_length
+                or (seals & _REQUIRED_SEALS) != _REQUIRED_SEALS):
+            reject("Owned FD replaced; foreign FD preserved")
+        os.close(fd)
 
     def __enter__(self):
+        self._checked_owned_fd()
         return self
 
     def __exit__(self, *_):
         self.close()
+
+
+def _mint_verified_fixture(fd, metadata, length):
+    """Internal final gate: signed policy + completed sealed byte identity.
+
+    This is called only at the end of verify_and_seal. It defensively checks
+    the exact source FD again, so an ordinary file can never be wrapped by
+    public direct constructor calls. Python module-private names are not an
+    adversarial same-process isolation boundary.
+    """
+    if type(metadata) is not VerifiedMetadata or type(length) is not int:
+        reject("Invalid signed metadata / verified byte count")
+    if length != metadata.artifact_size or length <= 0:
+        reject("Inconsistent immutable sealed fixture length/metadata")
+    try:
+        info = os.fstat(fd)
+        seals = fcntl.fcntl(fd, fcntl.F_GET_SEALS)
+        raw = os.pread(fd, length, 0)
+    except OSError:
+        reject("Verified fixture requires an owned sealed FD")
+    if (info.st_size != length or len(raw) != length
+            or (seals & _REQUIRED_SEALS) != _REQUIRED_SEALS
+            or hashlib.sha256(raw).hexdigest() != metadata.artifact_sha256):
+        reject("Verified fixture FD seals/digest/length mismatch")
+    result = object.__new__(SealedFixture)
+    object.__setattr__(result, "_fd", fd)
+    object.__setattr__(result, "metadata", metadata)
+    object.__setattr__(result, "_verified_length", length)
+    object.__setattr__(result, "_owned_identity", (info.st_dev, info.st_ino))
+    object.__setattr__(result, "_sealed_digest", metadata.artifact_sha256)
+    return result
 
 
 def verify_and_seal(source, metadata_bytes, signature, trusted_keys, *,
@@ -338,7 +406,7 @@ def verify_and_seal(source, metadata_bytes, signature, trusted_keys, *,
         # copied is read from the successfully sealed FD and its digest was
         # checked against the original Ed25519-authorised manifest above.
         # Freeze that verified length in the returned object.
-        output = SealedFixture(staged_fd, metadata, len(copied))
+        output = _mint_verified_fixture(staged_fd, metadata, len(copied))
         staged_fd = None
         return output
     finally:

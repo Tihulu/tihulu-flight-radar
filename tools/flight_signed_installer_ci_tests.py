@@ -84,11 +84,11 @@ class SignedFixtureCI(unittest.TestCase):
             self.assertEqual(artifact.metadata["sequence"], 8)
             required = (fcntl.F_SEAL_WRITE | fcntl.F_SEAL_GROW |
                         fcntl.F_SEAL_SHRINK | fcntl.F_SEAL_SEAL)
-            self.assertEqual(fcntl.fcntl(artifact.fd, fcntl.F_GET_SEALS)
+            self.assertEqual(fcntl.fcntl(artifact._fd, fcntl.F_GET_SEALS)
                              & required, required)
             with self.assertRaises(OSError):
-                os.pwrite(artifact.fd, b"ATTACK", 0)
-            fd = artifact.fd
+                os.pwrite(artifact._fd, b"ATTACK", 0)
+            fd = artifact._fd
         with self.assertRaises(OSError):
             os.fstat(fd)
         with self.assertRaises(gate.TrustRejected):
@@ -336,7 +336,7 @@ class SignedFixtureCI(unittest.TestCase):
             with patch.object(gate.os, "pread", new=recorded):
                 result = artifact.read()
             self.assertEqual(result, VALID)
-            self.assertEqual(calls, [(artifact.fd, len(VALID), 0)])
+            self.assertEqual(calls, [(artifact._fd, len(VALID), 0)])
             self.assertEqual(artifact.verified_length, len(VALID))
 
     def test_28_reject_forced_sealed_fd_length_drift(self):
@@ -345,7 +345,7 @@ class SignedFixtureCI(unittest.TestCase):
             real_fstat = gate.os.fstat
             def swapped_stat(fd):
                 original = real_fstat(fd)
-                if fd == artifact.fd:
+                if fd == artifact._fd:
                     stat_clone = Mock()
                     stat_clone.st_size = original.st_size + 1
                     return stat_clone
@@ -369,6 +369,81 @@ class SignedFixtureCI(unittest.TestCase):
         self.assertEqual(meta.key_id, "fixture-root")
         self.assertEqual(len(meta), len(gate.FIELDS))
         self.assertNotIn("injected", meta)
+
+
+    def test_30_verified_policy_and_artifact_direct_constructors_denied(self):
+        # Direct data class creation must NOT assert signature provenance.
+        from dataclasses import FrozenInstanceError
+        with self.assertRaisesRegex(gate.TrustRejected, "Ed25519"):
+            gate.VerifiedMetadata(**self.metadata)
+        with self.verify() as artifact:
+            with self.assertRaisesRegex(gate.TrustRejected, "verified signature"):
+                gate.SealedFixture(artifact._fd, artifact.metadata, len(VALID))
+            self.assertFalse(hasattr(artifact, "fd"))
+            with self.assertRaises(FrozenInstanceError):
+                artifact._fd = -1
+            self.assertEqual(artifact.read(), VALID)
+
+    def test_31_unsealed_ordinary_fd_rejected_by_constructor(self):
+        ordinary = os.open(self.file, os.O_RDONLY | os.O_CLOEXEC)
+        try:
+            with self.assertRaisesRegex(gate.TrustRejected, "verified signature"):
+                gate.SealedFixture(ordinary, {"artifact_size": len(VALID)}, len(VALID))
+            self.assertEqual(os.pread(ordinary, len(VALID), 0), VALID)
+        finally:
+            os.close(ordinary)
+
+    def test_32_private_fd_reuse_rejected_without_closing_foreign(self):
+        # White-box same-process attack bypasses private convention; original
+        # P2 caused foreign bytes read and foreign FD closed. New API refuses.
+        foreign = self.root / "foreign-reused-handle.bin"
+        foreign.write_bytes(b"X" * len(VALID))
+        artifact = self.verify()
+        number = artifact._fd
+        os.close(number)
+        replacement = os.open(foreign, os.O_RDONLY | os.O_CLOEXEC)
+        if replacement != number:
+            os.dup2(replacement, number)
+            os.close(replacement)
+        try:
+            with self.assertRaisesRegex(gate.TrustRejected, "FD"):
+                artifact.read()
+            with self.assertRaisesRegex(gate.TrustRejected, "foreign FD preserved"):
+                artifact.close()
+            self.assertEqual(os.pread(number, len(VALID), 0), b"X" * len(VALID))
+            artifact.close()  # idempotent; never close reused foreign number
+        finally:
+            os.close(number)
+
+    def test_33_sealed_fd_identity_drift_is_rejected(self):
+        with self.verify() as artifact:
+            with patch.object(gate.os, "fstat", wraps=os.fstat) as spy:
+                self.assertEqual(artifact.read(), VALID)
+                self.assertGreaterEqual(spy.call_count, 2)
+            real_fstat = os.fstat
+            def drift(fd):
+                st = real_fstat(fd)
+                if fd == artifact._fd:
+                    from unittest.mock import Mock
+                    return Mock(st_dev=st.st_dev, st_ino=st.st_ino + 100,
+                                st_size=st.st_size)
+                return st
+            with patch.object(gate.os, "fstat", new=drift):
+                with self.assertRaisesRegex(gate.TrustRejected, "identity"):
+                    artifact.read()
+            self.assertEqual(artifact.read(), VALID)
+
+    def test_34_verified_read_digest_checked_every_time(self):
+        with self.verify() as artifact:
+            old_pread = os.pread
+            def injected(fd, length, offset):
+                if fd == artifact._fd:
+                    return b"Y" * len(VALID)
+                return old_pread(fd, length, offset)
+            with patch.object(gate.os, "pread", new=injected):
+                with self.assertRaisesRegex(gate.TrustRejected, "digest"):
+                    artifact.read()
+            self.assertEqual(artifact.read(), VALID)
 
 
 if __name__ == "__main__":
