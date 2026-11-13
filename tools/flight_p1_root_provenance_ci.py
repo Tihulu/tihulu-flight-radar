@@ -37,6 +37,7 @@ ARTNAME = re.compile(r"[a-z0-9][a-z0-9_.-]{0,79}\Z")
 ROOT_FIELDS = frozenset((
     "schema", "domain", "version", "issued_at", "expires_at",
     "threshold", "root_keys", "role_keys", "revoked_key_ids",
+    "revoked_key_fingerprints",
     "source_repo", "source_ref", "builder_workflow",
 ))
 SOURCE_FIELDS = frozenset(("schema", "key_id", "repo", "ref", "commit", "tree_sha256"))
@@ -121,6 +122,36 @@ def _key_map(obj, label):
     return result
 
 
+def key_fingerprint(public_key):
+    """Domain-separated SHA-256 of the immutable 32-byte Ed25519 public key.
+
+    Revocation attaches to KEY MATERIAL, never merely the replaceable ID.
+    No private key, production signing authority or secret is constructed.
+    """
+    if type(public_key) is not bytes or len(public_key) != 32:
+        deny("Invalid Ed25519 public key material for fingerprint")
+    return hashlib.sha256(
+        b"TIHULU_FLIGHT_ED25519_KEY_TOMBSTONE_V1\\x00".replace(b"\\x00", b"\x00")
+        + public_key
+    ).hexdigest()
+
+
+def _revocation_fingerprints(value, revoked_ids):
+    """Signed ID-to-material tombstones, canonical and complete.
+
+    Old revoked IDs with unknown original public bytes MUST have an
+    authenticated fingerprint supplied by the original signed policy.
+    """
+    if type(value) is not dict or set(value) != set(revoked_ids):
+        deny("Signed key fingerprint ledger must cover exact revoked IDs")
+    for key_id, fingerprint in value.items():
+        if not _name(key_id) or not _name(fingerprint, HEX32):
+            deny("Invalid signed revoked key fingerprint")
+    if len(set(value.values())) != len(value):
+        deny("Revocation fingerprint ledger aliases revoked key material")
+    return dict(value)
+
+
 def _root_roster(policy):
     root = _key_map(policy["root_keys"], "root")
     roles = policy["role_keys"]
@@ -185,6 +216,7 @@ class RootAuthority:
     root_keys: object
     role_keys: object
     revoked_key_ids: frozenset
+    revoked_key_fingerprints: object
     source_repo: str
     source_ref: str
     builder_workflow: str
@@ -221,9 +253,12 @@ def _quorum(raw, signatures, old_roots, old_threshold, new_roots, new_threshold)
         if not _name(key_id):
             deny("Invalid root endorser key identifier")
         _verify(authorized[key_id], _sig_bytes(raw_sig), ROOT_DOMAIN, raw)
-    if len(set(signatures) & set(old_roots)) < old_threshold:
+    # Count DISTINCT ED25519 PUBLIC KEY MATERIAL, not attacker-chosen aliases.
+    old_signed_material = {old_roots[k] for k in signatures if k in old_roots}
+    new_signed_material = {new_roots[k] for k in signatures if k in new_roots}
+    if len(old_signed_material) < old_threshold:
         deny("Previous trusted root threshold not met")
-    if len(set(signatures) & set(new_roots)) < new_threshold:
+    if len(new_signed_material) < new_threshold:
         deny("New root threshold not met")
 
 
@@ -269,6 +304,11 @@ def verify_root_policy(raw, endorsements, *, now, minimum_version,
     active = set(new_roots) | set().union(*(set(roles[r]) for r in ROLES))
     if active & set(revoked):
         deny("Revoked signer cannot retain an active authority")
+    ledger = _revocation_fingerprints(value["revoked_key_fingerprints"], revoked)
+    active_keys = {**new_roots, **{k: v for r in ROLES for k, v in roles[r].items()}}
+    denied_material = set(ledger.values())
+    if any(key_fingerprint(pub) in denied_material for pub in active_keys.values()):
+        deny("Revoked Ed25519 key material/fingerprint cannot regain any authority")
     if value["version"] < minimum_version:
         deny("Root policy rollback rejected by trusted caller floor")
     if previous is None:
@@ -288,10 +328,22 @@ def verify_root_policy(raw, endorsements, *, now, minimum_version,
             deny("Root policy issued_at regressed")
         if not previous.revoked_key_ids.issubset(set(revoked)):
             deny("Root key revocation ledger cannot shrink")
-        old_active = set(previous.root_keys) | set().union(
-            *(set(previous.role_keys[r]) for r in ROLES))
+        # Every prior authenticated material tombstone is immutable
+        # across ALL epochs, including historical IDs no longer active.
+        for retired_id, fp in previous.revoked_key_fingerprints.items():
+            if ledger.get(retired_id) != fp:
+                deny("Root key material fingerprint ledger cannot shrink/change")
+        old_active_keys = {
+            **dict(previous.root_keys),
+            **{k: v for r in ROLES for k, v in previous.role_keys[r].items()},
+        }
+        old_active = set(old_active_keys)
         if not (old_active - active).issubset(set(revoked)):
             deny("Retired authority must be explicitly revoked")
+        for retired_id in old_active - active:
+            expected = key_fingerprint(old_active_keys[retired_id])
+            if ledger.get(retired_id) != expected:
+                deny("Retired authority fingerprint tombstone missing or forged")
         for key_id in old_active & active:
             old_role = next((r for r in ROLES
                              if key_id in previous.role_keys[r]), "root")
@@ -311,7 +363,8 @@ def verify_root_policy(raw, endorsements, *, now, minimum_version,
     values = (
         value["version"], value["threshold"], MappingProxyType(dict(new_roots)),
         MappingProxyType({r: MappingProxyType(dict(roles[r])) for r in ROLES}),
-        frozenset(revoked), value["source_repo"], value["source_ref"],
+        frozenset(revoked), MappingProxyType(dict(ledger)),
+        value["source_repo"], value["source_ref"],
         value["builder_workflow"], value["issued_at"], value["expires_at"],
     )
     for field_name, validated in zip(RootAuthority.__dataclass_fields__, values):
