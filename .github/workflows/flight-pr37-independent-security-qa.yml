@@ -1,0 +1,33 @@
+name: Agent 06 independent Flight PR37 signed-FD security QA (disposable)
+
+on:
+  pull_request:
+    paths:
+      - 'tools/flight_pr37_independent_security_qa.py'
+      - '.github/workflows/flight-pr37-independent-security-qa.yml'
+      - 'tools/flight_signed_installer_ci_prototype.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  independent-signed-fd:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GITHUB_ACTIONS: 'true'
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned CI-only Ed25519 verifier dependency
+        run: python -m pip install --disable-pip-version-check --only-binary=:all: 'cryptography==46.0.3'
+      - name: Compile new QA and original prototype exactly as checked out
+        run: python -m py_compile tools/flight_pr37_independent_security_qa.py tools/flight_signed_installer_ci_prototype.py
+      - name: Execute independent Ed25519 / sealed FD / replay / trust-boundary attacks
+        run: python -m tools.flight_pr37_independent_security_qa
+      - name: Ensure no changes to checked-out repository
+        run: git diff --exit-code
