@@ -432,5 +432,42 @@ class RealUIDBrokerTests(unittest.TestCase):
         self.assertEqual(collision.read_bytes(),foreign)
 
 
+
+    def test_19_malformed_ipc_fd_closed_without_leaking_into_broker(self):
+        """Malformed signed-frame field cannot leak an accepted SCM_RIGHTS FD."""
+        badframe = b.canonical({
+            "metadata":"@@not-base64@@", "release_sig":"AA==",
+            "ticket":"AA==", "ticket_sig":"AA=="})
+        procfds = Path("/proc") / str(self.worker.pid) / "fd"
+        baseline = len(list(procfds.iterdir()))
+        reply = self.request(badframe, BLOB)
+        self.assertFalse(reply["ok"])
+        self.assertEqual(len(list(procfds.iterdir())), baseline)
+        self.assertEqual(self.ledger(), [])
+
+    def test_20_crash_orphaned_activation_temp_does_not_block_restart(self):
+        """Recovery uses new exclusive temp and never erases unknown old bytes."""
+        self.stop_server()
+        raw, sig, ticket, authsig = self.payload()[2]
+        fd = os.memfd_create("agent08-orphan-test", os.MFD_ALLOW_SEALING)
+        try:
+            os.write(fd,BLOB)
+            fcntl.fcntl(fd,fcntl.F_ADD_SEALS,b.REQUIRED_SEALS)
+            model=b.Broker(self.root)
+            try:
+                with self.assertRaises(b.Cut):
+                    model.activate(fd,raw,sig,ticket,authsig,
+                                   now=NOW,cut="after_journal")
+            finally:
+                model.close()
+        finally:
+            os.close(fd)
+        old=self.root/"private"/"active"/"next-00000000000000000050.tmp"
+        old.write_bytes(b"FOREIGN-ORPHAN-DO-NOT-DELETE")
+        self.start_server()
+        self.assertEqual(self.active()["seq"],50)
+        self.assertEqual(old.read_bytes(),b"FOREIGN-ORPHAN-DO-NOT-DELETE")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
