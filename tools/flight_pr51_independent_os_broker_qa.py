@@ -269,7 +269,7 @@ print(json.dumps({"result":r,"parent":initiator,"child":pid,"status":status}),fl
         recovery protocol / ownership ledger, not manual 'rm' in production.
         """
         self.stop_server()
-        manifest,sig,ticket,ticket_sig=self.payload()[2]
+        frame,data,(manifest,sig,ticket,ticket_sig)=self.payload()
         fd=os.memfd_create("agent06-real-uid-orphan",os.MFD_ALLOW_SEALING)
         try:
             os.write(fd,BLOB)
@@ -283,8 +283,7 @@ print(json.dumps({"result":r,"parent":initiator,"child":pid,"status":status}),fl
         self.assertTrue(self._release_path(50,BLOB).exists())
         self.assertEqual(self.ledger(),[])
         self.start_server()
-        frame,data,_=self.payload()
-        retry=self.request(frame,data)
+        retry=self.request(frame,data)  # EXACT same issued ticket+signed manifest
         self.assertFalse(retry["ok"])
         self.assertEqual(self.ledger(),[])
         self.assertIsNone(self.active())
