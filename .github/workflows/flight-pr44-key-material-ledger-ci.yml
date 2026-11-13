@@ -1,0 +1,42 @@
+name: Flight PR44 signed key-material revocation and rotation CI
+
+on:
+  push:
+    branches:
+      - fix/flight-pr44-key-material-ledger-20261113
+  pull_request:
+    paths:
+      - 'tools/flight_p1_root_provenance_ci.py'
+      - 'tools/flight_p1_root_provenance_ci_tests.py'
+      - 'tools/flight_pr44_key_material_qa_derived.py'
+      - '.github/workflows/flight-pr44-key-material-ledger-ci.yml'
+      - 'docs/FLIGHT_PR44_KEY_MATERIAL_REVOCATION_GATES.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  material_revocation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      CI: 'true'
+      GITHUB_ACTIONS: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install CI-only pinned Ed25519 verification dependency
+        run: |
+          python -m pip install --disable-pip-version-check --only-binary=:all: 'cryptography==46.0.3'
+      - name: Compile original root engine, legacy and QA-derived strict negative suites
+        run: |
+          python -m py_compile tools/flight_p1_root_provenance_ci.py tools/flight_p1_root_provenance_ci_tests.py tools/flight_pr44_key_material_qa_derived.py
+      - name: Preserve 34 original production trust fixture controls
+        run: python -m tools.flight_p1_root_provenance_ci_tests
+      - name: Run Agent06 PR46 attack-derived negative acceptance and multi-epoch tests
+        run: python -m tools.flight_pr44_key_material_qa_derived
+      - name: Verify tests did not mutate tracked repository files
+        run: git diff --exit-code
