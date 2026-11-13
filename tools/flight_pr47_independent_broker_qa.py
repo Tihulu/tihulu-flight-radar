@@ -403,5 +403,40 @@ class PR47IndependentBrokerQA(unittest.TestCase):
         self.assertNotIn("broker authorized",gate.__doc__.lower())
 
 
+    def test_33_POSITIVE_GAP_real_separate_sameuid_process_forces_unsigned_activation(self):
+        """Real child PROCESS, same kernel UID, not a Python monkeypatch:
+        overwrite same-UID-owned journal + activation + release with a
+        perfectly matching fake. Recovery says True WITHOUT validating any
+        Ed25519 signature of the new release. This deliberately proves P1
+        missing OS principal protection, not a real privileged broker exploit.
+        """
+        old=self.install()
+        forged=b"UNSIGNED-FOREIGN-ACTIVATION-BY-CHILD"
+        name="foreign-unsigned-child.bin"
+        pid=os.fork()
+        if pid==0:
+            try:
+                (self.path/"releases"/name).write_bytes(forged)
+                journal={"seq":9001,"release":name,
+                         "digest":hashlib.sha256(forged).hexdigest(),
+                         "previous":old}
+                (self.path/"journal"/"current.json").write_bytes(
+                    json.dumps(journal,sort_keys=True,separators=(",",":")).encode())
+                pointer={"seq":9001,"release":name}
+                (self.path/"activation"/"active.json").write_bytes(
+                    json.dumps(pointer,sort_keys=True,separators=(",",":")).encode())
+                os._exit(0)
+            except BaseException:
+                os._exit(38)
+        _,status=os.waitpid(pid,0)
+        self.assertTrue(os.WIFEXITED(status))
+        self.assertEqual(os.WEXITSTATUS(status),0)
+        self.assertTrue(self.broker.recover())
+        self.assertEqual(self.broker.pointer()[1]["release"],name)
+        self.assertEqual(self.broker.state()[1]["seq"],9001)
+        self.assertEqual((self.path/"releases"/old).read_bytes(),PAYLOAD)
+        self.assertEqual((self.path/"releases"/name).read_bytes(),forged)
+
+
 if __name__=="__main__":
     unittest.main(verbosity=2)
