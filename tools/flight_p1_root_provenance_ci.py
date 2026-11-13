@@ -131,7 +131,7 @@ def key_fingerprint(public_key):
     if type(public_key) is not bytes or len(public_key) != 32:
         deny("Invalid Ed25519 public key material for fingerprint")
     return hashlib.sha256(
-        b"TIHULU_FLIGHT_ED25519_KEY_TOMBSTONE_V1\\0" + public_key
+        b"TIHULU_FLIGHT_ED25519_KEY_TOMBSTONE_V1\0" + public_key
     ).hexdigest()
 
 
