@@ -425,3 +425,7 @@ class PR43IndependentQA(unittest.TestCase):
         self.assertNotEqual(pub(self.root_sk),pub(self.builder_sk))
         self.assertIn("CALLER",authority.__doc__)
         self.assertNotIn("private_key",self.root_policy)
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
