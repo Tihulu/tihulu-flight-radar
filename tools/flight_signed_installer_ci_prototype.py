@@ -258,10 +258,12 @@ class SealedFixture:
         try:
             info = os.fstat(fd)
             seals = fcntl.fcntl(fd, fcntl.F_GET_SEALS)
-        except OSError:
-            reject("Owned sealed FD invalid or replaced; do not use foreign bytes")
-        if ((info.st_dev, info.st_ino) != self._owned_identity
-                or info.st_size != self._verified_length
+            identity = (info.st_dev, info.st_ino)
+            length = info.st_size
+        except (OSError, AttributeError, TypeError):
+            reject("Owned sealed FD identity/seals/length invalid or replaced")
+        if (identity != self._owned_identity
+                or length != self._verified_length
                 or (seals & _REQUIRED_SEALS) != _REQUIRED_SEALS):
             reject("Owned sealed FD identity/seals/length mismatch")
         return fd
