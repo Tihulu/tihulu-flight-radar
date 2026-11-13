@@ -75,7 +75,7 @@ class P1RootProvenanceCI(unittest.TestCase):
         }
 
     def signed_policy(self, policy=None, endorsers=None):
-        raw = gate.canonical_bytes(self.root_policy if policy is None else policy)
+        raw = gate.canonical(self.root_policy if policy is None else policy)
         if endorsers is None:
             endorsers = ("root1", "root2")
         signatures = {
