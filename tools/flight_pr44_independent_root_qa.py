@@ -476,5 +476,47 @@ class IndependentPR44QA(unittest.TestCase):
         self.assertEqual(signed_release["materials_sha256"],"1"*64)
 
 
+    def test_30_POSITIVE_GAP_revoked_builder_public_key_reintroduced_under_new_id(self):
+        """New independent P2 candidate. Original PR45 same-ID resurrection
+        is denied by PR44; HOWEVER the same revoked secret/public key can
+        regain 'builder' authority under another ID. Revocation IDs persist
+        correctly, old+new root quorums and version advance are valid.
+        This MUST remain a POSITIVE breach witness, NOT scoped PASS.
+        """
+        old=self.make_policy(
+            revoked=("builder1",),builder_ids=("builder2",))
+        previous=self.auth_root(old)
+        self.assertIn("builder1",previous.revoked_key_ids)
+        self.keys["builder3"]=self.keys["builder1"]  # same old revoked bytes
+        new=self.new_policy(
+            revoked_key_ids=["builder1","builder2","root1"],
+            role_keys={**self.initial["role_keys"],
+                       "builder":self.root_map("builder3")})
+        self.assertNotIn("builder1",new["role_keys"]["builder"])
+        self.assertIn("builder1",new["revoked_key_ids"])
+        rot=self.rotate(new,previous=previous)
+        self.assertEqual(rot.role_keys["builder"]["builder3"],
+                         bytes.fromhex(public_hex(self.keys["builder1"])))
+        signed=self.bundle(rot,builder_signer="builder3")
+        approved=self.check(signed,minimum_root_version=2)
+        self.assertEqual(approved.root_version,2)
+
+    def test_31_POSITIVE_GAP_revoked_old_root_key_aliased_as_new_root_id(self):
+        """A removed root1 must be revoked by ID. A root4 record with the
+        SAME root1 public bytes currently meets the 'new' quorum, even
+        though root1 remains revoked. Thus 'old+new' roster key material
+        independence is not enforced across epochs.
+        """
+        self.keys["root4"]=self.keys["root1"]  # deliberate alias, test RAM
+        new=self.new_policy()
+        self.assertEqual(new["root_keys"]["root4"],
+                         self.initial["root_keys"]["root1"])
+        self.assertIn("root1",new["revoked_key_ids"])
+        root=self.rotate(new,signers=("root1","root2","root4"))
+        self.assertIn("root1",root.revoked_key_ids)
+        self.assertEqual(root.root_keys["root4"],
+                         bytes.fromhex(self.initial["root_keys"]["root1"]))
+
+
 if __name__=="__main__":
     unittest.main(verbosity=2)
