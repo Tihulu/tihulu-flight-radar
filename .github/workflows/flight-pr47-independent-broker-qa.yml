@@ -5,6 +5,9 @@ on:
     branches:
       - audit/flight-pr47-independent-broker-20261113
   pull_request:
+    paths:
+      - 'tools/flight_pr47_independent_broker_qa.py'
+      - '.github/workflows/flight-pr47-independent-broker-qa.yml'
   workflow_dispatch:
 
 permissions:
@@ -19,21 +22,29 @@ jobs:
       GITHUB_ACTIONS: 'true'
       PYTHONDONTWRITEBYTECODE: '1'
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout exact tested source without retaining credentials
+        uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - name: Setup pinned Python 3.12
+        uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install pinned disposable-only cryptographic test dependency
-        run: python -m pip install --disable-pip-version-check --only-binary=:all: 'cryptography==46.0.3'
+      - name: Install pinned disposable-only signature verifier dependency
+        run: |
+          python -m pip install --disable-pip-version-check --only-binary=:all: 'cryptography==46.0.3'
       - name: Compile exact code and independent negative tests
-        run: python -m py_compile tools/flight_p1_broker_ci_contract.py tools/flight_pr47_independent_broker_qa.py
-      - name: Run Agent 06 new SCM_RIGHTS SO_PEERCRED and same UID attack suite
-        run: python -m tools.flight_pr47_independent_broker_qa
+        run: |
+          python -m py_compile tools/flight_p1_broker_ci_contract.py tools/flight_pr47_independent_broker_qa.py
+      - name: Run independent SCM_RIGHTS SO_PEERCRED and same UID attack suite
+        run: |
+          python -m tools.flight_pr47_independent_broker_qa
       - name: Re-run original Agent 08 broker attack suite (28 cases)
-        run: python -m tools.flight_p1_broker_ci_tests
+        run: |
+          python -m tools.flight_p1_broker_ci_tests
       - name: Re-run frozen Agent 06 signed FD and constructor suite (18 cases)
-        run: python -m tools.flight_pr41_independent_security_qa
+        run: |
+          python -m tools.flight_pr41_independent_security_qa
       - name: Verify no tracked files changed on CI runner
-        run: git diff --exit-code
+        run: |
+          git diff --exit-code
