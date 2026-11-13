@@ -280,6 +280,8 @@ def verify_root_policy(raw, endorsements, *, now, minimum_version,
     else:
         if type(previous) is not RootAuthority:
             deny("Previous root must be already signature-authenticated")
+        if not previous.issued_at <= now <= previous.expires_at:
+            deny("Expired previous root requires manual offline recovery")
         if value["version"] != previous.version + 1:
             deny("Root rotation must advance exactly one version")
         if value["issued_at"] < previous.issued_at:
@@ -291,6 +293,12 @@ def verify_root_policy(raw, endorsements, *, now, minimum_version,
         if not (old_active - active).issubset(set(revoked)):
             deny("Retired authority must be explicitly revoked")
         for key_id in old_active & active:
+            old_role = next((r for r in ROLES
+                             if key_id in previous.role_keys[r]), "root")
+            new_role = next((r for r in ROLES
+                             if key_id in roles[r]), "root")
+            if old_role != new_role:
+                deny("Existing authority ID cannot change signer role")
             old_key = (dict(previous.root_keys)
                        | {k: v for r in ROLES for k, v in previous.role_keys[r].items()})[key_id]
             new_key = (new_roots
