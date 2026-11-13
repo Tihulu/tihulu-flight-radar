@@ -304,5 +304,22 @@ class PR37IndependentSignedQA(unittest.TestCase):
             self.assertEqual(os.pread(artifact.fd,len(CLEAN),0),CLEAN)
 
 
+    def test_19_trusted_time_is_caller_policy_not_clock_bootstrap(self):
+        # A signed envelope expired at NOW+900; a caller that supplies an
+        # earlier forged "now" accepts it. No trusted clock is implemented.
+        self.assert_rejected(now=NOW+901,regex="Expired")
+        with self.accept(now=NOW) as replayed:
+            self.assertEqual(replayed.read(),CLEAN)
+
+    def test_20_source_commit_is_signed_label_not_attestation(self):
+        # Validly signed metadata naming an arbitrary 40-hex commit has not
+        # been checked against any reproducible source/build inventory.
+        forged_identity={**self.fields,"source_commit":"f"*40}
+        raw,sig=self.envelope(fields=forged_identity)
+        with self.accept(raw=raw,sig=sig) as artifact:
+            self.assertEqual(artifact.metadata["source_commit"],"f"*40)
+            self.assertEqual(artifact.read(),CLEAN)
+
+
 if __name__=="__main__":
     unittest.main(verbosity=2)
