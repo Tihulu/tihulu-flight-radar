@@ -32,6 +32,12 @@ PREPARED_FIELDS = ("seq", "release", "digest", "manifest_hash",
                    "previous_digest")
 TICKET_FIELDS = old.FIELDS | frozenset((
     "manifest_sha256", "release_signature_sha256", "source_commit"))
+HANDOFF_FIELDS = (
+    "schema", "seq", "prepared_hash", "release", "digest",
+    "manifest_hash", "release_sig_hash", "previous_seq", "previous_digest",
+    "from_nonce", "from_ticket_hash", "from_pid", "from_start_ticks",
+    "to_nonce", "to_ticket_hash", "to_pid", "to_start_ticks")
+
 CLIENT_UID = 65534  # Disposable CI test principal; NOT product policy.
 
 
@@ -205,7 +211,170 @@ class BrokerV2(old.Broker):
             "previous_seq":previous["seq"] if previous else None,
             "previous_digest":previous["digest"] if previous else None}
 
-    def stage_or_retry(self, record, data, *, cut=None):
+    @staticmethod
+    def handoff_name(sequence):
+        if type(sequence) is not int or sequence < 0:
+            old.reject("invalid takeover sequence")
+        return "transfer-%020d.json" % sequence
+
+    def protected_preparation(self, sequence):
+        raw = old.read_file(
+            self.dirs["prepared"], self.prepared_name(sequence), maximum=4096)
+        if raw is None:
+            old.reject("no authenticated original prepared transaction")
+        record = self.verify_record(raw, PREPARED_FIELDS)
+        if (type(record["seq"]) is not int or record["seq"] != sequence
+                or type(record["nonce"]) is not str
+                or not old.NONCE.fullmatch(record["nonce"])):
+            old.reject("invalid original prepared transaction")
+        return raw, record
+
+    def protected_approval_for(self, nonce, receipt):
+        raw = old.read_file(
+            self.dirs["approval"], self.approval_name(nonce), maximum=4096)
+        if raw is None:
+            old.reject("missing protected original or replacement approval")
+        grant = self.verify_record(raw, APPROVAL_FIELDS)
+        if (type(grant["pid"]) is not int
+                or type(grant["start_ticks"]) is not int
+                or grant["start_ticks"] <= 0
+                or grant["uid"] != CLIENT_UID
+                or grant["nonce"] != nonce
+                or grant["seq"] != receipt["seq"]
+                or grant["ticket_hash"] != receipt["ticket_hash"]
+                or grant["manifest_hash"] != receipt["manifest_hash"]
+                or grant["release_sig_hash"] != receipt["release_sig_hash"]):
+            old.reject("original/replacement authority does not match prepared bytes")
+        return grant
+
+    @staticmethod
+    def original_identity_gone(grant):
+        """Explicit root-side process-death check, fail closed if ambiguous.
+
+        A zombie still in /proc is conservatively considered alive. Start ticks
+        are a CI PID-reuse hint, NOT a production pidfd/session guarantee.
+        """
+        pid = grant["pid"]
+        if type(pid) is not int or pid <= 0:
+            old.reject("untrusted original process identity")
+        try:
+            with open("/proc/%d/stat" % pid, encoding="ascii") as handle:
+                data = handle.read()
+        except FileNotFoundError:
+            return True
+        except OSError:
+            old.reject("original process identity cannot be verified")
+        try:
+            current_start = int(data.rsplit(")", 1)[1].split()[19])
+        except (ValueError, IndexError):
+            old.reject("unverifiable original process identity")
+        if current_start == grant["start_ticks"]:
+            old.reject("original approved process is still alive")
+        return True  # Previously approved PID has been recycled.
+
+    @staticmethod
+    def compare_immutable_prepared(original, replacement):
+        keys = ("seq", "release", "digest", "manifest_hash", "release_sig_hash",
+                "previous_seq", "previous_digest")
+        if any(original[k] != replacement[k] for k in keys):
+            old.reject("takeover would change original signed manifest/state")
+        if original["nonce"] == replacement["nonce"]:
+            old.reject("replacement must have independently signed NEW nonce")
+
+    def build_handoff(self, prepared_raw, original, replacement, new_pid):
+        """Recompute a full transfer authorization from ROOT-owned evidence."""
+        self.compare_immutable_prepared(original, replacement)
+        source = self.protected_approval_for(original["nonce"], original)
+        self.original_identity_gone(source)
+        destination = self.protected_approval_for(replacement["nonce"], replacement)
+        observed = pid_identity(new_pid)
+        if destination["pid"] != observed["pid"] or (
+                destination["start_ticks"] != observed["start_ticks"]):
+            old.reject("replacement sender not independently root approved")
+        if (source["pid"], source["start_ticks"]) == (
+                destination["pid"], destination["start_ticks"]):
+            old.reject("replacement is not a new approved session")
+        return {
+            "schema":1, "seq":original["seq"],
+            "prepared_hash":dig(prepared_raw),
+            "release":original["release"], "digest":original["digest"],
+            "manifest_hash":original["manifest_hash"],
+            "release_sig_hash":original["release_sig_hash"],
+            "previous_seq":original["previous_seq"],
+            "previous_digest":original["previous_digest"],
+            "from_nonce":original["nonce"],
+            "from_ticket_hash":original["ticket_hash"],
+            "from_pid":source["pid"], "from_start_ticks":source["start_ticks"],
+            "to_nonce":replacement["nonce"],
+            "to_ticket_hash":replacement["ticket_hash"],
+            "to_pid":destination["pid"],
+            "to_start_ticks":destination["start_ticks"]}
+
+    def authorize_takeover_from_root_test_authority(
+            self, manifest, release_sig, ticket, ticket_sig,
+            replacement_pid, *, now=old.CI_NOW):
+        """ROOT-ONLY independent handoff decision, never a client IPC command.
+
+        Requires BOTH independently root-approved original and new operations.
+        The original PID must be dead. Record is immutable, authenticated and
+        fsynced before new process can adopt a staged root-owned release.
+        """
+        old.guard()
+        with self.lock():
+            committed = self.commits()
+            previous = self.reconcile(committed)
+            meta = self.signed_release(
+                manifest, release_sig, previous=previous, now=now)
+            obj = self.authorize_v2(
+                ticket, ticket_sig, manifest, release_sig, meta, previous,
+                now=now)
+            if any(item["nonce"] == obj["nonce"] for item in committed):
+                old.reject("committed nonce cannot be transferred")
+            self.check_independent_approval(
+                obj, manifest, release_sig, ticket,
+                (replacement_pid, CLIENT_UID, CLIENT_UID))
+            original_raw, original = self.protected_preparation(meta.sequence)
+            release = "rel-%020d-%s.bin" % (
+                meta.sequence, meta.artifact_sha256[:16])
+            replacement = self.prepared_record(
+                obj, manifest, release_sig, ticket, meta, release, previous)
+            transfer = self.build_handoff(
+                original_raw, original, replacement, replacement_pid)
+            # If the root-owned orphan exists, validate it BEFORE authorizing
+            # adoption. A foreign or changed byte stays untouched on denial.
+            blob = old.read_file(self.dirs["release"], release)
+            if blob is not None and (
+                    len(blob) != meta.artifact_size
+                    or dig(blob) != meta.artifact_sha256):
+                old.reject("foreign/altered orphan cannot be transferred")
+            name = self.handoff_name(meta.sequence)
+            existing = old.read_file(self.dirs["handoff"], name, maximum=4096)
+            if existing is not None:
+                if self.verify_record(existing, HANDOFF_FIELDS) != transfer:
+                    old.reject("different/foreign transfer record already exists")
+                return transfer  # Idempotent EXACT root approval.
+            old.write_new(self.dirs["handoff"], name,
+                          self.signed_record(transfer))
+            return transfer
+
+    def assert_authenticated_takeover(
+            self, prepared_raw, original, replacement, credentials):
+        if (type(credentials) is not tuple or len(credentials) != 3
+                or credentials[1:] != (CLIENT_UID, CLIENT_UID)):
+            old.reject("kernel sender credentials missing for takeover")
+        transfer_raw = old.read_file(
+            self.dirs["handoff"], self.handoff_name(original["seq"]),
+            maximum=4096)
+        if transfer_raw is None:
+            old.reject("replacement lacks independent protected transfer")
+        transfer = self.verify_record(transfer_raw, HANDOFF_FIELDS)
+        expected = self.build_handoff(
+            prepared_raw, original, replacement, credentials[0])
+        if transfer != expected:
+            old.reject("authenticated transfer does not match new session")
+        return True
+
+    def stage_or_retry(self, record, data, *, credentials=None, cut=None):
         """Adopt only protected signed-prepared orphan; foreign bytes untouched.
 
         Receipt is HMAC-authenticated and committed BEFORE blob creation, so a
@@ -224,7 +393,10 @@ class BrokerV2(old.Broker):
         else:
             authenticated = self.verify_record(previous, PREPARED_FIELDS)
             if authenticated != record:
-                old.reject("foreign or mismatched authenticated prepare receipt")
+                # Strict unchanged original prepare; only a separately
+                # root-authorized, immutable handoff can replace ticket/nonce.
+                self.assert_authenticated_takeover(
+                    previous, authenticated, record, credentials)
         if existing is None:
             old.write_new(self.dirs["release"], record["release"], data)
         elif (len(existing) != len(data) or dig(existing) != record["digest"]
@@ -257,7 +429,8 @@ class BrokerV2(old.Broker):
                 meta.sequence, meta.artifact_sha256[:16])
             receipt = self.prepared_record(
                 obj, manifest, release_sig, ticket, meta, release, previous)
-            self.stage_or_retry(receipt, data, cut=cut)
+            self.stage_or_retry(
+                receipt, data, credentials=credentials, cut=cut)
             if cut == "after_release":
                 raise old.Cut("prepared release without journal")
             commit = {
