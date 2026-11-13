@@ -3,8 +3,9 @@
 
 Runs ONLY in a newly-created disposable GitHub Linux RUNNER_TEMP fixture.
 Ephemeral test signing keys stay in memory. The tests intentionally include
-POSITIVE demonstrations of residual production trust and API gaps: their PASS
-is not security approval. No installer, service or owner-machine operations.
+POSITIVE demonstrations of residual production trust gaps: their PASS
+is not security approval. The prior metadata-interface P2 reproducer is now a
+NEGATIVE acceptance assertion in the separate remediation branch. No installer, service or owner-machine operations.
 """
 from __future__ import annotations
 
@@ -287,21 +288,69 @@ class PR37IndependentSignedQA(unittest.TestCase):
         with self.accept(minimum=0) as artifact:
             self.assertEqual(artifact.metadata["sequence"],22)
 
-    def test_18_sealed_result_exposes_mutable_metadata_dictionary(self):
-        # P2 POSITIVE PROTOTYPE API ISSUE: metadata authorization was signed
-        # and verified, but output metadata is a writable plain Python dict.
-        # A naive downstream installer relying on it could be confused.
+    def test_18_verified_metadata_is_frozen_and_read_length_pinned(self):
+        # Previously a POSITIVE P2 vulnerability reproduction. In this
+        # new stacked remediation branch only, PASS is NEGATIVE acceptance:
+        # consumers cannot change the signed metadata or read byte count.
+        from dataclasses import FrozenInstanceError
         with self.accept() as artifact:
-            self.assertEqual(artifact.read(),CLEAN)
-            artifact.metadata["platform"]="windows"
-            artifact.metadata["architecture"]="arm64"
-            artifact.metadata["sequence"]=0
-            artifact.metadata["artifact_size"]=1
-            self.assertEqual(artifact.read(),CLEAN[:1])
-            self.assertEqual(artifact.metadata["platform"],"windows")
-            # No change to underlying sealed bytes; output metadata is not
-            # an authenticated immutable envelope to downstream consumers.
-            self.assertEqual(os.pread(artifact.fd,len(CLEAN),0),CLEAN)
+            meta = artifact.metadata
+            self.assertIsInstance(meta, gate.VerifiedMetadata)
+            self.assertNotIsInstance(meta, dict)
+            self.assertEqual(artifact.read(), CLEAN)
+            with self.assertRaises(TypeError):
+                meta["platform"] = "windows"
+            with self.assertRaises(TypeError):
+                meta["artifact_size"] = 1
+            with self.assertRaises(FrozenInstanceError):
+                meta.platform = "windows"
+            with self.assertRaises(FrozenInstanceError):
+                meta.sequence = 0
+            with self.assertRaises(FrozenInstanceError):
+                artifact.metadata = {"platform": "windows"}
+            with self.assertRaises(FrozenInstanceError):
+                artifact._verified_length = 1
+            copy = artifact.metadata_copy()
+            copy["platform"] = "windows"
+            copy["architecture"] = "arm64"
+            copy["sequence"] = 0
+            copy["artifact_size"] = 1
+            copy["nested"] = {"version": [1, 2, 3]}
+            copy["nested"]["version"].append(4)
+            self.assertEqual(artifact.metadata["platform"], "linux")
+            self.assertEqual(artifact.metadata["architecture"], "x86_64")
+            self.assertEqual(artifact.metadata["sequence"], 22)
+            self.assertEqual(artifact.metadata["artifact_size"], len(CLEAN))
+            self.assertNotIn("nested", artifact.metadata)
+            self.assertEqual(artifact.verified_length, len(CLEAN))
+            self.assertEqual(artifact.read(), CLEAN)
+            self.assertEqual(os.pread(artifact.fd, len(CLEAN), 0), CLEAN)
+
+    def test_18b_signed_nested_metadata_is_denied(self):
+        # The signature may be valid, but arbitrary mutable nested objects
+        # must never become an authorised policy snapshot.
+        for change in (
+            {"platform": {"nested": ["linux"]}},
+            {"artifact_size": [len(CLEAN)]},
+            {"architecture": {"nested": "x86_64"}},
+            {"extensions": {"mutable": ["injected"]}},
+        ):
+            with self.subTest(change=change):
+                raw, sig = self.envelope(fields={**self.fields, **change})
+                self.assert_rejected(raw=raw, sig=sig)
+
+    def test_18c_signed_policy_copy_is_independent_of_caller_inputs(self):
+        caller_data = dict(self.fields)
+        raw, sig = self.envelope(fields=caller_data)
+        with self.accept(raw=raw, sig=sig) as artifact:
+            caller_data["platform"] = "windows"
+            caller_data["sequence"] = 0
+            caller_data["artifact_size"] = 1
+            caller_data["nested"] = {"permissions": ["all"]}
+            self.assertEqual(artifact.metadata["platform"], "linux")
+            self.assertEqual(artifact.metadata["sequence"], 22)
+            self.assertEqual(artifact.verified_length, len(CLEAN))
+            self.assertEqual(artifact.read(), CLEAN)
 
 
     def test_19_trusted_time_is_caller_policy_not_clock_bootstrap(self):

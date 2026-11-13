@@ -1,4 +1,4 @@
-name: Agent 06 Flight PR37 independent signed byte QA
+name: Flight PR38 frozen metadata acceptance (audit-derived)
 
 on:
   push:
@@ -28,7 +28,7 @@ jobs:
       - name: Compile isolated tests
         run: |
           python -m py_compile tools/flight_pr37_independent_security_qa.py tools/flight_signed_installer_ci_prototype.py
-      - name: Run independent adversarial tests
+      - name: Run original independent security controls plus frozen metadata negative acceptance
         run: |
           python -m tools.flight_pr37_independent_security_qa
       - name: Verify immutable checkout

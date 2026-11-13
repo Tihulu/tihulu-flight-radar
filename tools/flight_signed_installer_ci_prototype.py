@@ -8,6 +8,8 @@ services or owner workstation operations exist in this module.
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
+from dataclasses import dataclass, fields
 import fcntl
 import hashlib
 import json
@@ -41,6 +43,46 @@ DIR_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
 
 class TrustRejected(RuntimeError):
     """Refuse unsigned, untrusted, malformed, or inconsistent fixture bytes."""
+
+
+@dataclass(frozen=True, slots=True)
+class VerifiedMetadata(Mapping):
+    """Immutable, flat, typed snapshot of previously signature-verified policy.
+
+    The public mapping interface preserves existing metadata["field"] uses;
+    frozen fields and slots prevent ordinary mutation or dynamic extensions.
+    There are no nested lists/dicts to retain as writable aliases. Deliberate
+    low-level object.__setattr__ bypasses, caller-process compromise and
+    untrusted production key distribution remain out of scope / HOLD.
+    """
+    schema: int
+    app_id: str
+    channel: str
+    platform: str
+    architecture: str
+    artifact_name: str
+    artifact_size: int
+    artifact_sha256: str
+    sequence: int
+    issued_at: int
+    expires_at: int
+    source_commit: str
+    key_id: str
+
+    def __iter__(self):
+        return iter(field.name for field in fields(self))
+
+    def __len__(self):
+        return len(FIELDS)
+
+    def __getitem__(self, key):
+        if key not in FIELDS:
+            raise KeyError(key)
+        return getattr(self, key)
+
+    def to_dict(self):
+        """New ordinary dict with independent immutable primitive values."""
+        return {key: self[key] for key in self}
 
 
 def reject(message):
@@ -134,7 +176,9 @@ def verify_metadata(raw, signature, trust_roots, *, expected_platform,
             signature, DOMAIN + raw)
     except (InvalidSignature, ValueError):
         reject("Ed25519 signature verification failed")
-    return dict(value)
+    # Create a detached typed record; never publish the mutable JSON parser
+    # dict, even transiently, as downstream authorisation metadata.
+    return VerifiedMetadata(**value)
 
 
 def _open_source_once(source, runner):
@@ -170,14 +214,24 @@ def _write_all(fd, data):
         position += written
 
 
+@dataclass(frozen=True, slots=True)
 class SealedFixture:
-    """A sealed, read-only-by-policy FD handle; caller must close it.
+    """Frozen verified-FD handle; close() is the only internal state change.
 
-    Passing this FD to a real unpacker is intentionally NOT implemented.
+    Neither metadata nor the verified byte count can be reassigned through
+    normal Python attribute writes. A hostile same-process user can bypass
+    Python language immutability; this remains CI-only, NOT an OS trust wall.
     """
-    def __init__(self, fd, metadata):
-        self._fd = fd
-        self.metadata = dict(metadata)
+    _fd: int | None
+    metadata: VerifiedMetadata
+    _verified_length: int
+
+    def __post_init__(self):
+        if (type(self.metadata) is not VerifiedMetadata
+                or type(self._verified_length) is not int
+                or self._verified_length <= 0
+                or self._verified_length != self.metadata.artifact_size):
+            reject("Inconsistent immutable sealed fixture length/metadata")
 
     @property
     def fd(self):
@@ -185,13 +239,32 @@ class SealedFixture:
             reject("Verified descriptor has been closed")
         return self._fd
 
+    @property
+    def verified_length(self):
+        """Validated length of the copied, sealed bytes (not mutable metadata)."""
+        return self._verified_length
+
+    def metadata_copy(self):
+        """Editable downstream *copy*, never used as an authorisation source."""
+        return self.metadata.to_dict()
+
     def read(self):
-        return os.pread(self.fd, self.metadata["artifact_size"], 0)
+        fd = self.fd
+        # Bind reads to the verified byte count, not a user-editable
+        # manifest mapping or a caller-controlled length argument.
+        if os.fstat(fd).st_size != self._verified_length:
+            reject("Sealed FD no longer matches verified length")
+        raw = os.pread(fd, self._verified_length, 0)
+        if len(raw) != self._verified_length:
+            reject("Truncated sealed FD read")
+        return raw
 
     def close(self):
-        if self._fd is not None:
-            os.close(self._fd)
-            self._fd = None
+        fd = self._fd
+        if fd is not None:
+            # Internal lifetime transition of this otherwise frozen record.
+            object.__setattr__(self, "_fd", None)
+            os.close(fd)
 
     def __enter__(self):
         return self
@@ -262,7 +335,10 @@ def verify_and_seal(source, metadata_bytes, signature, trusted_keys, *,
         copied = os.pread(staged_fd, metadata["artifact_size"], 0)
         if hashlib.sha256(copied).hexdigest() != metadata["artifact_sha256"]:
             reject("Copied sealed artifact changed unexpectedly")
-        output = SealedFixture(staged_fd, metadata)
+        # copied is read from the successfully sealed FD and its digest was
+        # checked against the original Ed25519-authorised manifest above.
+        # Freeze that verified length in the returned object.
+        output = SealedFixture(staged_fd, metadata, len(copied))
         staged_fd = None
         return output
     finally:

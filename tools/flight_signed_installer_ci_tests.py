@@ -7,6 +7,7 @@ No real keys, installer, download, pipx, sudoers, services or SDR operations.
 """
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
 import fcntl
 import hashlib
 import json
@@ -261,6 +262,113 @@ class SignedFixtureCI(unittest.TestCase):
         with patch.dict(os.environ, {"CI": "false"}):
             with self.assertRaisesRegex(gate.TrustRejected, "CI-only"):
                 self.verify()
+
+    def test_23_signed_policy_snapshot_frozen_mapping_and_attributes(self):
+        with self.verify() as artifact:
+            meta = artifact.metadata
+            self.assertIsInstance(meta, gate.VerifiedMetadata)
+            self.assertNotIsInstance(meta, dict)
+            self.assertFalse(hasattr(meta, "__dict__"))
+            self.assertEqual(meta.artifact_size, len(VALID))
+            self.assertEqual(meta["artifact_size"], len(VALID))
+            with self.assertRaises(TypeError):
+                meta["artifact_size"] = 1
+            with self.assertRaises(FrozenInstanceError):
+                meta.platform = "windows"
+            with self.assertRaises(FrozenInstanceError):
+                meta.sequence = 0
+            with self.assertRaises(FrozenInstanceError):
+                artifact.metadata = {"platform": "windows"}
+            with self.assertRaises(FrozenInstanceError):
+                artifact._verified_length = 1
+            self.assertEqual(artifact.read(), VALID)
+
+    def test_24_signed_policy_defensively_copied_from_caller(self):
+        caller_fields = dict(self.metadata)
+        raw, sig = self.envelope(metadata=caller_fields)
+        with self.verify(raw=raw, signature=sig) as artifact:
+            caller_fields["artifact_size"] = 1
+            caller_fields["platform"] = "windows"
+            caller_fields["sequence"] = 0
+            caller_fields["artifact_sha256"] = "f" * 64
+            self.assertEqual(artifact.metadata["sequence"], 8)
+            self.assertEqual(artifact.metadata["platform"], "linux")
+            self.assertEqual(artifact.metadata["artifact_size"], len(VALID))
+            self.assertEqual(artifact.read(), VALID)
+
+    def test_25_downstream_mutation_of_copy_cannot_change_authority(self):
+        with self.verify() as artifact:
+            editable = artifact.metadata_copy()
+            editable["artifact_size"] = 1
+            editable["platform"] = "windows"
+            editable["sequence"] = 0
+            editable["extra"] = {"nested": {"array": ["injected"]}}
+            editable["extra"]["nested"]["array"].append("modified")
+            self.assertNotIn("extra", artifact.metadata)
+            self.assertEqual(artifact.metadata["platform"], "linux")
+            self.assertEqual(artifact.metadata["sequence"], 8)
+            self.assertEqual(artifact.verified_length, len(VALID))
+            self.assertEqual(artifact.read(), VALID)
+
+    def test_26_nested_signed_fields_and_extensions_denied(self):
+        cases = (
+            {"platform": {"nested": ["linux"]}},
+            {"artifact_size": {"length": len(VALID)}},
+            {"source_commit": ["a" * 40]},
+            {"key_id": {"root": {"id": "fixture-root"}}},
+            {"extensions": {"size": {"override": 1}}},
+        )
+        for altered in cases:
+            with self.subTest(altered=altered):
+                raw, sig = self.envelope(metadata={**self.metadata, **altered})
+                with self.assertRaises(gate.TrustRejected):
+                    self.verify(raw=raw, signature=sig)
+
+    def test_27_read_length_uses_verified_sealed_bytes_not_copy(self):
+        with self.verify() as artifact:
+            original = gate.os.pread
+            calls = []
+            def recorded(fd, size, offset):
+                calls.append((fd, size, offset))
+                return original(fd, size, offset)
+            altered = artifact.metadata_copy()
+            altered["artifact_size"] = 1
+            with patch.object(gate.os, "pread", new=recorded):
+                result = artifact.read()
+            self.assertEqual(result, VALID)
+            self.assertEqual(calls, [(artifact.fd, len(VALID), 0)])
+            self.assertEqual(artifact.verified_length, len(VALID))
+
+    def test_28_reject_forced_sealed_fd_length_drift(self):
+        with self.verify() as artifact:
+            from unittest.mock import Mock
+            real_fstat = gate.os.fstat
+            def swapped_stat(fd):
+                original = real_fstat(fd)
+                if fd == artifact.fd:
+                    stat_clone = Mock()
+                    stat_clone.st_size = original.st_size + 1
+                    return stat_clone
+                return original
+            with patch.object(gate.os, "fstat", new=swapped_stat):
+                with self.assertRaisesRegex(gate.TrustRejected, "length"):
+                    artifact.read()
+            self.assertEqual(artifact.read(), VALID)
+
+    def test_29_unknown_fields_and_snapshot_export_isolation(self):
+        raw, sig = self.envelope()
+        meta = gate.verify_metadata(
+            raw, sig, self.roots, expected_platform="linux",
+            expected_arch="x86_64", minimum_sequence=7, now=NOW)
+        self.assertEqual(set(meta), gate.FIELDS)
+        with self.assertRaises(KeyError):
+            _ = meta["extensions"]
+        exported = meta.to_dict()
+        exported["key_id"] = "other"
+        exported["injected"] = {"nested": [1]}
+        self.assertEqual(meta.key_id, "fixture-root")
+        self.assertEqual(len(meta), len(gate.FIELDS))
+        self.assertNotIn("injected", meta)
 
 
 if __name__ == "__main__":
