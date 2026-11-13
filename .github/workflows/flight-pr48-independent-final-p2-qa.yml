@@ -1,0 +1,44 @@
+name: Agent 06 PR48 independent final P2 key-material and root-history QA
+
+on:
+  push:
+    branches:
+      - audit/flight-pr48-independent-final-p2-20261113
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  independent_p2_final:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      CI: 'true'
+      GITHUB_ACTIONS: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned disposable test dependency
+        run: |
+          python -m pip install --disable-pip-version-check --only-binary=:all: 'cryptography==46.0.3'
+      - name: Compile exact-branch verifier and independent security witnesses
+        run: |
+          python -m py_compile tools/flight_p1_root_provenance_ci.py tools/flight_pr48_independent_final_security_qa.py
+      - name: Independently run PR46 exploit adaptations and 3-epoch cross-role attacks
+        run: |
+          python -m tools.flight_pr48_independent_final_security_qa
+      - name: Preserve PR48 author tests including legitimate 2-of-3 root rotation
+        run: |
+          python -m tools.flight_p1_root_provenance_ci_tests
+      - name: Preserve PR48 predecessor independent-derived tests
+        run: |
+          python -m tools.flight_pr44_key_material_qa_derived
+      - name: Preserve earlier original FD and unsigned-constructor attack suite
+        run: |
+          python -m tools.flight_pr41_independent_security_qa
+      - name: Ensure independent CI did not modify tracked app or policy
+        run: git diff --exit-code
