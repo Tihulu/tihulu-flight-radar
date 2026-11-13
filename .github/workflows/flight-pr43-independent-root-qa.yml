@@ -1,0 +1,35 @@
+name: Agent 06 PR43 independent root provenance security QA
+
+on:
+  push:
+    branches:
+      - audit/flight-pr43-independent-root-qa-20261113
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  independent_root_attestation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      CI: 'true'
+      GITHUB_ACTIONS: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned disposable CI signature verification dependency
+        run: |
+          python -m pip install --disable-pip-version-check --only-binary=:all: 'cryptography==46.0.3'
+      - name: Compile frozen PR43 implementation and independent QA
+        run: |
+          python -m py_compile tools/flight_root_provenance_ci.py tools/flight_signed_installer_ci_prototype.py tools/flight_pr43_independent_root_qa.py
+      - name: Independently challenge root pins, rotation, revocation, provenance and sealed FD
+        run: |
+          python -m tools.flight_pr43_independent_root_qa
+      - name: Verify no tracked application files were modified by QA
+        run: git diff --exit-code
