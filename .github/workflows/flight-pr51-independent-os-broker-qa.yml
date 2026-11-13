@@ -1,0 +1,53 @@
+name: Agent 06 PR51 independent Linux OS broker P1 adversarial QA
+
+on:
+  push:
+    branches:
+      - audit/flight-pr51-independent-p1-os-security-20261113
+  pull_request:
+    paths:
+      - 'tools/flight_pr51_independent_os_broker_qa.py'
+      - '.github/workflows/flight-pr51-independent-os-broker-qa.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  independent_real_uid_broker:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      CI: 'true'
+      GITHUB_ACTIONS: 'true'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned disposable signature test dependency
+        run: |
+          python -m pip install --disable-pip-version-check --only-binary=:all: 'cryptography==46.0.3'
+      - name: Compile frozen production-scope prototype and independent attacks
+        run: |
+          python -m py_compile tools/flight_p1_broker_os_boundary_ci.py tools/flight_p1_broker_os_boundary_tests.py tools/flight_pr51_independent_os_broker_qa.py
+      - name: Independently challenge kernel DAC, stolen tickets, manifest scope, races and crash cuts
+        run: |
+          sudo --non-interactive env CI=true GITHUB_ACTIONS=true RUNNER_TEMP="$RUNNER_TEMP" PYTHONPATH="$GITHUB_WORKSPACE" PYTHONDONTWRITEBYTECODE=1 "$(command -v python)" -m tools.flight_pr51_independent_os_broker_qa
+      - name: Re-run frozen original Agent08 20 real-UID broker tests
+        run: |
+          sudo --non-interactive env CI=true GITHUB_ACTIONS=true RUNNER_TEMP="$RUNNER_TEMP" PYTHONPATH="$GITHUB_WORKSPACE" PYTHONDONTWRITEBYTECODE=1 "$(command -v python)" -m tools.flight_p1_broker_os_boundary_tests
+      - name: Preserve frozen Agent06 PR50 33 positive vulnerability witnesses
+        run: |
+          python -m tools.flight_pr47_independent_broker_qa
+      - name: Preserve original Agent08 PR47 28 CI simulation cases
+        run: |
+          python -m tools.flight_p1_broker_ci_tests
+      - name: Preserve frozen Agent06 PR42 18 FD/security controls
+        run: |
+          python -m tools.flight_pr41_independent_security_qa
+      - name: Guard production app and frozen test sources
+        run: git diff --exit-code
