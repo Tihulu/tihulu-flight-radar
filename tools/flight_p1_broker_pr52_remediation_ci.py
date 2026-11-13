@@ -67,7 +67,7 @@ def provision_extra(root_path):
     old.guard()
     broker = old.Broker(root_path)
     try:
-        for name in ("approval", "prepared"):
+        for name in ("approval", "prepared", "handoff"):
             try:
                 os.mkdir(name, 0o700, dir_fd=broker.dirs["private"])
             except FileExistsError:
@@ -86,6 +86,7 @@ class BrokerV2(old.Broker):
         try:
             self.dirs["approval"] = old.open_dir(self.dirs["private"], "approval")
             self.dirs["prepared"] = old.open_dir(self.dirs["private"], "prepared")
+            self.dirs["handoff"] = old.open_dir(self.dirs["private"], "handoff")
         except BaseException:
             self.close()
             raise
@@ -350,7 +351,14 @@ def server(root_path):
                 finally:
                     if fd is not None:
                         os.close(fd)
-                conn.sendall(old.canonical(reply))
+                # Unauthenticated peers may close, reset or time out while
+                # the broker is preparing a reply. Never let a failed
+                # response kill the privileged accept loop.
+                try:
+                    conn.sendall(old.canonical(reply))
+                except (BrokenPipeError, ConnectionResetError,
+                        ConnectionAbortedError, TimeoutError, OSError):
+                    pass
     finally:
         s.close()
         b.close()
