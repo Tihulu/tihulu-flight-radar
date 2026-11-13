@@ -244,8 +244,8 @@ class IndependentPR39QA(unittest.TestCase):
             os.fstat(old)
         with self.assertRaisesRegex(gate.TrustRejected,"closed"):
             obj.read()
-        with self.assertRaisesRegex(gate.TrustRejected,"closed"):
-            _=obj._fd
+        self.assertIsNone(obj._fd)
+        self.assertFalse(hasattr(obj, "fd"))
 
     def test_13_verified_fixture_length_and_metadata_mismatch_constructor_rejects(self):
         # All public constructor calls now refuse, regardless of argument
