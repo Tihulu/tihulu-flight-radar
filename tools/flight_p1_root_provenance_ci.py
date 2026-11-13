@@ -173,9 +173,13 @@ def pin_bootstrap_roots(out_of_band_keys, threshold, authenticated_pin_sha256):
     return BootstrapPins(MappingProxyType(keys), threshold, actual)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, init=False)
 class RootAuthority:
-    """Signed root policy, copied away from all untrusted input dictionaries."""
+    """Signed root policy, copied away from all untrusted input dictionaries.
+
+    Constructor denied: only verify_root_policy may mint a RootAuthority.
+    Python reflection is NOT a malicious same-interpreter security barrier.
+    """
     version: int
     threshold: int
     root_keys: object
@@ -186,6 +190,9 @@ class RootAuthority:
     builder_workflow: str
     issued_at: int
     expires_at: int
+
+    def __init__(self, *_args, **_kwargs):
+        deny("RootAuthority requires authenticated threshold endorsements")
 
 
 def _sig_bytes(hexsig):
@@ -292,12 +299,16 @@ def verify_root_policy(raw, endorsements, *, now, minimum_version,
                 deny("Existing authority ID reused with a different public key")
         old_roots, old_threshold = dict(previous.root_keys), previous.threshold
     _quorum(raw, endorsements, old_roots, old_threshold, new_roots, value["threshold"])
-    return RootAuthority(
+    approved = RootAuthority.__new__(RootAuthority)
+    values = (
         value["version"], value["threshold"], MappingProxyType(dict(new_roots)),
         MappingProxyType({r: MappingProxyType(dict(roles[r])) for r in ROLES}),
         frozenset(revoked), value["source_repo"], value["source_ref"],
         value["builder_workflow"], value["issued_at"], value["expires_at"],
     )
+    for field_name, validated in zip(RootAuthority.__dataclass_fields__, values):
+        object.__setattr__(approved, field_name, validated)
+    return approved
 
 
 def _role_verify(root, role, document, raw, domain):
@@ -324,9 +335,11 @@ def _hex(value, label, regex=HEX32):
         deny("Malformed " + label)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, init=False)
 class VerifiedProvenance:
-    """Bound CI-only provenance evidence, NOT an installer authorization token."""
+    """Bound CI-only provenance evidence, NOT an installer authorization token.
+    Constructor denied: verification must complete the full role chain.
+    """
     root_version: int
     artifact_sha256: str
     artifact_size: int
@@ -335,6 +348,9 @@ class VerifiedProvenance:
     source_attestation_sha256: str
     builder_attestation_sha256: str
     release_sequence: int
+
+    def __init__(self, *_args, **_kwargs):
+        deny("VerifiedProvenance requires a source/builder/release authorization chain")
 
 
 def verify_provenance_bundle(root, *, source_raw, source_signature,
@@ -421,7 +437,9 @@ def verify_provenance_bundle(root, *, source_raw, source_signature,
             or release["builder_attestation_sha256"] != build_hash
             or release["artifact_sha256"] != actual):
         deny("Release chain does not bind source/build/actual artifact")
-    return VerifiedProvenance(
-        root.version, actual, len(artifact), src["commit"], src["tree_sha256"],
-        src_hash, build_hash, release["sequence"],
-    )
+    record = VerifiedProvenance.__new__(VerifiedProvenance)
+    values = (root.version, actual, len(artifact), src["commit"],
+              src["tree_sha256"], src_hash, build_hash, release["sequence"])
+    for field_name, validated in zip(VerifiedProvenance.__dataclass_fields__, values):
+        object.__setattr__(record, field_name, validated)
+    return record
