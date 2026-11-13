@@ -30,7 +30,7 @@ class Agent08PR54P2NegativeAcceptance(unittest.TestCase):
     start_server = tests.PR52RemediationAcceptance.start_server
     stop_server = tests.PR52RemediationAcceptance.stop_server
     frame_v2 = tests.PR52RemediationAcceptance.frame_v2
-    reframe = tests.PR52RemediationAcceptance.reframe
+    reframe = staticmethod(tests.PR52RemediationAcceptance.reframe)
     parked_client = tests.PR52RemediationAcceptance.parked_client
     grant = tests.PR52RemediationAcceptance.grant
     resume = tests.PR52RemediationAcceptance.resume
