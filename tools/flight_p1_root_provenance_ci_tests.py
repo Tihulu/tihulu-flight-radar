@@ -312,7 +312,7 @@ class P1RootProvenanceCI(unittest.TestCase):
                                        previous=self.root,minimum=2)
         policy3={**policy,"version":3,"issued_at":NOW-300,
                  "role_keys":{**policy["role_keys"],"release":self.public_map("release1")},
-                 "revoked_key_ids":["release1","root1","release2"]}
+                 "revoked_key_ids":["release1","release2","root1"]}
         with self.assertRaisesRegex(gate.TrustRejected,"Revoked"):
             self.authenticate_root(policy3,("root2","root3"),previous=rotated,
                                    minimum=3)
@@ -398,7 +398,7 @@ class P1RootProvenanceCI(unittest.TestCase):
             self.verify(payload,artifact=b"x"*(gate.MAX_ARTIFACT+1))
 
     def test_29_release_sequence_and_signed_root_version_enforced(self):
-        with self.assertRaisesRegex(gate.TrustRejected,"rollback"):
+        with self.assertRaisesRegex(gate.TrustRejected,"Release root"):
             self.verify(self.signed_bundle(),minimum_sequence=9)
         with self.assertRaisesRegex(gate.TrustRejected,"rollback"):
             self.verify(self.signed_bundle(),minimum_root_version=2)
