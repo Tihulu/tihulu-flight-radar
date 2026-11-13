@@ -96,7 +96,9 @@ class IndependentPR39QA(unittest.TestCase):
                         setattr(m,key,value)
                     with self.assertRaises(TypeError):
                         m[key]=value
-            with self.assertRaises(FrozenInstanceError):
+            # CPython frozen+slotted dataclasses may raise TypeError for
+            # attempts to add unknown slots; both types are fail-closed.
+            with self.assertRaises((FrozenInstanceError, TypeError)):
                 m.unsigned_extension={"privileged":True}
             with self.assertRaises(KeyError):
                 _=m["unsigned_extension"]
