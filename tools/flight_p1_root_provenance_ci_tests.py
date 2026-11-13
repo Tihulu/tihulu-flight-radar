@@ -443,5 +443,26 @@ class P1RootProvenanceCI(unittest.TestCase):
         self.assertNotEqual(dict(accepted.root_keys),dict(self.pins.keys))
 
 
+    def test_33_expired_previous_trusted_root_cannot_rotate_without_recovery(self):
+        policy=self.rotated_policy()
+        policy["issued_at"]=NOW+1001
+        policy["expires_at"]=NOW+1400
+        with self.assertRaisesRegex(gate.TrustRejected,"Expired previous root"):
+            self.authenticate_root(policy,("root1","root2","root4"),
+                                   previous=self.root,minimum=2,now=NOW+1001)
+
+    def test_34_signer_authority_cannot_switch_roles_by_reusing_key_id(self):
+        policy=self.rotated_policy()
+        self.keys["source2"]=Ed25519PrivateKey.generate()
+        policy["role_keys"]={
+            **policy["role_keys"],
+            "source":self.public_map("source2"),
+            "release":self.public_map("source1"),
+        }
+        with self.assertRaisesRegex(gate.TrustRejected,"cannot change signer role"):
+            self.authenticate_root(policy,("root1","root2","root4"),
+                                   previous=self.root,minimum=2)
+
+
 if __name__=="__main__":
     unittest.main(verbosity=2)
