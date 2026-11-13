@@ -326,6 +326,10 @@ def server(root_path):
     path = str(Path(root_path) / "broker.sock")
     s = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
     try:
+        # Kernel SCM_CREDENTIALS must be attached at enqueue time. Setting
+        # SO_PASSCRED after accept/recv may yield an SCM_CREDENTIALS pid=0
+        # for a frame already queued before the receiver toggles it.
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_PASSCRED, 1)
         s.bind(path)
         os.chmod(path, 0o666)
         s.listen(6)
