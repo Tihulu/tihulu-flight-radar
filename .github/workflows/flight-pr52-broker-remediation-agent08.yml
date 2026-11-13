@@ -1,0 +1,56 @@
+name: Agent08 PR52 exact-manifest separate-approval and authenticated retry QA
+
+on:
+  push:
+    branches:
+      - remediation/flight-pr52-independent-qa-agent08-20261113
+  pull_request:
+    paths:
+      - 'tools/flight_p1_broker_pr52_remediation_ci.py'
+      - 'tools/flight_p1_broker_pr52_remediation_tests.py'
+      - 'docs/FLIGHT_PR52_BROKER_REMEDIATION.md'
+      - '.github/workflows/flight-pr52-broker-remediation-agent08.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  isolated_linux_broker_acceptance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    env:
+      CI: 'true'
+      GITHUB_ACTIONS: 'true'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - name: Checkout exact source without persisted credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned disposable Ed25519 verifier
+        run: |
+          python -m pip install --disable-pip-version-check --only-binary=:all: 'cryptography==46.0.3'
+      - name: Syntax check new broker and immutable original QA sources
+        run: |
+          python -m py_compile tools/flight_p1_broker_pr52_remediation_ci.py tools/flight_p1_broker_pr52_remediation_tests.py tools/flight_pr51_independent_os_broker_qa.py tools/flight_p1_broker_os_boundary_tests.py
+      - name: New V2 kernel-UID signer approval / exact manifest / orphan retry acceptance
+        run: |
+          sudo --non-interactive env CI=true GITHUB_ACTIONS=true RUNNER_TEMP="$RUNNER_TEMP" PYTHONPATH="$GITHUB_WORKSPACE" PYTHONDONTWRITEBYTECODE=1 "$(command -v python)" -m tools.flight_p1_broker_pr52_remediation_tests
+      - name: FROZEN QA PR52 original 15 cases including POSITIVE vulnerability witnesses
+        run: |
+          sudo --non-interactive env CI=true GITHUB_ACTIONS=true RUNNER_TEMP="$RUNNER_TEMP" PYTHONPATH="$GITHUB_WORKSPACE" PYTHONDONTWRITEBYTECODE=1 "$(command -v python)" -m tools.flight_pr51_independent_os_broker_qa
+      - name: FROZEN development PR51 real Linux broker 20 tests
+        run: |
+          sudo --non-interactive env CI=true GITHUB_ACTIONS=true RUNNER_TEMP="$RUNNER_TEMP" PYTHONPATH="$GITHUB_WORKSPACE" PYTHONDONTWRITEBYTECODE=1 "$(command -v python)" -m tools.flight_p1_broker_os_boundary_tests
+      - name: FROZEN PR50 independent original 33 attack witnesses
+        run: python -m tools.flight_pr47_independent_broker_qa
+      - name: FROZEN PR47 28 CI simulator attacks
+        run: python -m tools.flight_p1_broker_ci_tests
+      - name: FROZEN PR42 18 verified-FD and constructor tests
+        run: python -m tools.flight_pr41_independent_security_qa
+      - name: Ensure no tracked data modified
+        run: git diff --exit-code
