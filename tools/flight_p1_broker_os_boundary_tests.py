@@ -32,6 +32,33 @@ BLOB = b"ROOT-SEPARATED-BROKER-EPHEMERAL-CI-ARTIFACT"
 NOW = b.CI_NOW
 UNPRIV = 65534
 
+# An exec'd UID 65534 client must NOT import the runner-owned checkout:
+# /home/runner ancestors are intentionally inaccessible to nobody. This
+# standalone stdlib-only client has no signer key, broker code or trust roots.
+UNPRIV_CLIENT = """
+import array
+import fcntl
+import os
+from pathlib import Path
+import socket
+import sys
+frame = Path(sys.argv[2]).read_bytes()
+data = Path(sys.argv[3]).read_bytes()
+fd = os.memfd_create("agent08-unpriv-fd", os.MFD_CLOEXEC | os.MFD_ALLOW_SEALING)
+try:
+    os.write(fd, data)
+    seals = fcntl.F_SEAL_WRITE | fcntl.F_SEAL_GROW | fcntl.F_SEAL_SHRINK | fcntl.F_SEAL_SEAL
+    fcntl.fcntl(fd, fcntl.F_ADD_SEALS, seals)
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+    with sock:
+        sock.settimeout(8)
+        sock.connect(sys.argv[1])
+        sock.sendmsg([frame], [(socket.SOL_SOCKET, socket.SCM_RIGHTS, array.array("i", [fd]))])
+        print(sock.recv(4096).decode("ascii"), flush=True)
+finally:
+    os.close(fd)
+"""
+
 
 def pub(key):
     return key.public_key().public_bytes(
@@ -146,8 +173,8 @@ class RealUIDBrokerTests(unittest.TestCase):
     def request(self, frame, data):
         f, artifact = self.make_files(frame, data)
         cp = subprocess.run(
-            [sys.executable, "-m", "tools.flight_p1_broker_os_boundary_ci",
-             "client", str(self.sock), str(f), str(artifact)],
+            [sys.executable, "-c", UNPRIV_CLIENT,
+             str(self.sock), str(f), str(artifact)],
             capture_output=True, text=True, timeout=14, cwd=os.getcwd(),
             env=self.env, preexec_fn=drop)
         self.assertEqual(cp.returncode, 0, cp.stderr)
