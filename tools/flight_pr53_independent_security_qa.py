@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import base64
 from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 import fcntl
 import hashlib
 import json
@@ -531,6 +532,46 @@ print("UNPRIVILEGED_DISCONNECTED",flush=True)
         self.assertIn("BrokenPipeError",stderr)
         self.assertEqual(self.ledger(),[])
         self.assertIsNone(self.active())
+
+
+    def test_27_concurrent_authorized_and_stolen_same_ticket_at_most_one_activation(self):
+        """Real UID65534 authenticated process + an unrelated stolen-ticket
+        sender in concurrent threads. The stolen bearer has no root grant.
+        Either schedule order must produce one authorized commit.
+        """
+        frame,data,parts=self.frame_v2()
+        legit=self.parked_client(frame,data)
+        self.grant(legit,parts)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            real_future=pool.submit(self.resume,legit)
+            thief_future=pool.submit(self.request,frame,data)
+            real=real_future.result(timeout=12)
+            thief=thief_future.result(timeout=12)
+        self.assertTrue(real["ok"],real)
+        self.assertFalse(thief["ok"],thief)
+        self.assertEqual(len(self.ledger()),1)
+        self.assertEqual(self.active()["seq"],50)
+
+    def test_28_concurrent_two_distinct_ROOT_authorized_clients_at_most_one_commit(self):
+        """Distinct ROOT grants to separate live PIDs with different
+        independently signed NONCE values, but competing for the same
+        release sequence. Trusted serialization must deny the loser.
+        """
+        first,blob,one=self.frame_v2(nonce="a"*32)
+        second,blob2,two=self.frame_v2(nonce="b"*32)
+        self.assertNotEqual(one[2],two[2])
+        p1=self.parked_client(first,blob)
+        p2=self.parked_client(second,blob2)
+        self.grant(p1,one)
+        self.grant(p2,two)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            a=pool.submit(self.resume,p1)
+            b=pool.submit(self.resume,p2)
+            outcomes=[a.result(timeout=12),b.result(timeout=12)]
+        self.assertEqual(sum(bool(x["ok"]) for x in outcomes),1,outcomes)
+        self.assertEqual(len(self.ledger()),1)
+        self.assertEqual(self.active()["seq"],50)
+        self.assertEqual(self.release_path(50,blob).read_bytes(),blob)
 
 
 if __name__=="__main__":
