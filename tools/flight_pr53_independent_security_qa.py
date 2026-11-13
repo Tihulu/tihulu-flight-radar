@@ -196,6 +196,7 @@ s.close()
         result=self.resume(approved_parent)
         self.assertEqual(result["status"],0)
         self.assertFalse(result["response"]["ok"])
+        self.assertIn("not bound to this sender",result["response"]["error"])
         self.assertEqual(self.ledger(),[])
         self.assertIsNone(self.active())
 
@@ -398,6 +399,101 @@ s.close()
         reply=self.resume(process)
         self.assertTrue(reply["ok"],reply)
         self.assertEqual(self.active()["seq"],50)
+
+
+    def test_23_POSITIVE_LIMIT_client_death_after_release_blocks_fresh_independently_granted_retry(self):
+        """P2 recovery/liveness gap, NOT auth bypass. Broker's protected
+        prepare is irrevocably bound to old ticket hash+nonce and original
+        PROCESS grant. A killed approved client cannot retry. A distinct new
+        UID65534 client obtains its OWN correctly root-approved signed
+        operation and cannot adopt the orphan under the same sequence.
+        Safe fail-closed; operational progress requires an explicit
+        owner-authorized prepare-transfer/cancel state machine.
+        """
+        frame,data,parts=self.frame_v2()
+        initial=self.parked_client(frame,data)
+        self.grant(initial,parts)
+        self.stop_server()
+        self.cut_as_approved(initial,parts,cut="after_release")
+        oldreceipt=self.prep_path().read_bytes()
+        oldblob=self.release_path(50,data).read_bytes()
+        os.kill(initial.pid,signal.SIGKILL)
+        initial.wait(timeout=5)
+        self.start_server()
+        replacement_frame,replacement_data,replacement_parts=self.frame_v2()
+        replacement=self.parked_client(replacement_frame,replacement_data)
+        self.grant(replacement,replacement_parts)
+        result=self.resume(replacement)
+        self.assertFalse(result["ok"],result)
+        self.assertIn("mismatched authenticated prepare receipt",result["error"])
+        self.assertEqual(self.prep_path().read_bytes(),oldreceipt)
+        self.assertEqual(self.release_path(50,data).read_bytes(),oldblob)
+        self.assertEqual(self.ledger(),[])
+        self.assertIsNone(self.active())
+
+    def test_24_POSITIVE_LIMIT_client_death_after_prepare_blocks_fresh_authorized_attempt(self):
+        """Even after_prepare BEFORE the release file exists, a new root
+        approval and new ticket cannot displace old signed prepare safely.
+        This is correct foreign-preservation behavior but leaves no
+        progress/recovery path once initial PID has died.
+        """
+        frame,data,parts=self.frame_v2()
+        previous=self.parked_client(frame,data)
+        self.grant(previous,parts)
+        self.stop_server()
+        self.cut_as_approved(previous,parts,cut="after_prepare")
+        initialprep=self.prep_path().read_bytes()
+        self.assertFalse(self.release_path(50,data).exists())
+        os.kill(previous.pid,signal.SIGKILL)
+        previous.wait(timeout=5)
+        self.start_server()
+        newframe,newblob,newparts=self.frame_v2()
+        newproc=self.parked_client(newframe,newblob)
+        self.grant(newproc,newparts)
+        result=self.resume(newproc)
+        self.assertFalse(result["ok"])
+        self.assertIn("mismatched authenticated prepare receipt",result["error"])
+        self.assertEqual(self.prep_path().read_bytes(),initialprep)
+        self.assertFalse(self.release_path(50,data).exists())
+        self.assertIsNone(self.active())
+
+    def test_25_kernel_rejects_explicit_forged_SCM_CREDENTIALS_for_approved_PID(self):
+        """Actual UID65534 sender tries to send SCM_CREDENTIALS claiming
+        DIFFERENT already-approved PID. Kernel rejects impersonation without
+        privileged capabilities. This is kernel negative, not Python mock.
+        """
+        frame,data,parts=self.frame_v2()
+        approved=self.parked_client(frame,data)
+        self.grant(approved,parts)
+        f,blob=self.make_files(frame,data)
+        code=r"""
+import array,fcntl,os,socket,struct,sys
+from pathlib import Path
+sock=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET)
+sock.settimeout(5)
+sock.connect(sys.argv[1])
+fd=os.memfd_create("forge-credentials",os.MFD_CLOEXEC|os.MFD_ALLOW_SEALING)
+os.write(fd,Path(sys.argv[3]).read_bytes())
+fl=fcntl.F_SEAL_WRITE|fcntl.F_SEAL_GROW|fcntl.F_SEAL_SHRINK|fcntl.F_SEAL_SEAL
+fcntl.fcntl(fd,fcntl.F_ADD_SEALS,fl)
+claims=struct.pack("3i",int(sys.argv[4]),os.getuid(),os.getgid())
+try:
+  sock.sendmsg([Path(sys.argv[2]).read_bytes()],
+      [(socket.SOL_SOCKET,socket.SCM_RIGHTS,array.array("i",[fd])),
+       (socket.SOL_SOCKET,socket.SCM_CREDENTIALS,claims)])
+  print("FORGED_CREDENTIALS_UNEXPECTEDLY_ACCEPTED")
+except PermissionError:
+  print("KERNEL_REJECTED_FORGED_PID")
+finally:
+  sock.close()
+  os.close(fd)
+"""
+        result=self.unpriv_action(code,self.sock,f,blob,approved.pid)
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn("KERNEL_REJECTED_FORGED_PID",result.stdout)
+        self.assertIsNone(self.active())
+        self.assertEqual(self.ledger(),[])
+        self.assertTrue(self.resume(approved)["ok"])
 
 
 if __name__=="__main__":
