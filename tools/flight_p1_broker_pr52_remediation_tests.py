@@ -142,7 +142,7 @@ class PR52RemediationAcceptance(unittest.TestCase):
         out, err = proc.communicate(timeout=10)
         self.assertEqual(proc.returncode, 0, err)
         result = json.loads(out.strip())
-        return result.get("result", result)
+        return result
 
     def sealed_fd(self, data=BLOB):
         fd = os.memfd_create("agent08-v2-cut", os.MFD_ALLOW_SEALING |
