@@ -205,7 +205,7 @@ s.close()
         raw=signed.canonical_bytes(altered)
         other_sig=self.release_key.sign(signed.DOMAIN+raw)
         signed.verify_metadata(raw,other_sig,
-            {"test-root":author.pub(self.release_key)},
+            {"test-root":native.pub(self.release_key)},
             expected_platform="linux",expected_arch="x86_64",
             minimum_sequence=0,now=NOW)
         self.assertNotEqual(v2.dig(manifest),v2.dig(raw))
