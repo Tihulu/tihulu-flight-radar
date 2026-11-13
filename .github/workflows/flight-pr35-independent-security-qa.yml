@@ -1,0 +1,28 @@
+name: Agent 06 independent PR35 security QA (disposable Linux)
+
+on:
+  pull_request:
+    paths:
+      - 'tools/flight_pr35_independent_security_qa.py'
+      - '.github/workflows/flight-pr35-independent-security-qa.yml'
+      - 'tools/flight_transaction_lab.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  independent-qa:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CI: 'true'
+      GITHUB_ACTIONS: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile isolated QA without installation or external processes
+        run: python -m py_compile tools/flight_pr35_independent_security_qa.py tools/flight_transaction_lab.py
+      - name: Reproduce corrected controls and explicitly open same-UID release blockers
+        run: python -m tools.flight_pr35_independent_security_qa
+      - name: Confirm immutable source checkout
+        run: git diff --exit-code
