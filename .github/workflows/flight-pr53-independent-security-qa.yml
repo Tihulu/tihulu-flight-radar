@@ -1,0 +1,56 @@
+name: Agent06 PR53 independent signed approval manifest and recovery security QA
+
+on:
+  push:
+    branches:
+      - audit/flight-pr53-agent06-independent-security-20261113
+  pull_request:
+    paths:
+      - 'tools/flight_pr53_independent_security_qa.py'
+      - '.github/workflows/flight-pr53-independent-security-qa.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  independent_pr53_security:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    env:
+      CI: 'true'
+      GITHUB_ACTIONS: 'true'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install disposable pinned Ed25519 crypto for CI only
+        run: |
+          python -m pip install --disable-pip-version-check --only-binary=:all: 'cryptography==46.0.3'
+      - name: Compile frozen broker code and new independent adversarial tests
+        run: |
+          python -m py_compile tools/flight_p1_broker_pr52_remediation_ci.py tools/flight_pr53_independent_security_qa.py
+      - name: Execute NEW independent real-UID signed approval and crash recovery attacks
+        run: |
+          sudo --non-interactive env CI=true GITHUB_ACTIONS=true RUNNER_TEMP="$RUNNER_TEMP" PYTHONPATH="$GITHUB_WORKSPACE" PYTHONDONTWRITEBYTECODE=1 "$(command -v python)" -m tools.flight_pr53_independent_security_qa
+      - name: Preserve frozen Agent08 V2 exact-manifest and retry 16-case regression
+        run: |
+          sudo --non-interactive env CI=true GITHUB_ACTIONS=true RUNNER_TEMP="$RUNNER_TEMP" PYTHONPATH="$GITHUB_WORKSPACE" PYTHONDONTWRITEBYTECODE=1 "$(command -v python)" -m tools.flight_p1_broker_pr52_remediation_tests
+      - name: Preserve frozen Agent06 PR52 positive 15-case V1 attack witnesses
+        run: |
+          sudo --non-interactive env CI=true GITHUB_ACTIONS=true RUNNER_TEMP="$RUNNER_TEMP" PYTHONPATH="$GITHUB_WORKSPACE" PYTHONDONTWRITEBYTECODE=1 "$(command -v python)" -m tools.flight_pr51_independent_os_broker_qa
+      - name: Preserve frozen Agent08 root UID broker 20-case baseline
+        run: |
+          sudo --non-interactive env CI=true GITHUB_ACTIONS=true RUNNER_TEMP="$RUNNER_TEMP" PYTHONPATH="$GITHUB_WORKSPACE" PYTHONDONTWRITEBYTECODE=1 "$(command -v python)" -m tools.flight_p1_broker_os_boundary_tests
+      - name: Preserve original Agent06 same-UID 33-case positive exploitation
+        run: python -m tools.flight_pr47_independent_broker_qa
+      - name: Preserve Agent08 original 28-case original CI simulation
+        run: python -m tools.flight_p1_broker_ci_tests
+      - name: Preserve Agent06 original signed FD 18-case regression
+        run: python -m tools.flight_pr41_independent_security_qa
+      - name: Ensure no tracked sources modified on CI runner
+        run: git diff --exit-code
