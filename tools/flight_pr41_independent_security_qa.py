@@ -318,13 +318,28 @@ class PR41IndependentSecurityQA(unittest.TestCase):
         self.assertIn("test_16_private_fd_number_reuse_fail_closed_preserves_foreign_fd",content)
         self.assertIn("test_17_frozen_python_fields_low_level_setattr_is_not_os_security",content)
 
-    def test_18_private_internal_mint_is_not_same_interpreter_security_boundary(self):
-        # DOCUMENTED LIMITATION, not newly discovered P2:
-        # untrusted code with control of the trusted interpreter can forge
-        # a sealed FD & VerifiedMetadata with object.__new__/setattr__.
-        self.assertTrue(callable(gate._mint_verified_fixture))
-        self.assertFalse(hasattr(gate.VerifiedMetadata,"__dict__") is False)
-        # Production signer/key/bootstrap and OS-protected installer remain HOLD.
+    def test_18_private_reflection_is_not_same_interpreter_authorization(self):
+        # POSITIVE documented boundary test, NOT a public-constructor bypass:
+        # hostile code already inside the verifier interpreter may use
+        # object.__new__ and module-private mint to impersonate provenance.
+        # This is why the real broker must have a separate OS trust boundary.
+        fake=object.__new__(gate.VerifiedMetadata)
+        for name,value in {**self.metadata,"platform":"windows"}.items():
+            object.__setattr__(fake,name,value)
+        self.assertEqual(fake.platform,"windows")
+        fd=os.memfd_create("disposable-independent-internal-mint",
+                           os.MFD_CLOEXEC|os.MFD_ALLOW_SEALING)
+        transferred=False
+        try:
+            os.write(fd,TRUSTED)
+            fcntl.fcntl(fd,fcntl.F_ADD_SEALS,gate._REQUIRED_SEALS)
+            with gate._mint_verified_fixture(fd,fake,len(TRUSTED)) as fixture:
+                transferred=True
+                self.assertEqual(fixture.metadata.platform,"windows")
+                self.assertEqual(fixture.read(),TRUSTED)
+        finally:
+            if not transferred:
+                os.close(fd)
 
 
 if __name__=="__main__":
