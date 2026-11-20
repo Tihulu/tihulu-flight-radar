@@ -1,0 +1,51 @@
+{
+  "schema": "tihulu.stable_first.codex_handoff.v1",
+  "as_of_utc": "2026-11-20",
+  "repo": "Tihulu/tihulu-flight-radar",
+  "branch": "docs/stable-first-codex-handoff-20261120",
+  "summary": "Keep the known-good Flight Radar 0.3.1 stable source and optional 0.3.2.dev4 preview separate; security and public release HOLD.",
+  "public_release": "HOLD",
+  "status": "documentation_only_candidate",
+  "stable_baseline": {
+    "name": "legacy/v0.3.1",
+    "commit": "67280cd84feb89faec6a80f5fe2a55ce5f7b89e6",
+    "kind": "user-verified working legacy source baseline"
+  },
+  "latest_inspected_work": {
+    "name": "Draft PR #55",
+    "url": "https://github.com/Tihulu/tihulu-flight-radar/pull/55",
+    "commit": "2e7ef7246787fcb210fa19ab6436d1da0ce0ff28",
+    "kind": "CI-only root-broker security changes; not owner-host deployed"
+  },
+  "invariants": [
+    "Do not change legacy/v0.3.1, the owner's pipx installation, readsb/tar1090, SDR ownership or settings.",
+    "No merge, release, service restart, sudoers/polkit modifications or real hardware operations.",
+    "Native desktop uses readsb rather than WebUSB; browser SDR path is separate and optional.",
+    "Internet-only must work without antenna; I, R and I/R indicate real provenance, never mock aircraft."
+  ],
+  "blockers": [
+    "Independent security QA on exact PR #55 head and real OS-installed broker",
+    "External receiver ownership, hostile same-UID and power-loss case limits",
+    "Real native USB/readsb + online provider parity on supported devices",
+    "Both GitHub Pages deployments and source-revision parity verified against same SHA; no release without approval"
+  ],
+  "next_safe_actions": [
+    "Read existing root AGENTS.md, README.md, docs/POP_OS_VERSION_SWITCH_AND_LEGACY.md and this handoff.",
+    "Verify legacy branch checksum and latest PR #55/CI before claiming scoped passes.",
+    "Plan isolated regression suite for I/R deduplication, tar1090, receiver safety and dual Pages parity.",
+    "Maintain opt-in 0.3.2.dev4 preview; do not silently replace the user-verified 0.3.1 baseline."
+  ],
+  "source_links": [
+    "https://github.com/Tihulu/tihulu-flight-radar/blob/main/AGENTS.md",
+    "https://github.com/Tihulu/tihulu-flight-radar/pull/55"
+  ],
+  "evidence_policy": "Distinguish repository facts, PR author reports, independent QA and owner-host acceptance. Never invent percentages or imply CI equals actual hardware acceptance.",
+  "retrieval": {
+    "chunks": "docs/codex/KNOWLEDGE.jsonl",
+    "history": "docs/codex/HISTORY.md",
+    "builder": "docs/codex/index_local.py",
+    "keyword_index": "offline SQLite FTS5",
+    "semantic_index": "opt-in local already-installed model; not precomputed",
+    "data_egress": "none"
+  }
+}
