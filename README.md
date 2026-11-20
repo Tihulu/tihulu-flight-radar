@@ -1,5 +1,10 @@
 # TIHULU Flight Radar
 
+## For AI coding agents / Codex
+
+Start with [AGENTS.md](AGENTS.md) and the [application-specific Codex resume prompt](docs/codex/CODEX_RESUME_PROMPT.md). More detailed version history and vector-ready knowledge live on the separate `docs/stable-first-codex-handoff-20261120` Draft branch; follow the entry instructions to read them. **No installation, merge or release is authorized by these documents.**
+
+
 **Real ADS-B / Mode S aircraft tracking — desktop and web.** Internet sources, optional local RTL-SDR reception, the complete original tar1090 map, and deduplicated I / R / I/R aircraft markers.
 
 [**Open web radar**](https://tihulu.github.io/tihulu-flight-radar/) · [**Full tar1090 map**](https://tihulu.github.io/tihulu-flight-radar/?view=tar1090) · [**Install & restore site**](https://tihulu.github.io/tihulu-flight-radar/install.html) · [**TEXT CENTER radar**](https://tihulu.github.io/TIHULU-TEXT-CENTER/flight_radar/)

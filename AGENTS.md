@@ -1,5 +1,16 @@
 # TIHULU FLIGHT RADAR — TWO PAGES CONTRACT (read before every change)
 
+## Stable-first agent entry point (read on every new session)
+
+- **Canonical project-specific AI instructions (on `main`):** [`docs/codex/CODEX_RESUME_PROMPT.md`](docs/codex/CODEX_RESUME_PROMPT.md). Read this before planning or making changes.
+- **Detailed evidence and resumable state (separate Draft branch):** `docs/stable-first-codex-handoff-20261120`, files `docs/codex/START_HERE.md`, `STATE.json`, `KNOWLEDGE.jsonl` and append-only `HISTORY.md`. These additional files are **not yet merged to main**: explicitly check out or fetch the Draft branch, do not assume they exist on main.
+- **Protected baseline:** User-confirmed 0.3.1 branch `legacy/v0.3.1` at `67280cd84feb89faec6a80f5fe2a55ce5f7b89e6`; 0.3.2.dev4 is optional preview.
+- Verify current refs and CI independently. Distinguish reported tests from actual installation, security, UI and physical-device acceptance; all public releases remain **HOLD**.
+- Do not modify working local installations, frozen snapshots, SDR/receiver services, recordings, settings, external AI models, previous Draft PRs, or release artifacts without separate explicit owner approval. Only authorized, isolated documentation/read-only/CI work is permitted.
+- Do not upload private repository material, machine details or recordings to unapproved cloud models or public GitHub. No automatic embedding-model downloads, no remote vectorization. Read public knowledge snippets before creating a local index.
+- Keep GitHub technical work in English. Report progress to the owner in Turkish. Preserve the app's independence and the full decision history.
+
+
 ## Full upstream tar1090 without an antenna — 0.3.2.dev1 contract
 
 - New preview is pinned at source SHA `def7a62ff6951951bc3a432b93da3251c7ea4162`
