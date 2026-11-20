@@ -796,15 +796,19 @@ $("rfClearHistory").onclick=()=>{
 function renderCoverageStatus(){
  const result=coverageResult();
  const label=$("rfCoverageStatus");
- const info={
-  insufficient:result.count+" independently positioned antenna aircraft (live and allowed fixed-site history). Need at least 3 for a modeled possible area.",
-  no_overlap:"Radio-horizon model has no common overlap. Check altitude/age/source validity.",
-  unresolved:"Possible region too thin or fragmented for current grid. No coordinate fix.",
-  region:"Possible modeled coverage · "+result.count+" independent RF aircraft · "+
+ // Build status text LAZILY: the region branch is the only consumer of
+ // result.region. Eager evaluation threw a TypeError on every paint when no
+ // RF region existed (Internet-only / no antenna), freezing the status label
+ // and spamming the console. Regression: tests/render_coverage_status.test.cjs.
+ const describe={
+  insufficient:()=>result.count+" independently positioned antenna aircraft (live and allowed fixed-site history). Need at least 3 for a modeled possible area.",
+  no_overlap:()=>"Radio-horizon model has no common overlap. Check altitude/age/source validity.",
+  unresolved:()=>"Possible region too thin or fragmented for current grid. No coordinate fix.",
+  region:()=>"Possible modeled coverage · "+result.count+" independent RF aircraft · "+
    (result.constraintsUsed||result.count)+" constraints applied · coarse extent ~"+
     Math.round(result.region.extentKm)+" km. More planes may narrow this area, NOT establish GPS accuracy."
  };
- label.textContent=info[result.status]||"Insufficient evidence";
+ label.textContent=(describe[result.status]||(()=>"Insufficient evidence"))();
  const output=$("rfLocateStatus"),button=$("rfLocate");
  button.textContent=rfLocatorActive?"Hide RF estimate":"RF locate · 3+ aircraft";
  button.setAttribute("aria-pressed",String(rfLocatorActive));
