@@ -1,0 +1,19 @@
+# TIHULU FLIGHT RADAR — WEB (GitHub Pages) FROZEN SNAPSHOT
+Frozen: 2026-11-21 from the live published deployment (gh-pages branch).
+Origin: https://tihulu.github.io/tihulu-flight-radar/  (mirror: https://tihulu.github.io/TIHULU-TEXT-CENTER/flight_radar/ — verified byte-identical on all checked assets)
+
+## Provenance
+- Build source: main @ 059b391280635d9aa4d2ac73c7318af9e135ebf5 (source-revision.json in this snapshot)
+- Snapshot = gh-pages branch tarball (codeload refs/heads/gh-pages), verified against the live origin:
+  index.html  0a296709a72e22a47e89ef7ee7b706ad75d4776b2cd2d5bbc05c511116153be1  MATCH
+  app.js      21956bbfe8685530d37d3476eab6826bf659848928904c5acb2ed260f52d20c1  MATCH
+  browser_usb.mjs bcd2ef227debc75aa6b90183261705032aef434082f404fed6cc7e65e3a5e5ec  MATCH
+  style.css   39c498516bf80cf36c8c33f5b433f9dbfc85797dc70c7bb68c83b3d4dd6ea7ee  MATCH
+  tar1090/index.html e30e4116a498d7b6616c9b29b11f459164696bf19871a0b3646b9e7e34665649  MATCH
+  tar1090/tihulu-browser-bridge.js 6e5f2a091b9b76db63588ba2039468d306ef53379d1c7643c22abef12e97bd06  MATCH
+  vendor/rtlsdr.mjs 4c40bbfb169cfc8508912eeb2e4fc66f1851b711dceaae39d296cec5e0521af4  MATCH
+
+## Note
+This is the PRE-FIX bundle: it still contains the renderCoverageStatus() TypeError on
+paint without an RF region (fixed in PR #58). Keep it immutable; restore by copying the
+tree to any static host (it is a plain static site, no build step required).

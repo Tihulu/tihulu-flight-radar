@@ -1,0 +1,24 @@
+{
+  "name": "TIHULU Flight Radar",
+  "short_name": "TIHULU Radar",
+  "description": "Antenna and Internet ADS-B aircraft map",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": [
+    "window-controls-overlay",
+    "standalone"
+  ],
+  "orientation": "any",
+  "background_color": "#0e141d",
+  "theme_color": "#0e141d",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
