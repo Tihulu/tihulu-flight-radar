@@ -4,7 +4,7 @@
 // (even "I/R" rows whose displayed coordinates came from the Internet) cannot
 // be used to infer any physical receiver position.
 const TihuluRFCoverage = (() => {
- const RAD=Math.PI/180, EARTH_KM=6371.0088;
+ const RAD=Math.PI/180, EARTH_KM=6371.0088, MIN_INDEPENDENT=4;
  function point(p){
   return p && Number.isFinite(p.lat) && Number.isFinite(p.lon) &&
    Math.abs(p.lat)<=85 && Math.abs(p.lon)<=180;
@@ -57,10 +57,56 @@ const TihuluRFCoverage = (() => {
   if(radiusKm===null)return null;
   return {hex:a.hex.toLowerCase(),flight:String(a.flight||a.hex).trim(),
    lat:rf.lat,lon:rf.lon,radiusKm,altitudeFeet,
+   // Supporting metadata of a verified RF fix, never a measured range.
+   speedKt:Number.isFinite(rf.gs)?rf.gs:null,
+   headingDeg:Number.isFinite(rf.track)?rf.track:
+    Number.isFinite(rf.true_heading)?rf.true_heading:null,
+   positionAgeSeconds:rf.seen_pos,
+   // Approximate epoch of the *decoded aircraft position fix*;
+   // NEVER an RF propagation delay, TX UTC timestamp or UTC-synced arrival.
+   observationTimeMs:capturedAtMs-rf.seen_pos*1000,
    recorded_rf:true,capturedAtMs};
  }
+ // Keep measured radio positions only. Speed and direction control adaptive
+ // sampling and detect implausible jumps, NOT fake extrapolated RF fixes.
+ function trackSampleDecision(previous,next){
+  if(!previous)return {keep:true,reason:"first-received"};
+  if(previous.hex!==next.hex||!point(previous)||!point(next)||
+     !Number.isFinite(previous.capturedAtMs)||!Number.isFinite(next.capturedAtMs))
+   return {keep:false,reason:"invalid-track"};
+  const positionEpoch=fix=>Number.isFinite(fix.observationTimeMs)
+   ?fix.observationTimeMs:
+    fix.capturedAtMs-(Number.isFinite(fix.positionAgeSeconds)?fix.positionAgeSeconds:0)*1000;
+  const previousT=positionEpoch(previous),nextT=positionEpoch(next);
+  const dt=(nextT-previousT)/1000;
+  if(!Number.isFinite(dt)||dt<=0)return {keep:false,reason:"non-monotonic"};
+  const traveledKm=distanceKm(previous,next);
+  const speeds=[previous.speedKt,next.speedKt].filter(x=>Number.isFinite(x)&&x>=0&&x<=1300);
+  const fastestKmH=speeds.length?Math.max(...speeds)*1.852:1300;
+  // Slack permits ordinary reporting jitter, changing headings and lost messages.
+  if(traveledKm>Math.max(1300,fastestKmH*1.8)*dt/3600+5)
+   return {keep:false,reason:"implausible-rf-jump"};
+  const turning=Number.isFinite(previous.headingDeg)&&Number.isFinite(next.headingDeg)
+   ?Math.abs(((next.headingDeg-previous.headingDeg+540)%360)-180)>=25:false;
+  // Approx. 40 seconds' motion, bounded 5–20 km. More turns improve
+  // geometric variety, so sample those at the 5 km threshold.
+  const spacingKm=turning?5:Math.max(5,Math.min(20,fastestKmH*40/3600));
+  return {keep:traveledKm>=spacingKm,
+   reason:traveledKm>=spacingKm?"new-path-constraint":"redundant-rf-position",
+   traveledKm,elapsedSeconds:dt,spacingKm};
+ }
+ function groupAircraftCircles(records){
+  const groups=new Map();
+  for(const record of records){
+   let group=groups.get(record.hex);
+   if(!group){group={hex:record.hex,flight:record.flight,
+    samples:0,circle:record};groups.set(record.hex,group);}
+   group.samples++;
+  }
+  return [...groups.values()].map(g=>({...g,latestAgeSeconds:g.circle.ageSeconds}));
+ }
  function compute(aircraft,history=[]){
-  const records=[],seen=new Set();
+  const records=[],seen=new Set(),now=Date.now();
   for(const a of Array.isArray(aircraft)?aircraft:[]){
    if(!eligible(a) || seen.has(a.hex.toLowerCase()))continue;
    const rf=a.observations.antenna;
@@ -69,38 +115,58 @@ const TihuluRFCoverage = (() => {
    if(radiusKm===null)continue;
    records.push({hex:a.hex.toLowerCase(),flight:String(a.flight||a.hex).trim(),
     lat:rf.lat,lon:rf.lon,radiusKm,altitudeFeet,
-    ageSeconds:Math.max(a.seen_pos,rf.seen_pos)});
+    ageSeconds:Math.max(a.seen_pos,rf.seen_pos),
+    positionAgeSeconds:rf.seen_pos,
+    speedKt:Number.isFinite(rf.gs)?rf.gs:null,
+    headingDeg:Number.isFinite(rf.track)?rf.track:
+     Number.isFinite(rf.true_heading)?rf.true_heading:null,
+    observationTimeMs:now-rf.seen_pos*1000});
    seen.add(a.hex.toLowerCase());
   }
+  const liveCount=records.length;
   // Optional fixed-receiver session history, gathered only after eligible().
   // Drop observations older than two hours, cap model inputs and keep their
   // historical status separate from the current aircraft map.
-  const now=Date.now();
   for(const old of Array.isArray(history)?history.slice(-64):[]){
    if(!old||old.recorded_rf!==true||
-      !/^[a-f0-9]{6}$/i.test(String(old.hex||""))||seen.has(old.hex)||
+      !/^[a-f0-9]{6}$/i.test(String(old.hex||""))||
       !point(old)||!Number.isFinite(old.radiusKm)||
       old.radiusKm<10||old.radiusKm>1600||
       !Number.isFinite(old.capturedAtMs)||
       old.capturedAtMs>now+5000||now-old.capturedAtMs>2*3600*1000)continue;
-   records.push({...old,ageSeconds:(now-old.capturedAtMs)/1000,
+   // A single aircraft may yield several genuine geographic constraints
+   // along its flight path; it still counts as only ONE independent aircraft.
+   const hex=old.hex.toLowerCase();
+   if(records.some(r=>r.hex===hex&&distanceKm(r,old)<8))continue;
+   records.push({...old,hex,ageSeconds:(now-old.capturedAtMs)/1000,
     historic:true});
-   seen.add(old.hex);
+   seen.add(hex);
   }
   records.sort((a,b)=>a.ageSeconds-b.ageSeconds);
-  if(records.length<3)return {status:"insufficient",count:records.length,circles:[],region:null};
-  // Bound workload: choose newest independent RF aircraft, max 6 rings.
-  // Apply more genuinely independent RF constraints as aircraft count grows;
-  // only draw six circles to avoid visual clutter. This is not true accuracy.
-  const constraints=records.slice(0,64);
-  const circles=constraints.slice(0,6);
-  // No receiver latitude/longitude is an input. Unwrap longitude only to
-  // build the intersection grid (crossing the date line is supported).
-  // Actual acceptance remains a geodesic distance test for EVERY verified RF
-  // aircraft. Each circle is an upper-bound reception constraint, not a
-  // measured range. The resulting centroid is *not* a receiver location fix.
+  const aircraftCircles=groupAircraftCircles(records);
+  if(seen.size<MIN_INDEPENDENT)return {status:"insufficient",count:seen.size,
+   liveCount,historyCount:seen.size-liveCount,required:MIN_INDEPENDENT,circles:[],aircraftCircles,region:null};
+  // Bound workload: use up to 64 recent *positions* from at least four
+  // independent aircraft. Multiple positions from ONE plane do not satisfy
+  // the minimum. Only three circles are drawn as optional outlines.
+  // First preserve one latest real observation from every independent ICAO.
+  // Then add the remaining speed-spaced path samples. A busy aircraft
+  // must not crowd out other received airplanes from the 64-cell solver.
+  const heads=[],extras=[],usedHeads=new Set();
+  for(const record of records){
+   if(!usedHeads.has(record.hex)){heads.push(record);usedHeads.add(record.hex);}
+   else extras.push(record);
+  }
+  const constraints=heads.concat(extras).slice(0,64);
+  const circles=constraints.slice(0,6); // for diagnostics; UI draws only 3 optional outlines
+  // The grid must NOT be anchored on the last/first airplane; use a
+  // permutation-independent circular mean of ALL distinct RF aircraft.
+  // Grid acceptance tests EVERY independent aircraft + RF history fix.
   const longitudeNear=(lon,anchor)=>anchor+((lon-anchor+540)%360)-180;
-  const originLon=constraints[0].lon;
+  const independent=heads;
+  const sumSin=independent.reduce((n,p)=>n+Math.sin(p.lon*RAD),0);
+  const sumCos=independent.reduce((n,p)=>n+Math.cos(p.lon*RAD),0);
+  const originLon=Math.atan2(sumSin,sumCos)/RAD;
   const bounds=constraints.map(c=>{
    const spreadLat=c.radiusKm/110.5;
    // Conservative longitude envelope uses the smallest cosine at the
@@ -117,9 +183,10 @@ const TihuluRFCoverage = (() => {
   const minLon=Math.max(...bounds.map(b=>b.west));
   const maxLon=Math.min(...bounds.map(b=>b.east));
   if(minLat>=maxLat||minLon>=maxLon)return {
-   status:"no_overlap",count:records.length,constraintsUsed:constraints.length,circles,region:null};
+   status:"no_overlap",count:seen.size,liveCount,historyCount:seen.size-liveCount,
+   required:MIN_INDEPENDENT,constraintsUsed:constraints.length,circles,aircraftCircles,region:null};
   const points=[];
-  const STEPS=48;
+  const STEPS=80; // finer grid reduces model-centroid quantization jitter
   for(let i=0;i<=STEPS;i++)for(let j=0;j<=STEPS;j++){
    const lat=minLat+(maxLat-minLat)*i/STEPS;
    const unwrappedLon=minLon+(maxLon-minLon)*j/STEPS;
@@ -127,19 +194,78 @@ const TihuluRFCoverage = (() => {
    if(constraints.every(c=>distanceKm(p,c)<=c.radiusKm))points.push(p);
   }
   // A vanishingly small sampled overlap is not a safe coordinate estimate.
-  if(points.length<3)return {status:"unresolved",count:records.length,
-   constraintsUsed:constraints.length,circles,region:null};
-  const centerLat=points.reduce((sum,p)=>sum+p.lat,0)/points.length;
-  const centerUnwrappedLon=points.reduce((sum,p)=>
-   sum+longitudeNear(p.lon,originLon),0)/points.length;
+  if(points.length<3)return {status:"unresolved",count:seen.size,liveCount,historyCount:seen.size-liveCount,
+   required:MIN_INDEPENDENT,constraintsUsed:constraints.length,circles,aircraftCircles,region:null};
+  // Latitude/longitude grid cells have different physical areas. Correct
+  // their centroid by cos(latitude); no single plane dictates the origin.
+  const weighted=points.map(p=>({p,w:Math.max(.001,Math.cos(p.lat*RAD))}));
+  const areaWeight=weighted.reduce((sum,v)=>sum+v.w,0);
+  const centerLat=weighted.reduce((sum,v)=>sum+v.p.lat*v.w,0)/areaWeight;
+  const centerUnwrappedLon=weighted.reduce((sum,v)=>
+   sum+longitudeNear(v.p.lon,originLon)*v.w,0)/areaWeight;
   const center={lat:centerLat,lon:((centerUnwrappedLon+540)%360)-180};
   const extentKm=Math.max(...points.map(p=>distanceKm(center,p)));
-  return {status:"region",count:records.length,constraintsUsed:constraints.length,circles,
+  const aircraftDistances=independent.map(c=>({
+   hex:c.hex,flight:c.flight,
+   centerDistanceKm:Math.round(distanceKm(center,c)),
+   horizonKm:Math.round(c.radiusKm),
+   approximatePositionAgeSeconds:c.ageSeconds,
+   approximatePositionEpochMs:c.observationTimeMs,
+   speedKt:c.speedKt??null,
+   headingDeg:c.headingDeg??null,
+   sampleCount:aircraftCircles.find(item=>item.hex===c.hex)?.samples||1
+  })).sort((a,b)=>a.hex.localeCompare(b.hex));
+  // This is NOT a confidence level. Even four planes can yield a very
+  // broad intersection and a misleading numeric center.
+  const geometryStatus=extentKm>250?"broad":extentKm>100?"coarse":"bounded-model";
+  return {status:"region",count:seen.size,liveCount,historyCount:seen.size-liveCount,
+   geometryStatus,aircraftDistances,
+   required:MIN_INDEPENDENT,constraintsUsed:constraints.length,circles,aircraftCircles,
    region:{...center,extentKm:Math.max(10,Math.ceil(extentKm/10)*10),
+     // Keep unrounded model spread for best-so-far comparisons. It is
+     // NOT observed physical geolocation accuracy or calibrated uncertainty.
+     rawExtentKm:extentKm,
     sampleCount:points.length,possibleSamples:points,
     kind:"possible-area-centroid",accuracyMeters:null,confidence:null}};
  }
- return {point,distanceKm,horizonKm,horizonPoints,eligible,recordedCircle,compute};
+ // An *illustrative* Gaussian point-spread function for the radio-horizon
+ // EDGE only. A horizon is an upper bound, not an observed radio range;
+ // sigma is a user-chosen visualization assumption (km), NOT a calibrated
+ // position error or 68.3% credible receiver-location interval.
+ function gaussianHorizonPsf(radiusKm,sigmaKm,radialDistanceKm){
+  if(!Number.isFinite(radiusKm)||radiusKm<=0||
+     !Number.isFinite(sigmaKm)||sigmaKm<=0||sigmaKm>500||
+     !Number.isFinite(radialDistanceKm)||radialDistanceKm<0)return null;
+  const z=(radialDistanceKm-radiusKm)/sigmaKm;
+  return Math.exp(-0.5*z*z);
+ }
+ function gaussianHorizonBand(radiusKm,sigmaKm){
+  if(gaussianHorizonPsf(radiusKm,sigmaKm,radiusKm)===null)return null;
+  return {innerKm:Math.max(0,radiusKm-sigmaKm),outerKm:radiusKm+sigmaKm,
+   sigmaKm,peakAtKm:radiusKm,edgeRelativeWeight:Math.exp(-0.5),
+   calibrated:false,measuredRange:false,credibleInterval:false};
+ }
+ // Conditional distance envelope from *modeled* feasible receiver cells.
+ // Never a measured ToA/RSSI distance; sampled grid approximates this envelope.
+ function modelDistanceInterval(result,a){
+  if(result?.status!=="region"||!eligible(a))return null;
+  const samples=result.region?.possibleSamples;
+  if(!Array.isArray(samples)||samples.length<3)return null;
+  const p=a.observations.antenna;
+  let minKm=Infinity,maxKm=-Infinity;
+  for(const sample of samples){
+   if(!point(sample))continue;
+   const km=distanceKm(sample,p);
+   minKm=Math.min(minKm,km);maxKm=Math.max(maxKm,km);
+  }
+  if(!Number.isFinite(minKm)||!Number.isFinite(maxKm))return null;
+  return {minKm:Math.max(0,Math.floor(minKm/10)*10),
+   maxKm:Math.ceil(maxKm/10)*10,
+   kind:"model-grid-distance-interval",measured:false};
+ }
+ return {point,distanceKm,horizonKm,horizonPoints,eligible,recordedCircle,
+  trackSampleDecision,groupAircraftCircles,compute,modelDistanceInterval,
+  gaussianHorizonPsf,gaussianHorizonBand,MIN_INDEPENDENT};
 })();
 if(typeof module!=="undefined"&&module.exports)module.exports=TihuluRFCoverage;
 if(typeof window!=="undefined")window.TihuluRFCoverage=TihuluRFCoverage;

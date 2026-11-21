@@ -96,11 +96,40 @@
       <label><input id="showInternet" type="checkbox" checked><i class="key internet"></i> Internet</label>
       <label><input id="showBoth" type="checkbox" checked><i class="key both"></i> Both</label>
       <label><input id="showTracks" type="checkbox" checked> Tracks</label>
-      <label title="Experimental RF radio-horizon feasibility region, not measured range or a GPS fix"><input id="showRfCoverage" type="checkbox"> RF coverage rings</label>
+      <label title="Display-only motion estimated from the most recent real ADS-B position, speed and heading. Positions are never added to RF or Internet records."><input id="smoothMotion" type="checkbox" checked> Smooth live motion</label>
       <label><input id="showTiles" type="checkbox" checked> OSM tiles</label>
     </div>
     <div class="maptools">
-      <button id="fullTar1090" type="button" title="Open the complete bundled upstream tar1090 with live in-browser RF and Internet data">Full tar1090 · Internet or Radio</button><button id="expandMap" aria-pressed="false" title="Expand this independent browser radar map, even with readsb stopped">Full radar map</button><button id="focus">Focus aircraft</button><button id="rfLocate" type="button" aria-pressed="false" title="Show a model-dependent possible receiver region with 3+ independently positioned antenna aircraft; no GPS, manual receiver coordinates, or Internet required">RF locate · 3+ aircraft</button><button id="cologne">Cologne</button>
+      <button id="fullTar1090" type="button" title="Open the complete bundled upstream tar1090 with live in-browser RF and Internet data">Full tar1090 · Internet or Radio</button><button id="expandMap" aria-pressed="false" title="Expand this independent browser radar map, even with readsb stopped">Full radar map</button><button id="focus">Focus aircraft</button><label class="rf-mode-quick">Model <select id="rfMode" aria-label="Active RF location model"><option value="live10" selected>LIVE · 10 min</option><option value="liveX">X-hour LIVE</option><option value="best">BEST Fit · session</option><option value="history">HISTORY · all stored</option><option value="historyBest">HISTORY BEST · weighted</option></select></label><label class="rf-hours-quick" id="rfHoursWrap" hidden>Window <select id="rfHours" aria-label="X-hour LIVE observation window"><option value="1">1 h</option><option value="2" selected>2 h</option><option value="3">3 h</option><option value="4">4 h</option><option value="6">6 h</option><option value="12">12 h</option><option value="24">24 h</option><option value="48">48 h</option></select></label><button id="rfLocate" type="button" aria-pressed="true" title="Enable or disable the 4+ genuinely received ADS-B aircraft RF locator, not aircraft reception.">RF area · ON</button>
+       <details id="rfCirclesMenu" class="rf-circles-menu">
+        <summary title="Choose visible model and aircraft circles independently of the RF calculation">Circles <span aria-hidden="true">▾</span></summary>
+        <div class="rf-circles-dropdown" role="group" aria-label="RF circle visibility settings">
+         <strong>RF model layers · select any combination</strong>
+         <small id="rfCircleLayerStatus" class="rf-circles-footnote" role="status">Choose multiple models. Each enabled layer is evaluated independently; missing records are never replaced with fake circles.</small>
+         <label class="rf-circles-live"><input id="rfLayerLive10" type="checkbox" checked> LIVE · 10 min <small>Cyan · most recent genuine local RF observations</small></label>
+         <label class="rf-circles-xhour"><input id="rfLayerLiveX" type="checkbox"> X-hour LIVE <small>Blue · adjustable X-hour window (default 2 h)</small></label>
+         <label class="rf-circles-best"><input id="rfBestCircle" type="checkbox" checked> BEST Fit <small>Purple · saved narrowest session model</small></label>
+         <label class="rf-circles-history"><input id="rfLayerHistory" type="checkbox"> HISTORY <small>Green · all recorded RF constraints</small></label>
+         <label class="rf-circles-weighted"><input id="rfLayerHistoryBest" type="checkbox"> HISTORY BEST <small>Amber · weighted center ONLY; no manufactured radius</small></label>
+         <div class="rf-layer-actions">
+          <button id="rfLayerAll" type="button">Select all</button>
+          <button id="rfLayerNone" type="button">Hide all</button>
+          <button id="rfLayerRefresh" type="button">Recalculate layers</button>
+         </div>
+         <input id="rfModelCircle" type="checkbox" checked hidden aria-hidden="true">
+         <label><input id="rfFill" type="checkbox" checked> Active model feasible area <small>Only the active geometric model, not weighted history</small></label>
+         <label class="rf-circles-aircraft">Aircraft horizon circles
+          <select id="rfAircraftCircleMode" aria-label="Aircraft RF horizon circle visibility">
+           <option value="none" selected>Hidden (default)</option>
+           <option value="selected">Selected aircraft only (map / table clicks)</option>
+           <option value="all">All genuine RF aircraft</option>
+          </select>
+         </label>
+         <small class="rf-circles-footnote">Multiple model overlays may be visible simultaneously. RF model spread is NOT GPS accuracy. HISTORY BEST shows an optimized point, never an invented circle.</small>
+         <button id="rfCirclesDone" class="rf-circles-done" type="button">Done</button>
+        </div>
+       </details>
+       <button id="rfFocus" type="button" disabled title="Center on the modeled possible receiver region, not a GPS fix">Focus RF area</button><label class="rf-follow-label" title="Automatically follow changes to the RF model center; manual map movement turns this off"><input id="rfFollow" type="checkbox" checked> Follow 4+ RF model center</label><button id="cologne">Cologne</button>
       <button id="germany">Germany</button><button id="placeOpen" type="button" title="Choose country, state or province, city/district, or coordinates">Choose place</button><button id="locate">Use my location</button>
       <button id="searchHere" title="Fetch Internet aircraft around the current map view, without changing your receiver location">Search here</button>
       <button id="zoomIn" aria-label="Zoom in">+</button><button id="zoomOut" aria-label="Zoom out">−</button>
@@ -111,6 +140,7 @@
      <span class="altitude-label">Aircraft color · altitude</span>
      <div class="altitude-ramp" role="img" aria-label="Altitude from orange at ground level, yellow and green at lower heights, cyan and blue, to purple and pink at 40000 feet"></div>
      <span class="altitude-label">0–40,000 ft · grey = unknown</span>
+     <span class="altitude-label">Dashed halo = display-only motion prediction · cyan area = RF feasibility, not GPS</span>
    </div>
    <canvas id="map" role="img" aria-label="Live geographic aircraft map, with offline coordinate grid"></canvas>
     <section id="aircraftPopup" class="aircraft-popup" role="dialog" aria-label="Aircraft details" aria-modal="false" hidden>
@@ -120,13 +150,31 @@
      </header>
      <p id="popupSources" class="aircraft-popup-sources"></p>
      <div class="aircraft-popup-grid">
-      <div><span>Altitude</span><strong id="popupAltitude">—</strong></div>
+      <div><span>Airline / operator</span><strong id="popupAirline">Not provided</strong></div>
+       <div><span>Flight number / callsign</span><strong id="popupFlightNumber">Not provided</strong></div>
+       <div><span>Altitude</span><strong id="popupAltitude">—</strong></div>
       <div><span>Ground speed</span><strong id="popupSpeed">—</strong></div>
       <div><span>Heading</span><strong id="popupHeading">—</strong></div>
       <div><span>Vertical rate</span><strong id="popupVerticalRate">—</strong></div>
       <div><span>Aircraft type</span><strong id="popupType">—</strong></div>
       <div><span>Squawk</span><strong id="popupSquawk">—</strong></div>
      </div>
+     <section class="aircraft-journey" aria-label="Aircraft departure and arrival information">
+      <div class="aircraft-journey-title">
+       <strong><icon aria-hidden="true">✈</icon> From → To</strong>
+       <button id="popupJourneyRefresh" type="button" title="Look up this callsign's route online only when requested">Refresh route</button>
+      </div>
+      <div class="aircraft-journey-airports">
+       <div><small><span class="journey-dot takeoff"></span> Departure</small><strong id="popupDepartAirport">Unknown</strong></div>
+       <div><small><span class="journey-dot landing"></span> Arrival</small><strong id="popupArriveAirport">Unknown</strong></div>
+      </div>
+      <div class="aircraft-journey-times">
+       <div><span>Departure time</span><strong id="popupDepartureTime">Not available</strong></div>
+       <div><span>Arrival time</span><strong id="popupArrivalTime">Not available</strong></div>
+      </div>
+      <p id="popupRadioJourney" class="aircraft-journey-radio">Radio observations: waiting for genuine antenna data.</p>
+      <small id="popupJourneySource" class="aircraft-journey-source">Online: callsign route lookup when aircraft is selected. ADS-B alone has no timetable.</small>
+     </section>
      <p class="aircraft-popup-meta"><span id="popupPosition">Position unavailable</span><span id="popupSeen"></span></p>
      <details class="aircraft-popup-timing">
       <summary>RF timestamp / propagation diagnostics</summary>
@@ -138,26 +186,124 @@
       <button id="popupRaw" type="button">Raw JSON</button>
      </div>
     </section>
-   <div class="mapfooter"><span id="mapLabel">Germany default view · no receiver position assumed</span><span><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a> · <span id="sourceCredits">Source attribution shown after connection</span></span></div>
+    <section id="rfModelPopup" class="aircraft-popup rf-model-popup" role="dialog" aria-modal="false" aria-label="RF model details" hidden>
+     <header class="aircraft-popup-head">
+      <div><strong id="rfPopupTitle">LIVE RF Fit</strong><small id="rfPopupSub">Modeled possible-area center · NOT GPS</small></div>
+      <button id="rfPopupClose" type="button" aria-label="Close RF model details">×</button>
+     </header>
+     <div class="aircraft-popup-grid rf-popup-grid">
+      <div><span>Independent RF aircraft</span><strong id="rfPopupAircraft">—</strong></div>
+      <div><span>Real RF position samples</span><strong id="rfPopupConstraints">—</strong></div>
+      <div><span>Current / session RF aircraft</span><strong id="rfPopupSources">—</strong></div>
+      <div><span>Model geometry</span><strong id="rfPopupGeometry">—</strong></div>
+      <div class="rf-popup-wide"><span>Modeled center · WGS84 coordinates</span><strong id="rfPopupCoordinates">—</strong></div>
+      <div><span>Bounding-circle radius (range)</span><strong id="rfPopupRadius">—</strong></div>
+      <div><span>Bounding-circle diameter</span><strong id="rfPopupDiameter">—</strong></div>
+      <div class="rf-popup-wide"><span>Actual location accuracy</span><strong id="rfPopupAccuracy">Unmeasured · not GPS</strong></div>
+     </div>
+     <div class="rf-preview-heading"><strong>Model circle · geographic preview</strong><small id="rfPopupMapScale">Auto-fit</small></div>
+     <canvas id="rfModelMiniMap" width="280" height="280" role="img" aria-label="Geographic map preview showing complete modeled RF spread circle"></canvas>
+     <small id="rfPopupMapCredit" class="rf-popup-map-credit">© OpenStreetMap contributors when OSM tiles load · offline grid otherwise</small>
+     <p id="rfPopupNote" class="aircraft-popup-sources">RF horizon intersection is only a modeled possibility, not a measured receiver location, confidence or true distance.</p>
+     <div class="aircraft-popup-actions">
+      <button id="rfPopupFocus" type="button">Focus model</button>
+      <button id="rfPopupCopy" type="button">Copy coordinates</button>
+     </div>
+    </section>
+   <details class="offline-map-panel" id="offlineMapPanel">
+    <summary>Offline map · raster MBTiles</summary>
+    <p id="offlineMapStatus" class="muted" role="status">Native desktop: scanning local map folders…</p>
+    <div class="offline-map-controls">
+     <label>Map archive <select id="offlineMapSource" aria-label="Select locally installed raster MBTiles"><option value="">Automatic local map detection</option></select></label>
+     <button id="offlineMapScan" type="button">Scan installed maps</button>
+     <label class="offline-map-file">Add .mbtiles file
+      <input id="offlineMapFile" type="file" accept=".mbtiles">
+     </label>
+     <button id="offlineMapUpload" type="button">Import selected map</button>
+     <a href="https://www.maptiler.com/data/" target="_blank" rel="noopener noreferrer">Get licensed raster MBTiles (MapTiler)</a>
+    </div>
+    <small>Native desktop uses existing raster MBTiles from ~/Maps, ~/Downloads or ~/.local/share/tihulu-flight-radar/maps. A file picker can import maps up to 1 GiB. Only raster PNG/JPG/WebP MBTiles are currently supported; PBF vector MBTiles and PMTiles cannot be displayed here yet. MapTiler offline raster imagery/datasets may require a paid license. No automated scraping of volunteer OpenStreetMap tile servers.</small>
+   </details>
+   <div class="mapfooter"><span id="mapLabel">Germany default view · no receiver position assumed</span><span id="rfMapCoordinates" class="rf-map-coordinates" aria-live="polite">RF model center: waiting for 4+ local RF aircraft</span><span><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a> · <span id="sourceCredits">Source attribution shown after connection</span></span></div>
   </section>
+  <div id="aircraftSideSplitter" class="aircraft-side-splitter" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Resize aircraft and receiver panel" aria-valuemin="380" aria-valuemax="800" aria-valuenow="580" title="Drag left/right to resize panel · double click to reset"></div>
   <aside class="side">
    <h2>Receiver</h2>
    <p id="receiverStatus" class="muted">WebUSB can receive directly in supported browsers. A paired bridge is optional.</p>
    <div class="buttons"><button id="start">Start</button><button id="stop">Stop</button><button id="restart">Restart</button></div>
    <h2>Sources</h2><p id="feedStatus" class="muted">No source connected.</p>
-   <div class="aircraft-table-title"><h2>Aircraft <span id="visibleCount" class="muted">0</span></h2>
+   <div class="aircraft-table-title">
+    <h2>Aircraft <span id="visibleCount" class="muted">0</span></h2>
+    <div class="aircraft-load-buttons">
+     <button id="aircraftRadioLoad" type="button" title="Refresh real local readsb / WebUSB antenna observations; never guess departure airport or flight timetable">Load · Radio</button>
+     <button id="aircraftRoutesLoad" type="button" title="Fetch callsign route data for up to 30 visible aircraft on request">Load · Internet</button>
+    </div>
     <label for="unitSystem">Units <select id="unitSystem" aria-label="Flight information units"><option value="aviation">Aviation · ft / kt</option><option value="metric">Metric · m / km/h</option></select></label>
    </div>
-   <div class="tablewrap"><table><thead><tr><th>Flight / ICAO</th><th id="altitudeColumn">Altitude (ft)</th><th id="speedColumn">Speed (kt)</th><th>Source</th></tr></thead><tbody id="aircraftRows"></tbody></table></div>
-   <section class="rf-coverage-panel" aria-label="Experimental RF coverage constraints">
-    <strong>Receiver coverage estimate</strong>
+   <p id="aircraftLoadStatus" class="aircraft-load-status" role="status" aria-live="polite">Radio: first/last heard and possible ground↔air transitions · Internet: airports and provider times. Both on demand.</p>
+   <div class="tablewrap"><table><thead><tr><th>Flight / ICAO</th><th id="altitudeColumn">Altitude (ft)</th><th id="speedColumn">Speed (kt)</th><th>Source</th><th>From → To / times</th><th>Info</th></tr></thead><tbody id="aircraftRows"></tbody></table></div>
+   <section class="rf-picked-panel" aria-label="Persistent selected aircraft">
+    <div class="rf-picked-head"><strong>Selected aircraft <span id="rfPickedCount">0</span></strong><button id="rfPickedClear" type="button">Clear selected</button></div>
+    <p id="rfPickedSummary" class="muted">Click a plane on the map or an aircraft row. Closing Info keeps the selection.</p>
+    <div id="rfPickedList" class="rf-picked-list" aria-live="polite">No selected aircraft.</div>
+   </section>
+   <section class="rf-mode-panel" aria-label="Five RF geolocation models and persistent RF History">
+     <div class="rf-mode-title"><strong>RF Geolocation · 5 modes</strong><span id="rfModeLabel">LIVE · 10 min</span></div>
+     <p id="rfModeDescription" class="muted">Last 10 minutes of genuinely received and positioned RF aircraft observations.</p>
+     <div class="rf-mode-kpis">
+      <div><small>Independent RF aircraft</small><strong id="rfModeAircraft">—</strong></div>
+      <div><small>Eligible RF observations</small><strong id="rfModeFixes">—</strong></div>
+      <div><small>Geometric spread</small><strong id="rfModeSpread">—</strong></div>
+      <div><small>Measured accuracy</small><strong>Unknown · NOT GPS</strong></div>
+     </div>
+     <div class="rf-mode-work">
+      <label>Processing <select id="rfHistorySpeed"><option value="balanced" selected>Balanced · 60 s</option><option value="performance">Performance · 15 s</option><option value="manual">Manual · only on request</option></select></label>
+      <button id="rfRecalculate" type="button">Recalculate now</button>
+     </div>
+     <p id="rfModeCalculation" class="muted" role="status">Waiting for actual RF observations.</p>
+     <label class="rf-model-compare" hidden><input id="rfCompareModels" type="checkbox"> Legacy comparison setting (superseded by independent Circles layers)</label>
+     <details class="rf-archive-controls" open>
+      <summary>History Recorder · separate persistent RF dataset</summary>
+      <p class="muted">Opt-in only. No Internet aircraft, audio, IQ or full aircraft JSON. Receiver must stay in one physical location within each session. No automatic data deletion.</p>
+      <div class="rf-archive-actions">
+       <button id="rfRecorderToggle" type="button">Start recording</button>
+       <button id="rfNewSession" type="button" title="Start a separate recording session after moving the physical receiver">New receiver session</button>
+      </div>
+      <label class="rf-session-select">History session <select id="rfHistorySession" aria-label="Select stored physical receiver session"><option value="0">Latest recorded session (automatic)</option></select></label>
+      <div id="rfArchiveStatus" class="muted" role="status">Recorder OFF · historical observations kept when paused.</div>
+      <div id="rfArchiveWarning" class="muted"></div>
+     </details>
+     <small class="rf-mode-footnote">All stored verified circles are considered, not limited to 64. Smaller horizons receive more weight only in HISTORY BEST. Model spread is not calibrated error. History may contain conflicting bounds, so a weighted center is not necessarily inside every circle.</small>
+    </section>
+    <section class="rf-coverage-panel" aria-label="Legacy RF coverage constraints">
+    <strong>Legacy session BEST and RF details</strong>
     <div class="rf-history-controls">
      <label title="Accumulate only locally verified RF positions while this receiver stays physically fixed"><input id="rfRemember" type="checkbox" checked> Assume stationary receiver · accumulate 2 h of RF observations</label>
-     <button id="rfClearHistory" type="button">Clear RF history</button>
+     <button id="rfClearHistory" type="button">Clear RF history</button><button id="rfExportEvidence" type="button" title="Download genuine local RF constraints and modeled center. No token or Internet aircraft. The estimated listening area could be inferred if you share this file.">Export RF diagnostics</button>
     </div>
-    <span id="rfCoverageStatus" aria-live="polite">Three or more independently positioned RF aircraft required. A single SDR cannot give a measured location fix.</span>
-    <div id="rfLocateStatus" class="rf-locate-output" role="status" aria-live="polite">Press <strong>RF locate · 3+ aircraft</strong> to display the center of a modeled possible receiver area. Works with RF rings hidden or visible, without manual latitude/longitude or GPS permission.</div>
-    <small>Only genuine position-bearing antenna observations qualify; aircraft counted without positions do not qualify. The displayed coordinates are the <em>center of a modeled possible area</em>, not your measured position or GPS accuracy. A horizon circle represents a maximum plausible range, never a distance measurement. More planes may reduce the area without improving true accuracy. Reverse MLAT requires synchronized reference measurements.</small>
+    <div class="rf-view-controls" role="group" aria-label="RF model map appearance">
+     <label><input id="rfHatch" type="checkbox"> Hatched area</label>
+     <label><input id="rfModelPin" type="checkbox" checked> Active model center pin <small>Independent from model circle</small></label>
+     <label title="Show session-best center even when LIVE is currently unavailable; not calibrated GPS accuracy"><input id="rfBestPin" type="checkbox" checked> BEST center pin</label>
+     <label title="Draw a user-assumed radial Gaussian PSF around each selected aircraft horizon edge. Not a measured RF range, GPS error or 68% confidence."><input id="rfGaussianBand" type="checkbox"> Gaussian PSF · ±1σ</label>
+     <label title="ASSUMED one-sigma softening around each radio-horizon edge in kilometers, not measured range error">Assumed σ (km)
+      <select id="rfSigmaKm" aria-label="Assumed Gaussian horizon edge standard deviation in km"><option value="5">5</option><option value="10">10</option><option value="20" selected>20</option><option value="40">40</option><option value="80">80</option><option value="150">150</option></select>
+     </label>
+    </div>
+    <div id="rfCoordinateReadout" class="rf-coordinate-readout" aria-live="polite"><span id="rfCurrentCoordinates">Current RF model center: waiting for 4+ genuine RF aircraft</span><span id="rfBestCoordinates">Best session center: not yet available</span></div>
+     <span id="rfCoverageStatus" aria-live="polite">Four or more independently positioned local RF aircraft required. A single SDR cannot give a measured location fix.</span>
+    <span id="rfProgress" class="rf-progress" aria-live="polite">Model spread and center changes appear here as real RF observations accumulate.</span>
+    <span id="rfBestStatus" class="rf-best-status" aria-live="polite">Best model spread: waiting for 4 independently positioned RF aircraft.</span>
+    <button id="rfFocusBest" type="button" title="Show and inspect the saved BEST model center and circle, if available">Show BEST on map</button>
+    <div id="rfEvidence" class="rf-evidence" aria-live="polite">Waiting for 4+ independent local RF aircraft. No single-aircraft receiver fix.</div>
+    <div id="rfLocateStatus" class="rf-locate-output" role="status" aria-live="polite">The RF locator starts ON and calculates only from 4+ independent antenna aircraft. The Circles menu independently controls LIVE Fit, BEST Fit, individual aircraft horizons and the LIVE area. No GPS accuracy is claimed. No Internet, GPS or measured distance is required.</div>
+    <details class="rf-plane-layers" open>
+     <summary>Individual aircraft horizon circles · radio only</summary>
+     <div class="rf-aircraft-actions"><button type="button" id="rfAllPlanes">Show all</button><button type="button" id="rfNoPlanes">Hide all</button></div>
+     <div id="rfAircraftLayers" class="rf-aircraft-layers" aria-label="Individual real RF aircraft horizon layers">Waiting for valid RF aircraft positions.</div>
+      <small class="rf-psf-note">Gaussian PSF is only a hypothetical soft edge on the selected aircraft horizon circles. ±1σ is an assumed width, NOT measured accuracy or a calibrated 68% probability region. Enable aircraft circles from the top Circles menu first. This never changes the LIVE/BEST model.</small>
+    </details>
+    <small>Model spread circle bounds sampled feasible cells and is NOT a statistical accuracy/error circle. Hatched shading is an alternative visual layer, not GPS. Per-aircraft circles are radio-horizon upper limits, not measured aircraft distances. Only genuine position-bearing antenna observations qualify; aircraft counted without positions do not qualify. Native readsb aircraft positions may qualify even when the separate ADC timing laboratory is empty. The displayed coordinates are the <em>center of a modeled possible area</em>, not your measured position or GPS accuracy. A horizon circle represents a maximum plausible range, never a distance measurement. More planes may reduce the area without improving true accuracy. Reverse MLAT requires synchronized reference measurements.</small>
    </section>
    <section class="rf-lab-panel" aria-label="Offline RF Timing Laboratory">
     <div class="rf-lab-heading"><h2>RF Timing Laboratory</h2><span class="rf-lab-label">Local · offline-capable</span></div>
@@ -215,7 +361,7 @@
     <label class="location-wide">City / town / district / municipality
      <select id="placeTown"><option value="">Choose state first</option></select>
     </label>
-    <label class="location-wide">Search place (offline, accented or accent-free)
+    <label class="location-wide">Custom place search · offline towns or online street/address
      <input id="placeQuery" type="search" autocomplete="off" spellcheck="false"
       placeholder="Köln, Hürth, İzmir, Karaburun, Bornova…" aria-controls="placeSuggestions">
     </label>
@@ -240,6 +386,7 @@
     <button id="placeApply" class="primary" type="button">Use selected place</button>
     <button id="placeGps" type="button">Use device location (GPS)</button>
     <button id="placeOnline" type="button">Search worldwide online</button>
+    <button id="placeAddressOnline" type="button" title="Search a street, district, landmark or full address with Photon/OSM, only when clicked">Search address online</button>
    </div>
    <p class="location-footnote">Selecting a place changes only the map view and Internet aircraft query, never the physical SDR receiver location. Offline catalog: 8,084 approximate settlement points, not an exhaustive administrative boundary registry. GPS and online geocoding run only when requested. <a href="./CITY_DATA_LICENSE.md" target="_blank" rel="noopener noreferrer">Data license / ODbL</a>.</p>
   </div>
@@ -248,7 +395,14 @@
 </main>
 <script src="./multi_sources.js" defer></script>
 <script src="./receiver_coverage.js" defer></script>
+<script src="./flight_journey.js" defer></script>
+<script src="./rf_history_models.js" defer></script>
+<script src="./rf_history_client.js" defer></script>
+ <script src="./map_motion.js" defer></script>
 <script src="./rf_timing_lab.js" defer></script>
 <script src="./app.js" defer></script>
+<script src="./rf_history_ui.js" defer></script>
+<script src="./flight_journey_ui.js" defer></script>
+<script src="./aircraft_panel_resize.js" defer></script>
 <script type="module" src="./browser_usb.mjs"></script>
 </body></html>
