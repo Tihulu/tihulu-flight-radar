@@ -2,6 +2,7 @@
 const test=require("node:test");
 const assert=require("node:assert/strict");
 const fs=require("node:fs");
+const vm=require("node:vm");
 const path=require("node:path");
 const {pathToFileURL}=require("node:url");
 const root=path.join(__dirname,"../tihulu_flight_radar/web");
@@ -28,36 +29,63 @@ test("Four real positioned RF aircraft produce possible horizon area, not a GPS 
  assert.equal(result.circles.length,4);
  assert.ok(result.region.extentKm>0);
  assert.ok(result.region.possibleSamples.length>1);
+ const interval=coverage.modelDistanceInterval(result,rows[0]);
+ assert.equal(interval.kind,"model-grid-distance-interval");
+ assert.equal(interval.measured,false);
+ assert.ok(interval.minKm>=0&&interval.maxKm>=interval.minKm);
+ assert.equal(coverage.modelDistanceInterval(result,sample("a00005",50,7,"internet")),null);
+ assert.equal(coverage.modelDistanceInterval(coverage.compute(rows.slice(0,3)),rows[0]),null);
  assert.equal(Object.hasOwn(result,"receiverGPS"),false);
 });
-test("Three valid RF aircraft produce modeled area but never a measured receiver fix",()=>{
+test("Four local positioned RF aircraft yield possible area; three are explicitly insufficient",()=>{
  const radios=[
   sample("a00001",50.7,6.7),sample("a00002",50.2,7.5),
-  sample("a00003",51.1,6.2)
+  sample("a00003",51.1,6.2),sample("a00004",50.6,7.9)
  ];
+ assert.equal(coverage.MIN_INDEPENDENT,4);
+ assert.equal(coverage.compute(radios.slice(0,3)).status,"insufficient");
  const r=coverage.compute(radios);
  assert.equal(r.status,"region");
- assert.equal(r.count,3);
- assert.ok(Number.isFinite(r.region.lat) && Number.isFinite(r.region.lon));
+ assert.equal(r.count,4);
+ assert.equal(r.liveCount,4);
+ assert.equal(r.historyCount,0);
+ assert.ok(Number.isFinite(r.region.lat)&&Number.isFinite(r.region.lon));
  assert.equal(r.region.kind,"possible-area-centroid");
  assert.equal(r.region.accuracyMeters,null);
  assert.equal(r.region.confidence,null);
  assert.equal(Object.hasOwn(r,"receiverGPS"),false);
- const internet=sample("a00004",50.6,7.9,"internet");
- assert.equal(coverage.compute([...radios,internet]).count,3);
- const mixed=sample("a00005",50.4,7.7);
+ const internet=sample("a00005",50.6,7.9,"internet");
+ assert.equal(coverage.compute([...radios,internet]).count,4);
+ const mixed=sample("a00006",50.4,7.7);
  mixed.sources.push("internet");
  mixed.position_source="internet";
- assert.equal(coverage.compute([...radios,mixed]).count,3);
- const stale=sample("a00006",50.4,7.7);
+ assert.equal(coverage.compute([...radios,mixed]).count,4);
+ const stale=sample("a00007",50.4,7.7);
  stale.observations.antenna.seen_pos=90;
- assert.equal(coverage.compute([...radios,stale]).count,3);
- assert.equal(coverage.compute([radios[0],radios[1]]).status,"insufficient");
+ assert.equal(coverage.compute([...radios,stale]).count,4);
+});
+test("Session RF history contributes independent old aircraft only at a fixed receiver",()=>{
+ const current=[sample("a00001",50.7,6.7),sample("a00002",50.2,7.5)];
+ const old=sample("a00003",51.1,6.2),old2=sample("a00004",50.6,7.9);
+ const record1=coverage.recordedCircle(old),record2=coverage.recordedCircle(old2);
+ const eligible=coverage.compute(current,[record1,record2]);
+ assert.equal(eligible.count,4);
+ assert.equal(eligible.liveCount,2);
+ assert.equal(eligible.historyCount,2);
+ assert.equal(eligible.status,"region");
+ const trajectory={...record1,lat:record1.lat+0.2,lon:record1.lon+0.2,
+  capturedAtMs:Date.now()-60000};
+ const withTrack=coverage.compute(current,[record1,record2,trajectory]);
+ assert.equal(withTrack.count,4); // NOT 5 airplanes
+ assert.equal(withTrack.constraintsUsed,5); // five real received positions
+ assert.equal(coverage.compute(current,[record1,trajectory]).status,"insufficient");
+ assert.equal(coverage.compute(current,[record1,{...record2,capturedAtMs:Date.now()-3*3600000}]).status,"insufficient");
+ assert.equal(coverage.compute(current,[record1,record1]).status,"insufficient");
 });
 test("Unit selectors, close-on-outside click, raw JSON and timing claims in common web/Qt UI",()=>{
  const html=read("index.html"),js=read("app.js"),css=read("style.css");
  for(const id of ["unitSystem","altitudeColumn","speedColumn","aircraftPopup",
-   "popupClose","popupTiming","rawAircraftPanel","showRfCoverage","rfCoverageStatus"])
+   "popupClose","popupTiming","rawAircraftPanel","rfAircraftCircleMode","rfCoverageStatus"])
    assert.match(html,new RegExp('id="'+id+'"'));
  assert.match(html,/Altitude \(ft\)/);
  assert.match(html,/Speed \(kt\)/);
@@ -65,6 +93,7 @@ test("Unit selectors, close-on-outside click, raw JSON and timing claims in comm
  assert.match(js,/popupClose/);
  assert.match(js,/closePopup\(\)/);
  assert.match(js,/observations\?\.antenna/);
+ assert.match(js,/Local RF signal strength indicator/);
  assert.match(js,/Transmit–receive delay: not computable/);
  assert.match(css,/\.aircraft-popup\[hidden\]/);
 });
@@ -109,9 +138,65 @@ test("RF model is offline and the toggle doesn't depend on GPS or ring checkbox"
  assert.match(html,/id="rfLocate"/);
  assert.match(html,/id="rfLocateStatus"/);
  assert.match(js,/function paintRfLocator\(result\)/);
- assert.match(js,/paintRfLocator\(model\); \/\/ independent of the optional ring display/);
+ assert.match(js,/paintRfLocator\(model\);/);
+ assert.match(js,/paintRfBestPin\(model\);/);
  assert.match(js,/function focusRfModelWhenReady\(result\)/);
- assert.match(js,/const result=coverageResult\(\);\s*if\(result\.circles\.length<3\)return;/);
+ assert.match(js,/function paintRfCoverage\(result\)/);
+ assert.match(js,/rfConvexHull\(coords\)/);
+ assert.match(html,/smoothMotion/);
  assert.doesNotMatch(model,/\bfetch\s*\(|navigator\.geolocation|\bXMLHttpRequest\b|WebSocket/);
  assert.match(html,/not your measured position or GPS accuracy/);
+});
+
+test("Aircraft markers, callsign text and source badges have forgiving live hit targets",()=>{
+ const js=read("app.js");
+ const picker=js.match(/function pickPaintedAircraft\(hits,x,y,touchSlack=0\)\{[\s\S]*?\n\}/)?.[0];
+ assert.ok(picker,"click target picker must exist");
+ const pick=vm.runInNewContext(picker+"\npickPaintedAircraft",{Math});
+ const planes=[
+  {hex:"a00001",x:100,y:100,badgeRight:29,labelWidth:65},
+  {hex:"a00002",x:300,y:150,badgeRight:42,labelWidth:60}
+ ];
+ assert.equal(pick(planes,100,100)?.hex,"a00001");
+ assert.equal(pick(planes,121,117)?.hex,"a00001"); // source R badge
+ assert.equal(pick(planes,145,88)?.hex,"a00001"); // callsign text
+ assert.equal(pick(planes,334,170)?.hex,"a00002"); // I/R badge
+ assert.equal(pick(planes,20,20),null);
+ assert.equal(pick(planes,126,100,6)?.hex,"a00001"); // touch tolerance
+});
+test("Clicking a moving aircraft still opens its details without ending RF follow",()=>{
+ const js=read("app.js");
+ const down=js.match(/canvas\.addEventListener\("pointerdown",e=>\{[\s\S]*?\n\}\);/)?.[0];
+ const up=js.match(/canvas\.addEventListener\("pointerup",e=>\{[\s\S]*?\n\}\);/)?.[0];
+ const pick=js.match(/function pickPaintedAircraft\(hits,x,y,touchSlack=0\)\{[\s\S]*?\n\}/)?.[0];
+ const inspect=js.match(/function inspectCanvasAircraft\(x,y,preferredHex=null\)\{[\s\S]*?\n\}/)?.[0];
+ const inspectTarget=js.match(/function inspectCanvasTarget\(x,y,preferred=null\)\{[\s\S]*?\n\}/)?.[0];
+ const pickModel=js.match(/function pickPaintedModel\(hits,x,y,touchSlack=0\)\{[\s\S]*?\n\}/)?.[0];
+ assert.ok(down&&up&&pick&&inspect&&inspectTarget&&pickModel);
+ const handlers={},opened=[],state={pointer:null,data:[{hex:"a00001",lat:50,lon:7,seen_pos:1}]};
+ const canvas={
+  addEventListener:(event,fn)=>{handlers[event]=fn;},
+  getBoundingClientRect:()=>({left:10,top:20}),
+  setPointerCapture:()=>{}
+ };
+ const ctx={canvas,state,paintedModelHits:[],paintedAircraftHits:[
+  {hex:"a00001",x:100,y:100,badgeRight:29,labelWidth:60}
+ ],Math,Date,lastCanvasAircraftOpen:null,
+ visible:()=>true,isPositioned:()=>true,
+ toggleAircraftOnMap:a=>opened.push(a.hex),
+ openRfModelPopup:()=>false,closeRfModelPopup:()=>{},
+ closePopup:()=>opened.push("closed")};
+ vm.runInNewContext([pick,pickModel,inspect,inspectTarget,down,up].join("\n"),ctx);
+ handlers.pointerdown({pointerType:"mouse",button:0,clientX:110,clientY:120,pointerId:1});
+ assert.equal(state.pointer[5].value,"a00001");
+ assert.equal(state.pointer[5].kind,"aircraft");
+ // A position update arrives before button release: keep the pressed ICAO.
+ ctx.paintedAircraftHits[0].x=170;ctx.paintedAircraftHits[0].y=170;
+ handlers.pointerup({pointerType:"mouse",clientX:111,clientY:121});
+ assert.deepEqual(opened,["a00001"]);
+ assert.equal(state.pointer,null);
+ assert.match(js,/if\(state\.selected&&!\$\("aircraftPopup"\)\.hidden\)/);
+ assert.match(js,/const pos=displayedAircraftPoint\(a\)/);
+ assert.match(js,/canvas\.style\.cursor=hit\|\|model\?"pointer":"grab"/);
+ assert.match(js,/No live planes here · RF model may use past observations/);
 });
