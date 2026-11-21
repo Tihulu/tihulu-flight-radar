@@ -62,7 +62,8 @@ html.native .bridge-advanced:not([open])>.toolbar{display:flex}
 #usbReport{white-space:pre-wrap;overflow-wrap:anywhere;max-height:240px;
  overflow:auto;background:#0a1623;border:1px solid #334b62;border-radius:6px;
  padding:9px;font:12px/1.55 ui-monospace,Consolas,monospace}
-.map-panel>.mapbar,.map-panel>.aircraft-legend{position:relative;z-index:1;flex-shrink:0}
+.map-panel>.mapbar{position:relative;z-index:15;flex-shrink:0}
+.map-panel>.aircraft-legend{position:relative;z-index:1;flex-shrink:0}
 .map-panel>#map{position:relative;z-index:0}
 @media(max-width:620px){.usb-check-actions button{width:100%}}
 
@@ -190,7 +191,7 @@ body.tar-open{overflow:hidden}
 /* Shared web/Qt aircraft inspection: anchored nonmodal details. */
 .map-panel{position:relative}
 .aircraft-popup[hidden]{display:none!important}
-.aircraft-popup{position:absolute;z-index:5;width:min(328px,calc(100% - 16px));
+.aircraft-popup{position:fixed;z-index:20010;width:min(328px,calc(100vw - 16px));
  max-height:min(74vh,510px);overflow:auto;padding:13px;border:1px solid #5a768c;
  border-radius:13px;background:#152638;box-shadow:0 14px 45px #0009}
 .aircraft-popup-head{display:flex;align-items:flex-start;justify-content:space-between;gap:9px}
@@ -215,7 +216,7 @@ body.tar-open{overflow:hidden}
 .rf-coverage-panel{display:flex;flex-direction:column;gap:5px;margin-top:12px;padding:10px;
  border:1px solid #426076;border-radius:9px;background:#102234}
 .rf-coverage-panel strong{font-size:12px}
-.rf-coverage-panel span{font-size:12px;line-height:1.5;color:#e6d6af}
+.rf-coverage-panel span{font-size:12px;line-height:1.5;color:#c0e7ef}
 .rf-coverage-panel small{font-size:10px;color:var(--muted);line-height:1.5}
 .aircraft-popup-timing{margin-top:9px;padding:8px;border-top:1px solid #405267}
 .aircraft-popup-timing summary{cursor:pointer;font-size:11px;color:#afd4ee}
@@ -253,9 +254,358 @@ body.tar-open{overflow:hidden}
 
 /* RF feasible-area locator: independent from the optional horizon-ring overlay.
    Highlight the action but never style the model centroid as a GPS fix. */
-#rfLocate{border-color:#a58e56;background:#433922;color:#ffefcf;font-weight:650}
-#rfLocate[aria-pressed="true"]{background:#685124;border-color:#e3b865}
+#rfLocate{border-color:#2e9bb5;background:#103d54;color:#d5f8ff;font-weight:650}
+#rfLocate[aria-pressed="true"]{background:#175d70;border-color:#6ee2ed}
 .rf-locate-output{background:#0c1c2b;border:1px solid #486478;
- border-radius:8px;padding:10px;margin-top:5px;color:#e8e6d9;
+ border-radius:8px;padding:10px;margin-top:5px;color:#dbf4f7;
  font-size:11px;line-height:1.6;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
-.rf-locate-output strong{color:#ffdfab}
+.rf-locate-output strong{color:#7de1ed}
+
+
+/* Already-installed Qt desktop: never advertise another desktop install. */
+html.native .install-link{display:none!important}
+html.native .desktop-installed-label{display:inline-flex;align-items:center;
+ border:1px solid #357b70;background:#14352f;color:#b8f4e4;border-radius:8px;
+ padding:7px 10px;font-size:12px;white-space:nowrap}
+html.native #connectionLabel{max-width:340px;overflow-wrap:anywhere}
+html.native #receiverStatus[data-pair-state="failed"]{color:#ffbc99}
+
+/* Session-based radio feasibility display: controls never imply GPS accuracy. */
+.rf-follow-label,.rf-view-controls label{
+ display:inline-flex;align-items:center;gap:5px;white-space:normal;
+ font-size:11px;color:#c8edf7;cursor:pointer}
+.rf-follow-label{border:1px solid #326b83;background:#10364a;
+ border-radius:7px;padding:7px}
+.rf-follow-label input,.rf-view-controls input,.rf-aircraft-layer input{
+ accent-color:#59d3e4;cursor:pointer}
+.rf-view-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+ gap:7px;margin:7px 0;padding:8px;border:1px solid #31576b;
+ border-radius:8px;background:#102b3a}
+.rf-progress{display:block;padding:7px 8px;border-left:2px solid #6de3ee;
+ font-size:11px;line-height:1.5;color:#b8e3ee;background:#0c2230}
+.rf-plane-layers{margin:7px 0;padding:8px;border:1px solid #31576b;
+ border-radius:8px;background:#0e2434}
+.rf-plane-layers summary{cursor:pointer;color:#b9e9f4;font-size:12px;
+ font-weight:600}
+.rf-aircraft-actions{display:flex;gap:7px;margin:8px 0}
+.rf-aircraft-actions button{flex:1 1 0;padding:6px;font-size:11px}
+.rf-aircraft-layers{max-height:175px;overflow-y:auto;display:flex;
+ flex-direction:column;gap:4px;color:#b4d6e4;font-size:11px}
+.rf-aircraft-layer{display:flex;align-items:center;gap:7px;padding:5px 6px;
+ border:1px solid #305064;border-radius:5px;background:#142f40;
+ font-size:11px;color:#e4f3f8;cursor:pointer;min-width:0}
+.rf-aircraft-layer>span:last-child{overflow-wrap:anywhere}
+.rf-aircraft-swatch{display:inline-block;width:10px;height:10px;flex:0 0 10px;
+ border-radius:2px;border:1px solid rgba(255,255,255,.5)}
+@media(max-width:620px){.rf-view-controls{grid-template-columns:1fr 1fr}
+ .rf-aircraft-layers{max-height:135px}}
+
+/* Transparent evidence for independent RF constraints. Not a GPS fix. */
+.rf-evidence{margin-top:6px;border:1px solid #35687c;background:#0c2637;
+ border-radius:8px;padding:9px;font-size:11px;line-height:1.45;color:#c8e7ee}
+.rf-evidence>strong{display:block;color:#8ce6f0;margin-bottom:6px;
+ font-size:11px}
+.rf-evidence-line{display:flex;justify-content:space-between;align-items:center;
+ flex-wrap:wrap;gap:4px 10px;border-top:1px solid #325366;padding:6px 0;
+ font-variant-numeric:tabular-nums}
+.rf-evidence-line>span:first-child{color:#e3f3f7;font-weight:600}
+.rf-evidence-line>span:last-child{color:#9fcedc}
+.rf-evidence>small{display:block;margin-top:7px;color:#b2cbd5;line-height:1.5}
+
+/* RF model history and optional uncalibrated Gaussian-horizon visualization */
+.rf-best-status{display:block;margin-top:6px;padding:8px 10px;
+ border:1px solid #806b9c;border-left:3px solid #cfb7f3;border-radius:6px;
+ background:#201a32;color:#dfcfff;font-size:11px;line-height:1.5;
+ font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.rf-view-controls select{background:#102e42;color:#e8f3f9;border:1px solid #47738b;
+ border-radius:5px;padding:4px 6px;max-width:100%;font-size:11px}
+.rf-psf-note{display:block;margin:8px 2px 3px;color:#c6d7eb;
+ font-size:10px;line-height:1.55;overflow-wrap:anywhere}
+
+/* Explicit model coordinates are distinct from observed receiver GPS. */
+.rf-coordinate-readout{display:flex;flex-wrap:wrap;gap:7px;margin:8px 0}
+.rf-coordinate-readout span{flex:1 1 200px;min-width:0;padding:8px 9px;
+ border:1px solid #35758b;border-radius:7px;background:#102e3c;
+ color:#9de8f5;font:600 11px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;
+ font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+#rfBestCoordinates{border-color:#786699;background:#211e32;color:#e2ccff}
+.rf-map-coordinates{color:#b5f1f3;font:600 11px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;
+ font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+
+/* Guaranteed visible mini aircraft card and accessible list fallback. */
+.aircraft-row-info{font-size:11px!important;padding:4px 9px!important;
+ border:1px solid #508ca4!important;border-radius:6px!important;
+ background:#163b4d!important;color:#c9f5ff!important;
+ cursor:pointer;white-space:nowrap}
+.aircraft-row-info:hover,.aircraft-row-info:focus-visible{background:#24647a!important;
+ border-color:#9adfed!important;outline:2px solid #6ec9e2;outline-offset:2px}
+#popupAirline,#popupFlightNumber{font-size:12px;line-height:1.5;overflow-wrap:anywhere}
+
+/* One control surface for independent RF overlays in Qt/PWA/desktop/web. */
+.maptools .rf-circles-menu{position:relative;flex:0 0 auto;z-index:4}
+.rf-circles-menu>summary{display:flex;align-items:center;gap:8px;
+ list-style:none;background:#243b55;border:1px solid #527e9b;
+ color:#e9f8ff;border-radius:8px;padding:7px 10px;cursor:pointer;
+ font-size:12px;min-height:33px;user-select:none;white-space:nowrap}
+.rf-circles-menu>summary::-webkit-details-marker{display:none}
+.rf-circles-menu>summary:hover,.rf-circles-menu[open]>summary{background:#315472;
+ border-color:#6ebed9}
+.rf-circles-menu>summary:focus-visible{outline:2px solid #7dcaee;outline-offset:2px}
+.rf-circles-dropdown{position:absolute;z-index:20;top:calc(100% + 6px);
+ left:0;width:min(298px,calc(100vw - 32px));padding:10px;
+ border:1px solid #5a85a4;border-radius:11px;background:#142a3f;
+ box-shadow:0 12px 25px rgba(0,0,0,.48);display:flex;
+ flex-direction:column;gap:6px;max-height:min(380px,calc(100vh - 165px));
+ overflow-y:auto;overscroll-behavior:contain}
+.rf-circles-dropdown>strong{font-size:12px;color:#def3ff}
+.rf-circles-dropdown>label{display:flex;flex-wrap:wrap;align-items:center;
+ gap:6px;padding:5px 8px;background:#203b53;border:1px solid #395c78;
+ border-radius:8px;color:#e0f0fd;font-size:12px;cursor:pointer;min-width:0}
+.rf-circles-dropdown>label input[type=checkbox]{accent-color:#67dfe9;flex:none}
+.rf-circles-dropdown>label small{display:block;flex:1 1 100%;
+ margin-left:23px;font-size:10px;line-height:1.4;color:#b8cee1}
+.rf-circles-dropdown>.rf-circles-live{border-left:3px solid #58d7e9}
+.rf-circles-dropdown>.rf-circles-best{border-left:3px solid #cda6fc}
+.rf-circles-dropdown>.rf-circles-best input[type=checkbox]{accent-color:#cda6fc}
+.rf-circles-dropdown>.rf-circles-aircraft{display:flex;flex-direction:column;
+ align-items:stretch;gap:5px}
+.rf-circles-aircraft select{font-size:12px;width:100%;max-width:100%}
+.rf-circles-footnote{font-size:10px;line-height:1.45;color:#b4cada}
+.rf-circles-dropdown>label:not(.rf-circles-aircraft) small{
+ flex:1 1 auto;min-width:120px;margin-left:3px;font-size:10px
+}
+.rf-circles-done{align-self:flex-end;min-width:72px;
+ padding:6px 12px;border:1px solid #5a9cbd;border-radius:7px;
+ background:#234d65;color:#e7f8ff;cursor:pointer}
+.rf-circles-done:hover,.rf-circles-done:focus-visible{
+ background:#31667f;outline:2px solid #8cd8f2;outline-offset:1px}
+@media(max-width:620px){
+ .rf-circles-menu{flex:0 0 auto}
+ .rf-circles-dropdown{width:min(310px,calc(100vw - 30px));left:0}
+}
+
+/* Selected plane state is separate from popup visibility and from ALL RF rings. */
+.rf-picked-panel{margin:12px 0;padding:10px;border:1px solid #37637b;
+ background:#102837;border-radius:10px}
+.rf-picked-head{display:flex;align-items:center;justify-content:space-between;
+ gap:9px;flex-wrap:wrap;font-size:12px}
+.rf-picked-head strong{color:#e4f6fb}
+.rf-picked-head button{font-size:11px;padding:5px 8px}
+.rf-picked-panel .muted{margin:8px 0;overflow-wrap:anywhere}
+.rf-picked-list{display:flex;flex-direction:column;gap:6px;
+ max-height:210px;overflow:auto;font-size:11px;color:#bcd8e5}
+.rf-picked-item{display:flex;align-items:center;gap:5px;padding:7px;
+ border:1px solid #33596b;border-radius:7px;background:#182e40}
+.rf-picked-item.current{border-color:#68d8df;background:#203f50}
+.rf-picked-description{min-width:0;flex:1;display:flex;flex-direction:column;gap:2px}
+.rf-picked-description strong{color:#dceef9;font-size:11px;overflow-wrap:anywhere}
+.rf-picked-description small{font-size:10px;color:#a9cede;line-height:1.4}
+.rf-picked-item button{font-size:11px;padding:5px 7px;flex:none}
+.rf-picked-remove{min-width:28px}
+
+/* LIVE/BEST click details are viewport-fixed, like aircraft cards. */
+.rf-model-popup{width:min(338px,calc(100vw - 16px));max-height:min(88dvh,760px);
+ border-color:#5599b0}
+.rf-model-popup.best{border-color:#b99add}
+.rf-model-popup .rf-popup-grid{margin-top:12px}
+.rf-popup-grid .rf-popup-wide{grid-column:1/-1}
+.rf-popup-grid strong{font-variant-numeric:tabular-nums}
+.rf-popup-grid #rfPopupAccuracy{color:#ffcf99}
+.rf-preview-heading{display:flex;align-items:center;justify-content:space-between;
+ gap:6px;flex-wrap:wrap;margin:12px 0 7px;font-size:11px}
+.rf-preview-heading strong{font-size:12px;color:#dceaf7}
+.rf-preview-heading small{color:#b2ccdf}
+#rfModelMiniMap{display:block;width:100%;max-width:280px;aspect-ratio:1;
+ height:auto;border:1px solid #526d83;border-radius:8px;
+ background:#122e40;margin:0 auto}
+.rf-popup-map-credit{display:block;color:#a9c4d5;font-size:9px;line-height:1.4;margin:5px 0}
+
+.offline-map-panel{background:#112535;color:#d4eaf4;border-top:1px solid #355069;
+ padding:8px 12px;font-size:12px}
+.offline-map-panel summary{font-weight:650;color:#bbecff;cursor:pointer}
+.offline-map-controls{display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin:8px 0}
+.offline-map-controls>label{display:flex;flex-direction:column;gap:4px;font-size:11px}
+.offline-map-controls select{max-width:260px;padding:6px}
+.offline-map-controls button{font-size:11px;padding:6px 8px}
+.offline-map-controls input[type=file]{max-width:200px;font-size:11px}
+.offline-map-controls a{font-size:11px;color:#aedfff}
+.offline-map-panel small{color:#aec7d8;line-height:1.55;display:block}
+html:not(.native) .offline-map-controls{display:none}
+
+/* RF Geolocation v2: compact map toolbar and independent recorder panel. */
+.rf-mode-quick,.rf-hours-quick{display:inline-flex;align-items:center;gap:5px;
+ font-size:12px;font-weight:650;color:#d8edf8;padding:4px 7px;
+ background:#102e41;border:1px solid #496777;border-radius:7px}
+.rf-mode-quick select,.rf-hours-quick select{min-width:0;max-width:190px;
+ color:#eaf6ff;background:#142f42;border:1px solid #55768c;
+ border-radius:5px;padding:5px 6px;font:inherit}
+.rf-hours-quick[hidden]{display:none!important}
+.rf-mode-panel{border:1px solid #45677d;border-radius:12px;
+ background:linear-gradient(145deg,rgba(21,55,74,.78),rgba(11,32,49,.87));
+ margin:14px 0;padding:14px;display:flex;flex-direction:column;gap:10px}
+.rf-mode-title{display:flex;flex-wrap:wrap;gap:10px;align-items:center;
+ justify-content:space-between;font-size:14px}
+.rf-mode-title span{font-weight:750;color:#89e2f5;font-size:12px}
+.rf-mode-panel .muted{margin:0;line-height:1.5}
+.rf-mode-kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.rf-mode-kpis>div{display:flex;flex-direction:column;gap:4px;
+ background:rgba(5,20,30,.65);padding:10px;border:1px solid #35556d;
+ border-radius:8px;min-width:0}
+.rf-mode-kpis small{font-size:11px;color:#b7cfe0}
+.rf-mode-kpis strong{font-size:16px;color:#ecf8ff;overflow-wrap:anywhere}
+.rf-mode-kpis div:last-child strong{font-size:12px;color:#e9cb94}
+.rf-mode-work,.rf-archive-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.rf-mode-work label{display:flex;flex:1;flex-wrap:wrap;gap:6px;
+ align-items:center;font-size:12px;color:#d3e9f9}
+.rf-mode-work select{max-width:180px;min-width:130px}
+.rf-archive-controls{padding:10px;border:1px solid #416079;
+ background:rgba(5,21,32,.55);border-radius:9px}
+.rf-archive-controls summary{font-size:13px;font-weight:700;cursor:pointer;color:#c6eeff}
+.rf-archive-controls>.muted{margin:10px 0}
+.rf-archive-actions{margin:10px 0}
+.rf-archive-controls button,.rf-mode-work button{font-size:12px}
+.rf-mode-footnote{font-size:11px;line-height:1.5;color:#b7cede}
+@media(max-width:750px){.rf-mode-quick select{max-width:165px}
+ .rf-mode-panel{padding:11px}}
+
+.rf-session-select,.rf-model-compare{display:flex;flex-wrap:wrap;gap:7px;align-items:center;
+ font-size:12px;color:#d4e8f6}
+.rf-session-select select{max-width:100%;flex:1;min-width:145px}
+.rf-model-compare small{color:#abc7d8}
+
+/* Real callsign journey enrichment: static airport route vs provider schedule
+ * vs observed local SDR ground/air transition are never conflated. */
+.aircraft-journey{margin:10px 0;padding:10px;border:1px solid #47748a;
+ border-radius:9px;background:linear-gradient(140deg,#122b3d,#0d2532)}
+.aircraft-journey-title{display:flex;align-items:center;justify-content:space-between;
+ gap:7px;margin-bottom:8px}
+.aircraft-journey-title strong{font-size:12px;color:#ddf6ff}
+.aircraft-journey-title button{font-size:10px;padding:4px 7px;flex:none}
+.aircraft-journey-airports,.aircraft-journey-times{display:grid;
+ grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.aircraft-journey-airports>div{padding:8px;background:#092333;
+ border:1px solid #385a6d;border-radius:7px;min-width:0}
+.aircraft-journey-airports small,.aircraft-journey-times span{
+ display:block;color:#9ec4d7;font-size:10px;margin-bottom:5px}
+.aircraft-journey-airports strong{color:#f2f9ff;font-size:12px;
+ overflow-wrap:anywhere;line-height:1.5;display:block}
+.aircraft-journey-times{margin:8px 0}
+.aircraft-journey-times>div{border-top:1px solid #3a5c70;padding:6px 3px 3px}
+.aircraft-journey-times strong{font-size:11px;font-weight:650;color:#d8ebfa;
+ overflow-wrap:anywhere}
+.aircraft-journey-radio{font-size:10px;line-height:1.5;color:#a5dfca;
+ white-space:pre-line;margin:7px 0 5px}
+.aircraft-journey-source{display:block;font-size:10px;line-height:1.45;color:#a5c4d6}
+.journey-dot{display:inline-block;width:6px;height:6px;border-radius:50%;
+ margin-right:3px;background:#6be1cf}
+.journey-dot.landing{background:#deb17a}
+.journey-table{min-width:105px;line-height:1.4}
+.journey-table strong{font-size:11px;display:block;color:#e7f9ff}
+.journey-table small{display:block;color:#9ebacb;font-size:9px;white-space:normal}
+#aircraftRoutesLoad{font-size:10px;padding:5px 7px;white-space:nowrap}
+.aircraft-table-title{flex-wrap:wrap}
+@media(max-width:620px){.aircraft-journey{margin:7px 0;padding:8px}
+ .aircraft-popup{max-height:80vh}}
+
+
+/* Readable aircraft details: the old fixed 360px sidebar forced a clipped
+ * six-column table and a horizontal scrollbar. The map now shares width
+ * with an adjustable ~580px information pane. */
+:root{--flight-side-width:580px}
+.layout{grid-template-columns:minmax(0,1fr) 10px minmax(0,var(--flight-side-width));
+ gap:7px}
+.aircraft-side-splitter{width:10px;min-width:10px;border-radius:8px;
+ align-self:stretch;position:relative;cursor:col-resize;touch-action:none;
+ background:linear-gradient(90deg,transparent 0 3px,#33586e 3px 7px,transparent 7px)}
+.aircraft-side-splitter:hover,.aircraft-side-splitter:focus-visible{
+ background:linear-gradient(90deg,transparent 0 2px,#7ad5ed 2px 8px,transparent 8px);
+ outline:2px solid #2b5973;outline-offset:1px}
+.aircraft-side-splitter:active{background:#346c87}
+.aircraft-load-buttons{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.aircraft-load-buttons button{font-size:11px;padding:7px 9px}
+#aircraftRadioLoad{border-color:#419884;background:#1a4a47;color:#d1faed}
+#aircraftRadioLoad:hover{background:#23665a}
+.aircraft-table-title{gap:10px;align-items:center;flex-wrap:wrap}
+.aircraft-table-title h2{margin:6px 0!important;flex:0 0 auto}
+.aircraft-table-title label{margin-left:auto}
+.aircraft-load-status{font-size:11px;color:#a5c8d6;line-height:1.4;
+ border-bottom:1px solid #3b5368;margin:3px 0 10px;padding:0 0 7px}
+.tablewrap{max-height:min(55vh,580px);overscroll-behavior:contain;
+ scrollbar-gutter:stable;overflow-y:auto;overflow-x:hidden}
+.tablewrap table{table-layout:auto}
+.tablewrap th,.tablewrap td{vertical-align:top;overflow-wrap:anywhere}
+.tablewrap .journey-table{min-width:125px}
+.side{scrollbar-gutter:stable;container-type:inline-size;container-name:aircraft-side}
+.radar-expanded .layout{grid-template-columns:minmax(0,1fr) 10px minmax(0,var(--flight-side-width));gap:7px}
+.radar-expanded .tablewrap{max-height:min(47vh,490px)}
+@container (max-width:680px){
+ .tablewrap{overflow-x:hidden}
+ .tablewrap table,.tablewrap tbody{display:block;width:100%;min-width:0}
+ .tablewrap thead{display:none}
+ .tablewrap tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  gap:5px 9px;margin:0 0 9px;padding:10px 11px;
+  border:1px solid #3c576a;border-radius:10px;background:#142b3e}
+ .tablewrap tr.selected{background:#244555;border-color:#66ccd6}
+ .tablewrap td{display:block;min-width:0;border:none;padding:2px 3px;
+  white-space:normal;overflow-wrap:anywhere;line-height:1.45}
+ .tablewrap td::before{content:attr(data-label);display:block;font-size:10px;
+  margin-bottom:3px;font-weight:650;color:#96bfd6}
+ .tablewrap td:nth-child(1){grid-column:1;grid-row:1}
+ .tablewrap td:nth-child(4){grid-column:2;grid-row:1}
+ .tablewrap td:nth-child(2){grid-column:1;grid-row:2}
+ .tablewrap td:nth-child(3){grid-column:2;grid-row:2}
+ .tablewrap td:nth-child(5){grid-column:1/-1;grid-row:3;
+  border-top:1px solid #36596d;margin-top:4px;padding-top:7px}
+ .tablewrap td:nth-child(6){grid-column:1/-1;grid-row:4}
+ .tablewrap td:nth-child(6) button{width:100%;padding:7px 10px}
+ .tablewrap .journey-table{min-width:0}
+ .tablewrap .journey-table strong{font-size:12px;line-height:1.35}
+ .tablewrap .journey-table small{font-size:10px;line-height:1.45}
+}
+@media(max-width:1150px){
+ .layout{grid-template-columns:minmax(0,1fr)}
+ .aircraft-side-splitter{display:none}
+ .side{max-height:none}
+ .tablewrap{max-height:60vh}
+}
+@media(max-width:800px){
+ .radar-expanded .layout{grid-template-columns:minmax(0,1fr);
+  grid-template-rows:minmax(0,1fr) minmax(300px,44dvh)}
+ .radar-expanded .side{height:auto;max-height:none;min-height:0}
+ .radar-expanded .aircraft-side-splitter{display:none}
+ .radar-expanded .tablewrap{max-height:36dvh}
+}
+@media(max-width:430px){
+ .aircraft-load-buttons{width:100%}
+ .aircraft-load-buttons button{flex:1 1 0;padding:8px 5px}
+ .aircraft-table-title label{margin-left:0}
+ .tablewrap{scrollbar-gutter:auto}
+}
+
+/* A receiver observation must stay visually distinct from online timetable. */
+.tablewrap .journey-radio-time{color:#7fdec5;font-weight:600;
+ margin-top:5px;padding-top:3px;border-top:1px dashed #37635b}
+
+
+/* Circles was clipped by .map-panel{overflow:hidden}, especially Qt/WebEngine.
+   An opened menu is portaled to document.body and positioned inside the
+   actual viewport. No overlay may lie behind the receiver sidebar. */
+.rf-circles-dropdown.rf-circles-portaled{position:fixed!important;left:8px;
+ top:8px;right:auto;bottom:auto;z-index:31000!important;
+ width:min(340px,calc(100vw - 16px));max-height:calc(100dvh - 16px);
+ padding:11px;overscroll-behavior:contain;overflow-y:auto;
+ box-shadow:0 16px 48px rgba(0,0,0,.72);
+ scrollbar-width:thin}
+.rf-circles-dropdown>label.rf-circles-xhour{border-left:3px solid #85b3ff}
+.rf-circles-dropdown>label.rf-circles-history{border-left:3px solid #63dcac}
+.rf-circles-dropdown>label.rf-circles-weighted{border-left:3px solid #edbd71}
+.rf-circles-dropdown>label.rf-circles-xhour input{accent-color:#85b3ff}
+.rf-circles-dropdown>label.rf-circles-history input{accent-color:#63dcac}
+.rf-circles-dropdown>label.rf-circles-weighted input{accent-color:#edbd71}
+.rf-circles-dropdown .rf-layer-actions{display:grid;
+ grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin:4px 0}
+.rf-circles-dropdown .rf-layer-actions button{font-size:11px;padding:8px 3px;
+ white-space:normal;line-height:1.2;text-align:center}
+.rf-circles-dropdown input[hidden],.rf-model-compare[hidden]{display:none!important}
+@media(max-width:420px){.rf-circles-dropdown.rf-circles-portaled{
+ width:calc(100vw - 16px)}}
