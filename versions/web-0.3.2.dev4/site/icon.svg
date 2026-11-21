@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Tihulu Flight Radar">
+<rect width="512" height="512" rx="104" fill="#142638"/>
+<circle cx="256" cy="256" r="189" fill="none" stroke="#2c887e" stroke-width="13" opacity=".85"/>
+<circle cx="256" cy="256" r="124" fill="none" stroke="#2c887e" stroke-width="9" opacity=".55"/>
+<path d="M256 66v380M66 256h380" stroke="#2c887e" stroke-width="6" opacity=".45"/>
+<path d="M256 111l29 117 118 55-7 31-115-25-8 81 39 36v23l-56-19-56 19v-23l39-36-8-81-115 25-7-31 118-55z" fill="#8cebd0" stroke="#8cebd0" stroke-width="8" stroke-linejoin="round"/>
+</svg>
