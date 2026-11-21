@@ -1,0 +1,108 @@
+name: Desktop version builds
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: "Attach artifacts to a GitHub Release (draft)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: ubuntu-x64
+            os: ubuntu-24.04
+            artifact: linux-x64
+          - label: windows-x64
+            os: windows-latest
+            artifact: win-x64
+          - label: macos-arm64
+            os: macos-latest
+            artifact: macos-arm64
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          python -m pip install --disable-pip-version-check --upgrade pip
+          python -m pip install --disable-pip-version-check "PySide6==6.12.0" "PySide6-Addons==6.12.0" "PySide6-Essentials==6.12.0" "PySide6-WebEngine==6.12.0.140" pyinstaller
+      - name: Build desktop executable (PyInstaller onedir)
+        shell: bash
+        run: python -m PyInstaller --noconfirm --clean --windowed --onedir --name TihuluFlightRadar --collect-data tihulu_flight_radar --paths . tihulu_flight_radar/launcher.py
+      - name: Package Linux (.deb + AppImage)
+        if: matrix.label == 'ubuntu-x64'
+        shell: bash
+        run: |
+          sh packaging/linux/build-deb.sh
+          mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/scalable/apps
+          cp -a dist/TihuluFlightRadar/. AppDir/usr/bin/
+          install -m 0644 packaging/linux/tihulu-flight-radar.desktop AppDir/tihulu-flight-radar.desktop
+          install -m 0644 packaging/linux/tihulu-flight-radar.svg AppDir/tihulu-flight-radar.svg
+          install -m 0644 packaging/linux/tihulu-flight-radar.svg AppDir/usr/share/icons/hicolor/scalable/apps/tihulu-flight-radar.svg
+          printf '#!/bin/sh\nexec "$(dirname "$0")/usr/bin/TihuluFlightRadar" "$@"\n' > AppDir/AppRun
+          chmod +x AppDir/AppRun
+          curl -sSLo appimagetool "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage"
+          chmod +x appimagetool
+          ARCH=x86_64 ./appimagetool --no-appstream AppDir Tihulu_Flight_Radar-x86_64.AppImage
+      - name: Package Windows zip
+        if: matrix.label == 'windows-x64'
+        shell: bash
+        run: |
+          cd dist && 7z a ../TihuluFlightRadar-win-x64.zip TihuluFlightRadar && cd ..
+      - name: Package macOS zip
+        if: matrix.label == 'macos-arm64'
+        shell: bash
+        run: |
+          cd dist && ditto -c -k --sequesterRsrc --keepParent TihuluFlightRadar.app ../TihuluFlightRadar-macos-arm64.zip && cd ..
+      - name: Collect artifacts and checksums
+        shell: bash
+        run: |
+          mkdir -p dist-publish
+          for f in Tihulu_Flight_Radar-x86_64.AppImage tihulu-flight-radar_0.3.2.dev4_amd64.deb TihuluFlightRadar-win-x64.zip TihuluFlightRadar-macos-arm64.zip; do
+            for d in dist . ; do [ -f "$d/$f" ] && cp "$d/$f" dist-publish/ && break; done
+          done
+          cd dist-publish && sha256sum * > SHA256SUMS && ls -la
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tihulu-flight-radar-${{ matrix.artifact }}
+          path: dist-publish/
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    name: Draft release
+    needs: build
+    if: inputs.publish_release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Create draft release with desktop builds
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="desktop-0.3.2.dev4-$(date +%Y%m%d-%H%M)"
+          gh release create "$tag" --draft --title "Desktop builds 0.3.2.dev4 ($tag)" --notes "CI-built desktop artifacts from main. Not a signed or approved public release; verify SHA256SUMS before use."
+          for f in artifacts/*; do gh release upload "$tag" "$f"; done

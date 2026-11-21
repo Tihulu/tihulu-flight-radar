@@ -155,3 +155,16 @@ no browser GPS permission and no Internet**, and works with the optional
 position fixes** are not enough. The centroid is *not* a measured true
 receiver location, reverse MLAT, a GPS fix or a reliable accuracy estimate;
 additional aircraft constrain only the model-dependent possible region.
+
+
+## Latest versions
+
+| Platform | Version | Kurulum / İndirme |
+|---|---|---|
+| Web (browser) | 0.3.2.dev4 | https://tihulu.github.io/tihulu-flight-radar/ · kopya + tek satır lokal sunucu: [versions/web-0.3.2.dev4/](versions/web-0.3.2.dev4/) |
+| Ubuntu / Pop!_OS | 0.3.2.dev4 | Tek satır: `curl -fsSL https://raw.githubusercontent.com/Tihulu/tihulu-flight-radar/main/scripts/install-linux.sh | bash` · detay: [versions/desktop-ubuntu-popos/](versions/desktop-ubuntu-popos/) |
+| Windows | 0.3.2.dev4 | [versions/desktop-windows/](versions/desktop-windows/) (CI build) |
+| macOS | 0.3.2.dev4 | [versions/desktop-macos/](versions/desktop-macos/) (CI build) |
+| Raspberry Pi 5 (ARM64) | 0.3.2.dev4 | [versions/desktop-rpi5-arm/](versions/desktop-rpi5-arm/) (tek satır kurulum veya Pi üstünde AppImage build) |
+
+Tüm sürüm kayıtları: [versions/](versions/) · Rollback: legacy/v0.3.1 @ `67280cd84feb89faec6a80f5fe2a55ce5f7b89e6`
