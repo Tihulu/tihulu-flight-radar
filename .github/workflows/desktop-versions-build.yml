@@ -106,7 +106,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          cd artifacts && rm -f SHA256SUMS && sha256sum * > SHA256SUMS && cat SHA256SUMS
+          rm -f artifacts/SHA256SUMS
+          (cd artifacts && sha256sum * > SHA256SUMS)
           tag="desktop-0.3.2.dev4-$(date +%Y%m%d-%H%M)"
           gh release create "$tag" --draft --title "Desktop builds 0.3.2.dev4 ($tag)" --notes "CI-built desktop artifacts from main. Not a signed or approved public release; verify SHA256SUMS before use."
           for f in artifacts/*; do gh release upload "$tag" "$f"; done
