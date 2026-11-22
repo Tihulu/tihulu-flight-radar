@@ -57,6 +57,7 @@ jobs:
           install -m 0644 packaging/linux/tihulu-flight-radar.desktop AppDir/tihulu-flight-radar.desktop
           install -m 0644 packaging/linux/tihulu-flight-radar.svg AppDir/tihulu-flight-radar.svg
           install -m 0644 packaging/linux/tihulu-flight-radar.svg AppDir/usr/share/icons/hicolor/scalable/apps/tihulu-flight-radar.svg
+          ln -sf tihulu-flight-radar.svg AppDir/.DirIcon
           printf '#!/bin/sh\nexec "$(dirname "$0")/usr/bin/TihuluFlightRadar" "$@"\n' > AppDir/AppRun
           chmod +x AppDir/AppRun
           curl -sSLo appimagetool "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage"
@@ -116,6 +117,7 @@ jobs:
             install -m 0644 packaging/linux/tihulu-flight-radar.desktop AppDir/tihulu-flight-radar.desktop
             install -m 0644 packaging/linux/tihulu-flight-radar.svg AppDir/tihulu-flight-radar.svg
             install -m 0644 packaging/linux/tihulu-flight-radar.svg AppDir/usr/share/icons/hicolor/scalable/apps/tihulu-flight-radar.svg
+            ln -sf tihulu-flight-radar.svg AppDir/.DirIcon
             printf '#!/bin/sh\nexec "$(dirname "$0")/usr/bin/TihuluFlightRadar" "$@"\n' > AppDir/AppRun
             chmod +x AppDir/AppRun
       - name: Assemble aarch64 AppImage on the host (no emulation needed)
@@ -141,12 +143,12 @@ jobs:
         shell: bash
         run: |
           set -e
-          dpkg-deb -I dist-publish/tihulu-flight-radar_0.3.2.dev4_arm64.deb control | grep -q "Architecture: arm64"
-          dpkg-deb -c dist-publish/tihulu-flight-radar_0.3.2.dev4_arm64.deb | grep -q "./opt/tihulu-flight-radar/"
+          dpkg-deb -I dist-publish/tihulu-flight-radar_0.3.2.dev4_arm64.deb control | grep "Architecture: arm64"
+          dpkg-deb -c dist-publish/tihulu-flight-radar_0.3.2.dev4_arm64.deb | grep "./opt/tihulu-flight-radar/"
           rm -rf /tmp/debx && mkdir -p /tmp/debx
           dpkg-deb -x dist-publish/tihulu-flight-radar_0.3.2.dev4_arm64.deb /tmp/debx
-          file /tmp/debx/opt/tihulu-flight-radar/TihuluFlightRadar/TihuluFlightRadar | grep -q "ARM aarch64"
-          file dist-publish/Tihulu_Flight_Radar-aarch64.AppImage | grep -q "ARM aarch64"
+          file /tmp/debx/opt/tihulu-flight-radar/TihuluFlightRadar/TihuluFlightRadar | grep "ARM aarch64"
+          file dist-publish/Tihulu_Flight_Radar-aarch64.AppImage | grep "ARM aarch64"
           python3 - <<'PY'
           data = open("dist-publish/Tihulu_Flight_Radar-aarch64.AppImage", "rb").read()
           assert data[:4] == b"\x7fELF", "AppImage does not start with an ELF runtime"
