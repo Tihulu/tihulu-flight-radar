@@ -159,12 +159,12 @@ additional aircraft constrain only the model-dependent possible region.
 
 ## Latest versions
 
-| Platform | Version | Kurulum / İndirme |
+| Platform | Version | Install / Download |
 |---|---|---|
-| Web (browser) | 0.3.2.dev4 | https://tihulu.github.io/tihulu-flight-radar/ · kopya + tek satır lokal sunucu: [versions/web-0.3.2.dev4/](versions/web-0.3.2.dev4/) |
-| Ubuntu / Pop!_OS | 0.3.2.dev4 | Tek satır: `curl -fsSL https://raw.githubusercontent.com/Tihulu/tihulu-flight-radar/main/scripts/install-linux.sh | bash` · detay: [versions/desktop-ubuntu-popos/](versions/desktop-ubuntu-popos/) |
+| Web (browser) | 0.3.2.dev4 | https://tihulu.github.io/tihulu-flight-radar/ · copy + one-line local server: [versions/web-0.3.2.dev4/](versions/web-0.3.2.dev4/) |
+| Ubuntu / Pop!_OS | 0.3.2.dev4 | One line: `curl -fsSL https://raw.githubusercontent.com/Tihulu/tihulu-flight-radar/main/scripts/install-linux.sh | bash` · details: [versions/desktop-ubuntu-popos/](versions/desktop-ubuntu-popos/) |
 | Windows | 0.3.2.dev4 | [versions/desktop-windows/](versions/desktop-windows/) (CI build) |
 | macOS | 0.3.2.dev4 | [versions/desktop-macos/](versions/desktop-macos/) (CI build) |
-| Raspberry Pi 5 (ARM64) | 0.3.2.dev4 | [versions/desktop-rpi5-arm/](versions/desktop-rpi5-arm/) (tek satır kurulum veya Pi üstünde AppImage build) |
+| Raspberry Pi 5 (ARM64) | 0.3.2.dev4 | [versions/desktop-rpi5-arm/](versions/desktop-rpi5-arm/) (one-line install or AppImage build on the Pi) |
 
-Tüm sürüm kayıtları: [versions/](versions/) · Rollback: legacy/v0.3.1 @ `67280cd84feb89faec6a80f5fe2a55ce5f7b89e6`
+All version records: [versions/](versions/) · Rollback: legacy/v0.3.1 @ `67280cd84feb89faec6a80f5fe2a55ce5f7b89e6`
