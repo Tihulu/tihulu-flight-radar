@@ -197,7 +197,7 @@ jobs:
             dpkg -l tihulu-flight-radar | grep -q "^ii"
             test -x /usr/bin/tihulu-flight-radar
             set +e
-            timeout 120 env QT_QPA_PLATFORM=offscreen HOME=/root tihulu-flight-radar > /tmp/smoke.log 2>&1
+            timeout 120 env QT_QPA_PLATFORM=offscreen QTWEBENGINE_DISABLE_SANDBOX=1 HOME=/root tihulu-flight-radar > /tmp/smoke.log 2>&1
             code=$?
             set -e
             echo "launch exit code: $code (124 = still running at timeout, acceptable)"
