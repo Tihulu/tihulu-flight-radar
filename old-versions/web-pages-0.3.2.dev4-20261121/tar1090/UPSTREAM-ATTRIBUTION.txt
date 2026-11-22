@@ -1,0 +1,4 @@
+tar1090 copyright original authors; source: https://github.com/wiedehopf/tar1090
+Pinned source commit: 5d59b1ba2c5e30eb23f1161940367b7767f10ad5
+GPL-2.0-or-later; license: ./UPSTREAM-GPL-LICENSE.txt
+TIHULU adapter source: ../tar1090-adapter.js
