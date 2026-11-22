@@ -95,7 +95,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Build ARM64 artifacts in aarch64 container (QEMU, no cross-compile)
+      - name: Build ARM64 PyInstaller dir, .deb and AppDir in aarch64 container (QEMU, no cross-compile)
         uses: uraimo/run-on-arch-action@v3
         with:
           arch: aarch64
@@ -118,15 +118,24 @@ jobs:
             install -m 0644 packaging/linux/tihulu-flight-radar.svg AppDir/usr/share/icons/hicolor/scalable/apps/tihulu-flight-radar.svg
             printf '#!/bin/sh\nexec "$(dirname "$0")/usr/bin/TihuluFlightRadar" "$@"\n' > AppDir/AppRun
             chmod +x AppDir/AppRun
-            curl -sSLo appimagetool "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-aarch64.AppImage"
-            chmod +x appimagetool
-            export APPIMAGE_EXTRACT_AND_RUN=1
-            ARCH=aarch64 ./appimagetool --no-appstream AppDir Tihulu_Flight_Radar-aarch64.AppImage
-            mkdir -p dist-publish
-            for f in Tihulu_Flight_Radar-aarch64.AppImage tihulu-flight-radar_0.3.2.dev4_arm64.deb; do
-              for d in . dist ; do [ -f "$d/$f" ] && cp "$d/$f" dist-publish/ && break; done
-            done
-            (cd dist-publish && sha256sum * > SHA256SUMS && ls -la)
+      - name: Assemble aarch64 AppImage on the host (no emulation needed)
+        shell: bash
+        run: |
+          set -e
+          curl -sSLf -o runtime-aarch64 "https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-aarch64"
+          file runtime-aarch64
+          mksquashfs AppDir payload.squashfs -root-owned -noappend -quiet
+          cat runtime-aarch64 payload.squashfs > Tihulu_Flight_Radar-aarch64.AppImage
+          chmod +x Tihulu_Flight_Radar-aarch64.AppImage
+          ls -la Tihulu_Flight_Radar-aarch64.AppImage
+      - name: Collect artifacts and checksums
+        shell: bash
+        run: |
+          mkdir -p dist-publish
+          for f in Tihulu_Flight_Radar-aarch64.AppImage tihulu-flight-radar_0.3.2.dev4_arm64.deb; do
+            for d in . dist ; do [ -f "$d/$f" ] && cp "$d/$f" dist-publish/ && break; done
+          done
+          (cd dist-publish && sha256sum * > SHA256SUMS && ls -la)
       - uses: actions/upload-artifact@v4
         with:
           name: tihulu-flight-radar-linux-arm64
