@@ -13,17 +13,17 @@ bilgilerini tutar. En güncel sürümler ana README’de de listelenir.
 | macOS masaüstü 0.3.2.dev4 | [desktop-macos/](desktop-macos/) | ✅ Taslak release (doğrulanmış) | İndir + çalıştır |
 | Raspberry Pi 5 (ARM64) 0.3.2.dev4 | [desktop-rpi5-arm/](desktop-rpi5-arm/) | ✅ Taslak release (CI QEMU) | Tek satır pipx kurulumu (ARM yerel) |
 
-## İndirme (taslak release `__TAG__`)
+## İndirme (taslak release `desktop-0.3.2.dev4-20261122-0734`)
 
-Release sayfası: https://github.com/Tihulu/tihulu-flight-radar/releases/tag/__TAG__
+Release sayfası: https://github.com/Tihulu/tihulu-flight-radar/releases/tag/desktop-0.3.2.dev4-20261122-0734
 
 | Dosya | Platform | İndir |
 |---|---|---|
-| `tihulu-flight-radar_0.3.2.dev4_amd64.deb` | Ubuntu/Pop!_OS x64 | [.deb](https://github.com/Tihulu/tihulu-flight-radar/releases/download/__TAG__/tihulu-flight-radar_0.3.2.dev4_amd64.deb) |
-| `Tihulu_Flight_Radar-x86_64.AppImage` | Ubuntu/Pop!_OS x64 | [AppImage](https://github.com/Tihulu/tihulu-flight-radar/releases/download/__TAG__/Tihulu_Flight_Radar-x86_64.AppImage) |
-| `TihuluFlightRadar-win-x64.zip` | Windows x64 | [zip](https://github.com/Tihulu/tihulu-flight-radar/releases/download/__TAG__/TihuluFlightRadar-win-x64.zip) |
-| `TihuluFlightRadar-macos-arm64.zip` | macOS Apple Silicon | [zip](https://github.com/Tihulu/tihulu-flight-radar/releases/download/__TAG__/TihuluFlightRadar-macos-arm64.zip) |
-| `SHA256SUMS` | tümü | [SHA256SUMS](https://github.com/Tihulu/tihulu-flight-radar/releases/download/__TAG__/SHA256SUMS) |
+| `tihulu-flight-radar_0.3.2.dev4_amd64.deb` | Ubuntu/Pop!_OS x64 | [.deb](https://github.com/Tihulu/tihulu-flight-radar/releases/download/desktop-0.3.2.dev4-20261122-0734/tihulu-flight-radar_0.3.2.dev4_amd64.deb) |
+| `Tihulu_Flight_Radar-x86_64.AppImage` | Ubuntu/Pop!_OS x64 | [AppImage](https://github.com/Tihulu/tihulu-flight-radar/releases/download/desktop-0.3.2.dev4-20261122-0734/Tihulu_Flight_Radar-x86_64.AppImage) |
+| `TihuluFlightRadar-win-x64.zip` | Windows x64 | [zip](https://github.com/Tihulu/tihulu-flight-radar/releases/download/desktop-0.3.2.dev4-20261122-0734/TihuluFlightRadar-win-x64.zip) |
+| `TihuluFlightRadar-macos-arm64.zip` | macOS Apple Silicon | [zip](https://github.com/Tihulu/tihulu-flight-radar/releases/download/desktop-0.3.2.dev4-20261122-0734/TihuluFlightRadar-macos-arm64.zip) |
+| `SHA256SUMS` | tümü | [SHA256SUMS](https://github.com/Tihulu/tihulu-flight-radar/releases/download/desktop-0.3.2.dev4-20261122-0734/SHA256SUMS) |
 
 ARM64 (Pi 5) dosyaları aynı release'te `..._arm64.deb` ve `...-aarch64.AppImage`
 olarak yer alır (CI QEMU yapısı; fiziksel Pi'de doğrulama gerekir).

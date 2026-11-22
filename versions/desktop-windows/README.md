@@ -1,10 +1,10 @@
 # TIHULU Flight Radar — Windows masaüstü 0.3.2.dev4
 
-**Durum:** ✅ Taslak release `__TAG__` (GitHub Actions: `desktop-versions-build.yml`, windows-latest)
+**Durum:** ✅ Taslak release `desktop-0.3.2.dev4-20261122-0734` (GitHub Actions: `desktop-versions-build.yml`, windows-latest)
 
 ## Kurulum
-1. [`TihuluFlightRadar-win-x64.zip`](https://github.com/Tihulu/tihulu-flight-radar/releases/download/__TAG__/TihuluFlightRadar-win-x64.zip) dosyasını indirin
-   ([release sayfası](https://github.com/Tihulu/tihulu-flight-radar/releases/tag/__TAG__) · hash: `SHA256SUMS`)
+1. [`TihuluFlightRadar-win-x64.zip`](https://github.com/Tihulu/tihulu-flight-radar/releases/download/desktop-0.3.2.dev4-20261122-0734/TihuluFlightRadar-win-x64.zip) dosyasını indirin
+   ([release sayfası](https://github.com/Tihulu/tihulu-flight-radar/releases/tag/desktop-0.3.2.dev4-20261122-0734) · hash: `SHA256SUMS`)
 2. Zip’i bir klasöre açın ( Program Files gerekmez, kullanıcı klasörü önerilir)
 3. `TihuluFlightRadar.exe`’yi çalıştırın
 
