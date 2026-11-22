@@ -203,9 +203,57 @@ jobs:
             fi
             echo "ARM64 smoke test PASSED (structural install + launch, no fatal library errors)"
 
+  linux-x64-smoke:
+    name: linux-x64 smoke test (installs the published .deb + launches the AppImage)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    needs: build
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: tihulu-flight-radar-linux-x64
+          path: x64-artifacts
+      - name: Install the amd64 .deb and launch both packages
+        shell: bash
+        run: |
+          set -e
+          sudo apt-get install -q -y "$PWD/x64-artifacts/tihulu-flight-radar_0.3.2.dev4_amd64.deb" || sudo apt-get install -q -y -f
+          dpkg -l tihulu-flight-radar | grep "^ii"
+          set +e
+          timeout 90 env QT_QPA_PLATFORM=offscreen tihulu-flight-radar > /tmp/deb.log 2>&1
+          code=$?
+          set -e
+          echo "deb launch exit: $code (124 acceptable)"
+          tail -50 /tmp/deb.log
+          if grep -Eiq "ImportError|cannot open shared object|symbol lookup error|error while loading shared libraries" /tmp/deb.log; then
+            echo "::error::fatal library/import error in the x64 .deb launch"
+            exit 1
+          fi
+          if [ "$code" -ne 0 ] && [ "$code" -ne 124 ]; then
+            echo "::error::x64 .deb launch exited with unexpected code $code"
+            exit 1
+          fi
+          chmod +x x64-artifacts/Tihulu_Flight_Radar-x86_64.AppImage
+          set +e
+          APPIMAGE_EXTRACT_AND_RUN=1 timeout 90 env QT_QPA_PLATFORM=offscreen "$PWD/x64-artifacts/Tihulu_Flight_Radar-x86_64.AppImage" > /tmp/appimage.log 2>&1
+          acode=$?
+          set -e
+          echo "AppImage launch exit: $acode (124 acceptable)"
+          tail -50 /tmp/appimage.log
+          if grep -Eiq "ImportError|cannot open shared object|symbol lookup error|error while loading shared libraries" /tmp/appimage.log; then
+            echo "::error::fatal library/import error in the x64 AppImage launch"
+            exit 1
+          fi
+          if [ "$acode" -ne 0 ] && [ "$acode" -ne 124 ]; then
+            echo "::error::x64 AppImage launch exited with unexpected code $acode"
+            exit 1
+          fi
+          sudo apt-get purge -q -y tihulu-flight-radar
+          echo "linux-x64 smoke test PASSED (.deb install + launch, AppImage launch)"
+
   release:
     name: Draft release
-    needs: [build, build-arm64, arm64-smoke-test]
+    needs: [build, build-arm64, arm64-smoke-test, linux-x64-smoke]
     if: inputs.publish_release
     runs-on: ubuntu-latest
     permissions:
