@@ -27,7 +27,7 @@ Section: hamradio
 Priority: optional
 Architecture: ${ARCH}
 Maintainer: Tihulu Project
-Depends: sudo, libc6, libstdc++6, libegl1, libgl1, libdrm2, libgbm1, libx11-6, libx11-xcb1, libxcomposite1, libxdamage1, libxext6, libxfixes3, libxrandr2, libxtst6, libasound2, libbrotli1, libdbus-1-3, libexpat1, libfontconfig1, libfreetype6, libglib2.0-0, libgssapi-krb5-2, libnspr4, libnss3, libudev1, libxcb1, libxcb-cursor0, libxcb-dri3-0, libxcb-icccm4, libxcb-image0, libxcb-keysyms1, libxcb-render-util0, libxcb-shape0, libxcb-util1, libxcb-xfixes0, libxcb-xkb1, libxkbcommon0, libxkbcommon-x11-0, libxkbfile1, libxshmfence1, zlib1g, libzstd1, libsnappy1v5, libopus0
+Depends: sudo, libc6, libstdc++6, libegl1, libgl1, libdrm2, libgbm1, libx11-6, libx11-xcb1, libxcomposite1, libxdamage1, libxext6, libxfixes3, libxrandr2, libxtst6, libasound2, libbrotli1, libdbus-1-3, libexpat1, libfontconfig1, libfreetype6, libglib2.0-0, libgssapi-krb5-2, libnspr4, libnss3, libudev1, libxcb1, libxcb-cursor0, libxcb-dri3-0, libxcb-icccm4, libxcb-image0, libxcb-keysyms1, libxcb-render-util0, libxcb-shape0, libxcb-util1, libxcb-xfixes0, libxcb-xkb1, libxkbcommon0, libxkbcommon-x11-0, libxkbfile1, libxshmfence1, zlib1g, libzstd1, libsnappy1v5, libopus0, liblcms2-2, libminizip1t64, libwebp7, libwebpdemux2, libwebpmux3
 Description: Local-first ADS-B and Mode S aircraft monitor
  English-language receiver dashboard with local map and real JSON export.
  The ADS-B decoder and RTL-SDR drivers are installed separately.
