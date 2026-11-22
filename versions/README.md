@@ -13,17 +13,17 @@ installation/access information. The current versions are also listed in the roo
 | macOS desktop 0.3.2.dev4 | [desktop-macos/](desktop-macos/) | ✅ Draft release (verified) | Download + run |
 | Raspberry Pi 5 (ARM64) 0.3.2.dev4 | [desktop-rpi5-arm/](desktop-rpi5-arm/) | ✅ Draft release (CI QEMU) | One-line pipx install (ARM native) |
 
-## Download (draft release `desktop-0.3.2.dev4-20261122-0734`)
+## Download (draft release `desktop-0.3.2.dev4-20261122-2327`)
 
-Release page: https://github.com/Tihulu/tihulu-flight-radar/releases/tag/desktop-0.3.2.dev4-20261122-0734
+Release page: https://github.com/Tihulu/tihulu-flight-radar/releases/tag/desktop-0.3.2.dev4-20261122-2327
 
 | File | Platform | Download |
 |---|---|---|
-| `tihulu-flight-radar_0.3.2.dev4_amd64.deb` | Ubuntu/Pop!_OS x64 | [.deb](https://github.com/Tihulu/tihulu-flight-radar/releases/download/desktop-0.3.2.dev4-20261122-0734/tihulu-flight-radar_0.3.2.dev4_amd64.deb) |
-| `Tihulu_Flight_Radar-x86_64.AppImage` | Ubuntu/Pop!_OS x64 | [AppImage](https://github.com/Tihulu/tihulu-flight-radar/releases/download/desktop-0.3.2.dev4-20261122-0734/Tihulu_Flight_Radar-x86_64.AppImage) |
-| `TihuluFlightRadar-win-x64.zip` | Windows x64 | [zip](https://github.com/Tihulu/tihulu-flight-radar/releases/download/desktop-0.3.2.dev4-20261122-0734/TihuluFlightRadar-win-x64.zip) |
-| `TihuluFlightRadar-macos-arm64.zip` | macOS Apple Silicon | [zip](https://github.com/Tihulu/tihulu-flight-radar/releases/download/desktop-0.3.2.dev4-20261122-0734/TihuluFlightRadar-macos-arm64.zip) |
-| `SHA256SUMS` | all | [SHA256SUMS](https://github.com/Tihulu/tihulu-flight-radar/releases/download/desktop-0.3.2.dev4-20261122-0734/SHA256SUMS) |
+| `tihulu-flight-radar_0.3.2.dev4_amd64.deb` | Ubuntu/Pop!_OS x64 | [.deb](https://github.com/Tihulu/tihulu-flight-radar/releases/download/desktop-0.3.2.dev4-20261122-2327/tihulu-flight-radar_0.3.2.dev4_amd64.deb) |
+| `Tihulu_Flight_Radar-x86_64.AppImage` | Ubuntu/Pop!_OS x64 | [AppImage](https://github.com/Tihulu/tihulu-flight-radar/releases/download/desktop-0.3.2.dev4-20261122-2327/Tihulu_Flight_Radar-x86_64.AppImage) |
+| `TihuluFlightRadar-win-x64.zip` | Windows x64 | [zip](https://github.com/Tihulu/tihulu-flight-radar/releases/download/desktop-0.3.2.dev4-20261122-2327/TihuluFlightRadar-win-x64.zip) |
+| `TihuluFlightRadar-macos-arm64.zip` | macOS Apple Silicon | [zip](https://github.com/Tihulu/tihulu-flight-radar/releases/download/desktop-0.3.2.dev4-20261122-2327/TihuluFlightRadar-macos-arm64.zip) |
+| `SHA256SUMS` | all | [SHA256SUMS](https://github.com/Tihulu/tihulu-flight-radar/releases/download/desktop-0.3.2.dev4-20261122-2327/SHA256SUMS) |
 
 The ARM64 (Pi 5) files are in the same release as `..._arm64.deb` and
 `...-aarch64.AppImage` (CI QEMU build; verification on physical Pi hardware required).
