@@ -217,6 +217,7 @@ jobs:
         shell: bash
         run: |
           set -e
+          sudo apt-get update -q
           sudo apt-get install -q -y "$PWD/x64-artifacts/tihulu-flight-radar_0.3.2.dev4_amd64.deb" || sudo apt-get install -q -y -f
           dpkg -l tihulu-flight-radar | grep "^ii"
           set +e
