@@ -136,6 +136,25 @@ jobs:
             for d in . dist ; do [ -f "$d/$f" ] && cp "$d/$f" dist-publish/ && break; done
           done
           (cd dist-publish && sha256sum * > SHA256SUMS && ls -la)
+
+      - name: Verify ARM64 artifact structure (host-side, no emulation)
+        shell: bash
+        run: |
+          set -e
+          dpkg-deb -I dist-publish/tihulu-flight-radar_0.3.2.dev4_arm64.deb control | grep -q "Architecture: arm64"
+          dpkg-deb -c dist-publish/tihulu-flight-radar_0.3.2.dev4_arm64.deb | grep -q "./opt/tihulu-flight-radar/"
+          rm -rf /tmp/debx && mkdir -p /tmp/debx
+          dpkg-deb -x dist-publish/tihulu-flight-radar_0.3.2.dev4_arm64.deb /tmp/debx
+          file /tmp/debx/opt/tihulu-flight-radar/TihuluFlightRadar/TihuluFlightRadar | grep -q "ARM aarch64"
+          file dist-publish/Tihulu_Flight_Radar-aarch64.AppImage | grep -q "ARM aarch64"
+          python3 - <<'PY'
+          data = open("dist-publish/Tihulu_Flight_Radar-aarch64.AppImage", "rb").read()
+          assert data[:4] == b"\x7fELF", "AppImage does not start with an ELF runtime"
+          off = data.find(b"hsqs")
+          assert off > 0, "no squashfs payload found in AppImage"
+          print(f"AppImage OK: runtime {off} B + payload {len(data) - off} B")
+          PY
+          echo "ARM64 structure verification PASSED"
       - uses: actions/upload-artifact@v4
         with:
           name: tihulu-flight-radar-linux-arm64
@@ -143,9 +162,48 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  arm64-smoke-test:
+    name: arm64 smoke test (QEMU, installs the published .deb)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    needs: build-arm64
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: tihulu-flight-radar-linux-arm64
+          path: arm64-artifacts
+      - name: Install and launch the ARM64 .deb inside an aarch64 container (QEMU)
+        uses: uraimo/run-on-arch-action@v3
+        with:
+          arch: aarch64
+          distro: ubuntu24.04
+          install: |
+            apt-get update -q -y
+            apt-get install -q -y --no-install-recommends ca-certificates
+          run: |
+            set -e
+            apt-get install -q -y "$PWD/arm64-artifacts/tihulu-flight-radar_0.3.2.dev4_arm64.deb" || apt-get install -q -y -f
+            dpkg -l tihulu-flight-radar | grep -q "^ii"
+            test -x /usr/bin/tihulu-flight-radar
+            set +e
+            timeout 120 env QT_QPA_PLATFORM=offscreen HOME=/root tihulu-flight-radar > /tmp/smoke.log 2>&1
+            code=$?
+            set -e
+            echo "launch exit code: $code (124 = still running at timeout, acceptable)"
+            tail -50 /tmp/smoke.log
+            if grep -Eiq "ImportError|cannot open shared object|symbol lookup error|error while loading shared libraries" /tmp/smoke.log; then
+              echo "::error::fatal library/import error during the ARM64 launch"
+              exit 1
+            fi
+            if [ "$code" -ne 0 ] && [ "$code" -ne 124 ]; then
+              echo "::error::ARM64 app exited with unexpected code $code"
+              exit 1
+            fi
+            echo "ARM64 smoke test PASSED (structural install + launch, no fatal library errors)"
+
   release:
     name: Draft release
-    needs: [build, build-arm64]
+    needs: [build, build-arm64, arm64-smoke-test]
     if: inputs.publish_release
     runs-on: ubuntu-latest
     permissions:
