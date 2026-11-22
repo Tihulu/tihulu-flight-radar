@@ -87,9 +87,56 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  build-arm64:
+    name: linux-arm64 (Pi 5, QEMU)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build ARM64 artifacts in aarch64 container (QEMU, no cross-compile)
+        uses: uraimo/run-on-arch-action@v3
+        with:
+          arch: aarch64
+          distro: ubuntu24.04
+          install: |
+            apt-get update -q -y
+            apt-get install -q -y --no-install-recommends python3 python3-pip python3-venv curl file
+          run: |
+            set -e
+            python3 -m venv .venv-arm
+            . .venv-arm/bin/activate
+            python -m pip install --disable-pip-version-check --upgrade pip
+            python -m pip install --disable-pip-version-check "PySide6==6.12.0" "PySide6-Addons==6.12.0" "PySide6-Essentials==6.12.0" "PySide6-WebEngine==6.12.0.140" pyinstaller
+            python -m PyInstaller --noconfirm --clean --windowed --onedir --name TihuluFlightRadar --collect-data tihulu_flight_radar --paths . tihulu_flight_radar/launcher.py
+            DEB_ARCH=arm64 sh packaging/linux/build-deb.sh
+            mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/scalable/apps
+            cp -a dist/TihuluFlightRadar/. AppDir/usr/bin/
+            install -m 0644 packaging/linux/tihulu-flight-radar.desktop AppDir/tihulu-flight-radar.desktop
+            install -m 0644 packaging/linux/tihulu-flight-radar.svg AppDir/tihulu-flight-radar.svg
+            install -m 0644 packaging/linux/tihulu-flight-radar.svg AppDir/usr/share/icons/hicolor/scalable/apps/tihulu-flight-radar.svg
+            printf '#!/bin/sh\nexec "$(dirname "$0")/usr/bin/TihuluFlightRadar" "$@"\n' > AppDir/AppRun
+            chmod +x AppDir/AppRun
+            curl -sSLo appimagetool "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-aarch64.AppImage"
+            chmod +x appimagetool
+            export APPIMAGE_EXTRACT_AND_RUN=1
+            ARCH=aarch64 ./appimagetool --no-appstream AppDir Tihulu_Flight_Radar-aarch64.AppImage
+            mkdir -p dist-publish
+            for f in Tihulu_Flight_Radar-aarch64.AppImage tihulu-flight-radar_0.3.2.dev4_arm64.deb; do
+              for d in . dist ; do [ -f "$d/$f" ] && cp "$d/$f" dist-publish/ && break; done
+            done
+            (cd dist-publish && sha256sum * > SHA256SUMS && ls -la)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tihulu-flight-radar-linux-arm64
+          path: dist-publish/
+          if-no-files-found: error
+          retention-days: 30
+
   release:
     name: Draft release
-    needs: build
+    needs: [build, build-arm64]
     if: inputs.publish_release
     runs-on: ubuntu-latest
     permissions:
