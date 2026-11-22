@@ -1,9 +1,10 @@
 # TIHULU Flight Radar — macOS masaüstü 0.3.2.dev4
 
-**Durum:** 🔨 Build bekliyor (GitHub Actions: `desktop-appimage.yml`, macos-latest)
+**Durum:** ✅ Taslak release `__TAG__` (GitHub Actions: `desktop-versions-build.yml`, macos-latest)
 
-## Kurulum (build tamamlandığında)
-1. `TihuluFlightRadar-macos.zip` dosyasını indirin (Universal veya arm64)
+## Kurulum
+1. [`TihuluFlightRadar-macos-arm64.zip`](https://github.com/Tihulu/tihulu-flight-radar/releases/download/__TAG__/TihuluFlightRadar-macos-arm64.zip) dosyasını indirin
+   (Apple Silicon arm64 yapısı · [release sayfası](https://github.com/Tihulu/tihulu-flight-radar/releases/tag/__TAG__) · hash: `SHA256SUMS`)
 2. `TihuluFlightRadar.app` klasörünü `/Applications` (veya kullanıcı klasörü) içine sürükleyin
 3. İlk açılışta Gatekeeper uyarısı çıkabilir: sağ tık → Aç (imzasız yapı için beklenen davranış)
 
