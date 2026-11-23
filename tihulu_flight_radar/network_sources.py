@@ -121,6 +121,52 @@ def normalize_provider(provider: str, payload: object, lat: float, lon: float,
     return rows, stamp
 
 
+OPENSKY_FLIGHTS_MAX_BYTES = 262144
+OPENSKY_FLIGHT_WINDOW = 86400  # live partition, ~4 OpenSky API credits per request
+
+
+def flight_times_by_icao24(icao24: str, window: int = OPENSKY_FLIGHT_WINDOW,
+                           now: float | None = None) -> list[dict]:
+    """Flights-by-aircraft window for one transponder (read-through, never stored).
+
+    Returns the OpenSky flight records (firstSeen/lastSeen seconds, est airports,
+    callsign) recorded in the last `window` seconds. Presentation and matching stay
+    in the caller; this function only fetches from the user's own network.
+    """
+    hexid = str(icao24 or "").strip().lower()
+    if len(hexid) != 6 or any(c not in "0123456789abcdef" for c in hexid):
+        raise DataError("ICAO24 must be six hexadecimal characters.")
+    window = int(window)
+    if not 3600 <= window <= 7 * 86400:
+        raise DataError("Window must be 1 hour to 7 days.")
+    stamp = time.time() if now is None else float(now)
+    begin, end = int(stamp - window), int(stamp)
+    url = ("https://opensky-network.org/api/flights/aircraft"
+           f"?icao24={hexid}&begin={begin}&end={end}")
+    request = Request(url, headers={
+        "Accept": "application/json",
+        "User-Agent": "TihuluFlightRadar/0.3.2 (personal aircraft map)"})
+    opener = build_opener(ProxyHandler({}))
+    try:
+        with opener.open(request, timeout=8) as response:
+            raw = response.read(OPENSKY_FLIGHTS_MAX_BYTES + 1)
+    except HTTPError as exc:
+        if exc.code == 404:
+            return []  # no flight recorded in the window: not an error
+        raise DataError(f"OpenSky HTTP {exc.code}") from exc
+    except (URLError, OSError) as exc:
+        raise DataError("OpenSky unreachable: "+str(exc)) from exc
+    if len(raw) > OPENSKY_FLIGHTS_MAX_BYTES:
+        raise DataError("OpenSky response too large.")
+    try:
+        rows = json.loads(raw)
+    except ValueError as exc:
+        raise DataError("OpenSky payload is not JSON.") from exc
+    if not isinstance(rows, list):
+        raise DataError("OpenSky payload has an unexpected shape.")
+    return [row for row in rows[:20] if isinstance(row, dict)]
+
+
 class MultiNetworkProvider:
     """Selected independent feeds, bounded per-provider caching and backoff."""
 

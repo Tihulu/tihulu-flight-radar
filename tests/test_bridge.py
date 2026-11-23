@@ -283,3 +283,120 @@ def test_bridge_active_decoder_waits_for_first_json_without_inventing_aircraft()
     assert local["state"] == "decoder_waiting_for_json"
     assert "JSON output directory" in local["error"]
     assert result["aircraft"] == []
+
+
+# --- OpenSky flights-by-aircraft bridge endpoint (observed times) ---
+
+from tihulu_flight_radar import bridge as bridge_module
+from tihulu_flight_radar import network_sources
+
+
+class _FakeResponse:
+    def __init__(self, payload: bytes):
+        self._payload = payload
+
+    def read(self, size: int = -1) -> bytes:
+        return self._payload[:size]
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+class _FakeOpener:
+    def __init__(self, payload: bytes = b"[]", error: Exception | None = None):
+        self._payload, self._error = payload, error
+        self.calls: list[str] = []
+
+    def open(self, request, timeout: int = 0):
+        self.calls.append(request.full_url)
+        if self._error is not None:
+            raise self._error
+        return _FakeResponse(self._payload)
+
+
+def test_flight_times_window_parses_records_with_seconds_epoch():
+    day = 1763856000
+    opener = _FakeOpener(('[{"icao24":"484506","firstSeen":%d,'
+                          '"lastSeen":%d,"estDepartureAirport":"EDDK",'
+                          '"estArrivalAirport":"LPPT","callsign":"DLH123"}]'
+                          % (day + 3600, day + 7200)).encode())
+    monkey = None
+    import unittest.mock as mock
+    with mock.patch.object(network_sources, "build_opener", return_value=opener):
+        rows = network_sources.flight_times_by_icao24("484506")
+    assert len(rows) == 1
+    assert rows[0]["firstSeen"] == day + 3600
+    assert "begin=" in opener.calls[0] and "icao24=484506" in opener.calls[0]
+
+
+def test_flight_times_404_means_no_flight_not_an_error():
+    import unittest.mock as mock
+    opener = _FakeOpener(error=network_sources.HTTPError(
+        "https://opensky-network.org/", 404, "Not Found", None, None))
+    with mock.patch.object(network_sources, "build_opener", return_value=opener):
+        assert network_sources.flight_times_by_icao24("abcdef") == []
+
+
+def test_flight_times_rejects_bad_icao_and_window_bounds():
+    import pytest as _pytest
+    for bad in ("", "ABC", "48450", "gggggg", "4845067"):
+        with _pytest.raises(DataError):
+            network_sources.flight_times_by_icao24(bad)
+    with _pytest.raises(DataError):
+        network_sources.flight_times_by_icao24("484506", window=60)
+
+
+def test_flight_times_caps_payload_and_rejects_wrong_shape():
+    import unittest.mock as mock
+    opener = _FakeOpener(b'{"unexpected":"object"}')
+    with mock.patch.object(network_sources, "build_opener", return_value=opener):
+        with pytest.raises(DataError):
+            network_sources.flight_times_by_icao24("484506")
+
+
+def test_flight_times_endpoint_token_hex_404_and_upstream_error(monkeypatch):
+    bridge = Bridge(token="secret-for-test")
+    server = ThreadingHTTPServer(("127.0.0.1", 0), BaseHTTPRequestHandler)
+    server.RequestHandlerClass = make_handler(bridge, server.server_port)
+    worker = threading.Thread(target=server.serve_forever, daemon=True)
+    worker.start()
+    base = f"http://127.0.0.1:{server.server_port}"
+    seen: dict = {}
+    def fake_flight_times(icao24, window=network_sources.OPENSKY_FLIGHT_WINDOW,
+                          now=None):
+        seen["icao24"], seen["window"] = icao24, window
+        return [{"icao24": icao24, "firstSeen": 1, "lastSeen": 2}]
+    try:
+        # no token -> 401 like every other /api endpoint
+        with pytest.raises(urllib.error.HTTPError) as e:
+            urllib.request.urlopen(base+"/api/flight-times?hex=484506", timeout=3)
+        assert e.value.code == 401
+        head = {"Authorization": "Bearer secret-for-test"}
+        # malformed hex -> 400 before any upstream call
+        with pytest.raises(urllib.error.HTTPError) as e:
+            urllib.request.urlopen(urllib.request.Request(
+                base+"/api/flight-times?hex=zzzzzz", headers=head), timeout=3)
+        assert e.value.code == 400
+        monkeypatch.setattr(bridge_module, "flight_times_by_icao24", fake_flight_times)
+        with urllib.request.urlopen(urllib.request.Request(
+                base+"/api/flight-times?hex=484506&begin=999", headers=head),
+                timeout=3) as r:
+            body = json.loads(r.read())
+        assert body["flights"][0]["icao24"] == "484506"
+        assert seen["icao24"] == "484506"          # client window ignored
+        assert seen["window"] == 86400             # server-chosen live window
+        # upstream failure -> 502, never a fabricated empty success
+        def boom(icao24, window=86400, now=None):
+            raise DataError("OpenSky unreachable: timed out")
+        monkeypatch.setattr(bridge_module, "flight_times_by_icao24", boom)
+        with pytest.raises(urllib.error.HTTPError) as e:
+            urllib.request.urlopen(urllib.request.Request(
+                base+"/api/flight-times?hex=484506", headers=head), timeout=3)
+        assert e.value.code == 502
+    finally:
+        server.shutdown()
+        server.server_close()
+        worker.join(timeout=3)

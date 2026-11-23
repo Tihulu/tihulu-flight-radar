@@ -136,8 +136,9 @@
  }
  async function loadOpenSkyDetail(a,{force=false}={}){
   // Free, keyless enrichment: flights-by-aircraft window for the selected ICAO24.
-  // OpenSky sends no cross-origin header for foreign origins, so the request goes
-  // through the same third-party relay the Internet providers already use.
+  // Bridge mode goes through the local bridge (server-side, user network); the
+  // hosted/Pages mode uses the public relay as a best-effort fallback, because
+  // OpenSky allows no cross-origin access and blocks relay datacenter IPs.
   const hex=String(a?.hex||"").toLowerCase();
   if(!/^[0-9a-f]{6}$/.test(hex)||navigator.onLine===false)return null;
   const existing=openskyDetails.get(hex);
@@ -149,19 +150,31 @@
   const work=(async()=>{
    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),6000);
    try{
-    const now=Math.floor(Date.now()/1000),begin=now-86400; // live partition, ~4 API credits
-    const upstream="https://opensky-network.org/api/flights/aircraft?icao24="+hex+
-     "&begin="+begin+"&end="+now;
-    const response=await fetch(RELAY+upstream,{mode:"cors",credentials:"omit",
-     cache:"no-store",signal:controller.signal});
-    if(response.status===404){
-     openskyDetails.set(hex,{journey:null,at:Date.now()});
-     return null; // no flight recorded in the window: not an error
+    const now=Math.floor(Date.now()/1000);
+    let rows=null;
+    if(state.connectionKind==="bridge"&&state.base&&state.token){
+     // Bridge mode: the local bridge fetches server-side from the user's own
+     // network - no relay (OpenSky blocks relay datacenter IPs) and no browser
+     // CORS. The window is chosen by the bridge, not by this client.
+     const payload=await api("/api/flight-times?hex="+hex);
+     rows=Array.isArray(payload?.flights)?payload.flights:null;
+    }else{
+     // Hosted/Pages mode: OpenSky allows no cross-origin access and blocks relay
+     // datacenter IPs, so the public relay stays a best-effort fallback.
+     const upstream="https://opensky-network.org/api/flights/aircraft?icao24="+hex+
+      "&begin="+(now-86400)+"&end="+now;
+     const response=await fetch(RELAY+upstream,{mode:"cors",credentials:"omit",
+      cache:"no-store",signal:controller.signal});
+     if(response.status===404){
+      openskyDetails.set(hex,{journey:null,at:Date.now()});
+      return null; // no flight recorded in the window: not an error
+     }
+     if(!response.ok)throw Error("OpenSky HTTP "+response.status);
+     const raw=await response.text();
+     if(raw.length>65536)throw Error("OpenSky detail too large");
+     rows=JSON.parse(raw);
     }
-    if(!response.ok)throw Error("OpenSky HTTP "+response.status);
-    const raw=await response.text();
-    if(raw.length>65536)throw Error("OpenSky detail too large");
-    const rows=JSON.parse(raw);
+    if(rows===null)return null;
     const journey=F.fromOpenSky(rows,hex,F.callsign(a));
     openskyDetails.set(hex,{journey,at:Date.now()});
     if(openskyDetails.size>128)openskyDetails.delete(openskyDetails.keys().next().value);
