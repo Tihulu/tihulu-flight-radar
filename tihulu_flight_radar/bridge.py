@@ -19,7 +19,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlsplit, unquote
 from urllib.request import ProxyHandler, Request, build_opener
 
-from .network_sources import MultiNetworkProvider, parse_provider_selection
+from .network_sources import (MultiNetworkProvider, parse_provider_selection,
+                             flight_times_by_icao24)
 from .control import ReceiverController
 from .core import DataError, position_is_fresh, recently_seen
 
@@ -520,6 +521,22 @@ def make_handler(bridge: Bridge, port: int):
                 return
             if path.path == "/api/search-location":
                 self._send(HTTPStatus.OK, {"place": bridge.get_saved_search_place()})
+                return
+            if path.path == "/api/flight-times":
+                # Read-through OpenSky lookup from the user's own network: no relay,
+                # no datacenter IP block, no browser CORS. Window is chosen here, so
+                # the client never controls the time range. Nothing is persisted.
+                hexid = parse_qs(path.query).get("hex", [""])[0].strip().lower()
+                if len(hexid) != 6 or any(c not in "0123456789abcdef" for c in hexid):
+                    self._send(HTTPStatus.BAD_REQUEST,
+                               {"error": "ICAO24 must be six hexadecimal characters."})
+                    return
+                try:
+                    rows = flight_times_by_icao24(hexid)
+                except DataError as exc:
+                    self._send(HTTPStatus.BAD_GATEWAY, {"error": str(exc)})
+                    return
+                self._send(HTTPStatus.OK, {"flights": rows})
                 return
             if path.path != "/api/aircraft":
                 self._send(HTTPStatus.NOT_FOUND, {"error": "Not found."})

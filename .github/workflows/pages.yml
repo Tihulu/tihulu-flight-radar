@@ -68,6 +68,8 @@ jobs:
           node --check tihulu_flight_radar/web/receiver_coverage.js
           node --check tihulu_flight_radar/web/map_motion.js
           node --check tihulu_flight_radar/web/rf_timing_lab.js
+          node --check tihulu_flight_radar/web/flight_journey.js
+          node --check tihulu_flight_radar/web/flight_journey_ui.js
           node --check tihulu_flight_radar/web/sw.js
           node --check tihulu_flight_radar/web/browser_usb.mjs
           node --check tihulu_flight_radar/web/adsb_worker.mjs
