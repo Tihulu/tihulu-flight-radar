@@ -6,3 +6,8 @@ build/
 dist/
 *.egg-info/
 .DS_Store
+
+# Release signing: the root private key must never enter the repository.
+root-private.pem
+*.private.pem
+*.sig.bak
