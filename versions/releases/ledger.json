@@ -1,5 +1,17 @@
 {
   "format": 1,
-  "entries": [],
-  "head_seq": 0
+  "entries": [
+    {
+      "seq": 1,
+      "status": "approved",
+      "version": "0.3.2.dev4",
+      "tag": "desktop-0.3.2.dev4-20261122-2327",
+      "source_sha": "229a1dfdc4b949bcfe2c64db3b904829437e2644",
+      "prev_seq": 0,
+      "date": "2026-11-23T13:03:01Z",
+      "note": "four-gate CI verified (x64 + ARM64 smoke tests)",
+      "sha256sums": "sha256:3128293b6e0f837df1339075199f172d2d926481431f84e1bc126b73db07ad9f"
+    }
+  ],
+  "head_seq": 1
 }
