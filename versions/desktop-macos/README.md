@@ -1,6 +1,6 @@
 # TIHULU Flight Radar — macOS desktop 0.3.2.dev4
 
-**Status:** ✅ Draft release `desktop-0.3.2.dev4-20261122-2327` (GitHub Actions: `desktop-versions-build.yml`, macos-latest)
+**Status:** ✅ Published release (signed) `desktop-0.3.2.dev4-20261122-2327` (GitHub Actions: `desktop-versions-build.yml`, macos-latest)
 
 ## Install
 1. Download [`TihuluFlightRadar-macos-arm64.zip`](https://github.com/Tihulu/tihulu-flight-radar/releases/download/desktop-0.3.2.dev4-20261122-2327/TihuluFlightRadar-macos-arm64.zip)

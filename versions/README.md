@@ -8,10 +8,10 @@ installation/access information. The current versions are also listed in the roo
 | Version | Directory | Status | Install / Access |
 |---|---|---|---|
 | Web 0.3.2.dev4 (live) | [web-0.3.2.dev4/](web-0.3.2.dev4/) | ✅ Live | Open the site in a browser, or serve it locally in one line |
-| Ubuntu / Pop!_OS desktop 0.3.2.dev4 | [desktop-ubuntu-popos/](desktop-ubuntu-popos/) | ✅ Draft release (verified) | One-line pipx install / .deb / AppImage |
-| Windows desktop 0.3.2.dev4 | [desktop-windows/](desktop-windows/) | ✅ Draft release (verified) | Download + run |
-| macOS desktop 0.3.2.dev4 | [desktop-macos/](desktop-macos/) | ✅ Draft release (verified) | Download + run |
-| Raspberry Pi 5 (ARM64) 0.3.2.dev4 | [desktop-rpi5-arm/](desktop-rpi5-arm/) | ✅ Draft release (CI QEMU) | One-line pipx install (ARM native) |
+| Ubuntu / Pop!_OS desktop 0.3.2.dev4 | [desktop-ubuntu-popos/](desktop-ubuntu-popos/) | ✅ Published release (verified, signed) | One-line pipx install / .deb / AppImage |
+| Windows desktop 0.3.2.dev4 | [desktop-windows/](desktop-windows/) | ✅ Published release (verified, signed) | Download + run |
+| macOS desktop 0.3.2.dev4 | [desktop-macos/](desktop-macos/) | ✅ Published release (verified, signed) | Download + run |
+| Raspberry Pi 5 (ARM64) 0.3.2.dev4 | [desktop-rpi5-arm/](desktop-rpi5-arm/) | ✅ Published release (CI QEMU, signed) | One-line pipx install (ARM native) |
 
 ## Download (draft release `desktop-0.3.2.dev4-20261122-2327`)
 
