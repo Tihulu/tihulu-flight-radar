@@ -59,6 +59,39 @@ const TihuluFlightJourney=(()=>{
    source:"adsbdb callsign route · online (not live schedule)",
    matchedCallsign:expected,airline:trim(raw.airline?.name,110),at:Date.now()};
  }
+ function fromOpenSky(rows,hex,callsgn){
+  // OpenSky flights-by-aircraft: icao24-exact observation windows, NOT an official
+  // schedule. firstSeen = estimated time of departure, lastSeen = estimated time of
+  // arrival (seconds since epoch); est airports can be null.
+  if(!Array.isArray(rows))return null;
+  const want=String(hex||"").toLowerCase();
+  if(!HEX.test(want))return null;
+  const call=trim(callsgn,10)?.replace(/\s/g,"").toUpperCase()||null;
+  let best=null;
+  for(const row of rows){
+   if(!row||typeof row!=="object")continue;
+   if(String(row.icao24||"").toLowerCase()!==want)continue;
+   if(call){
+    const got=trim(row.callsign,10)?.replace(/\s/g,"").toUpperCase()||null;
+    if(got&&got!==call)continue; // another flight on the same transponder
+   }
+   const depart=epoch(row.firstSeen),arrive=epoch(row.lastSeen);
+   const score=Number.isFinite(arrive)?arrive:0;
+   if(!best||score>(best.score||0)){
+    best={score,origin:airport(row.estDepartureAirport),
+     destination:airport(row.estArrivalAirport),depart,arrive};
+   }
+  }
+  if(!best)return null;
+  if(!Number.isFinite(best.depart)&&!Number.isFinite(best.arrive)&&
+   !best.origin&&!best.destination)return null;
+  const times={};
+  if(Number.isFinite(best.depart))times.departEstimated=best.depart;
+  if(Number.isFinite(best.arrive))times.arriveEstimated=best.arrive;
+  return {origin:best.origin,destination:best.destination,midpoint:null,
+   times,source:"OpenSky flights API · estimated departure/arrival (observed by icao24)",
+   matchedHex:want,matchedCallsign:call,at:Date.now()};
+ }
  function utcEpoch(value){
   // Only parse strings expressly documented by the source as UTC.
   if(typeof value!=="string")return null;
@@ -186,7 +219,7 @@ const TihuluFlightJourney=(()=>{
   while(tracks.size>512)tracks.delete(tracks.keys().next().value);
  }
  function radioInfo(a){return tracks.get(String(a?.hex||"").toLowerCase())||null;}
- return {callsign,airport,epoch,fromAdsbdb,fromProvider,combine,formatAirport,
+ return {callsign,airport,epoch,fromAdsbdb,fromOpenSky,fromProvider,combine,formatAirport,
   shortRoute,formatTime,timeSummary,observeRadio,radioInfo,radioState};
 })();
 if(typeof module!=="undefined"&&module.exports)module.exports=TihuluFlightJourney;
