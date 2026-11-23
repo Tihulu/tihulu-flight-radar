@@ -1,6 +1,6 @@
 # TIHULU Flight Radar — Raspberry Pi 5 (ARM64) 0.3.2.dev4
 
-**Status:** ✅ Draft release `desktop-0.3.2.dev4-20261122-2327` (CI QEMU build) / ARM install path
+**Status:** ✅ Published release (signed) `desktop-0.3.2.dev4-20261122-2327` (CI QEMU build) / ARM install path
 
 ## Option A — One-line pipx install (recommended, ARM native)
 On Raspberry Pi OS 64-bit (Bookworm+):

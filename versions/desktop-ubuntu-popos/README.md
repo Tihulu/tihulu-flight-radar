@@ -1,6 +1,6 @@
 # TIHULU Flight Radar — Ubuntu / Pop!_OS desktop 0.3.2.dev4
 
-**Status:** ✅ Draft release `desktop-0.3.2.dev4-20261122-2327` (GitHub Actions: `desktop-versions-build.yml`) · **Source:** main (after the parity merge)
+**Status:** ✅ Published release (signed) `desktop-0.3.2.dev4-20261122-2327` (GitHub Actions: `desktop-versions-build.yml`) · **Source:** main (after the parity merge)
 
 ## One-line install (recommended — pipx, does not touch your existing install)
 ```
