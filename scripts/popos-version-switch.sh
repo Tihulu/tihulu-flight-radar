@@ -25,6 +25,24 @@ case "${1:-}" in
   *) usage >&2; exit 2 ;;
 esac
 
+# --- Signed-ledger gate (production gates 2 and 3) -------------------------
+# Enforced when the checkout carries the root public key; before the ceremony
+# the gate warns and stays out of the way (bootstrap phase).
+state_file="${TIHULU_LEDGER_STATE:-$HOME/.local/state/tihulu-ledger.json}"
+if [[ -f tools/release_signing.py && -f versions/releases/root-public.pem ]]; then
+  if ! verdict=$(python3 tools/release_signing.py ledger check \
+        --pub versions/releases/root-public.pem \
+        --source-sha "$ref" --state-file "$state_file" \
+        "${TIHULU_ALLOW_ROLLBACK:+--allow-rollback}" 2>&1); then
+    echo "$verdict" >&2
+    echo "Refused: this version is not approved by the signed release ledger." >&2
+    exit 3
+  fi
+  echo "$verdict"
+else
+  echo "Note: signed release ledger not present in this checkout - switching unverified." >&2
+fi
+
 if [[ "$(uname -s)" != "Linux" ]] || ! command -v apt-get >/dev/null 2>&1; then
   echo "The installer supports Debian, Ubuntu and Pop!_OS only." >&2
   exit 1
@@ -68,6 +86,18 @@ if [[ "$actual" != "$expected" ]]; then
   echo "Unexpected installed version $actual (wanted $expected); check pipx list." >&2
   exit 1
 fi
+# Record the approved seq locally (0600) so a later switch cannot silently
+# roll back below it; the signed ledger stays the authority, this is memory.
+if [[ -f tools/release_signing.py && -f versions/releases/root-public.pem ]]; then
+  seq_no=$(printf '%s\n' "$verdict" | grep -oE 'LEDGER seq=[0-9]+' | head -1 | cut -d= -f2)
+  if [[ -n "$seq_no" ]]; then
+    mkdir -p "$(dirname "$state_file")"
+    ( umask 077
+      printf '{"seq": %s, "source_sha": "%s", "version": "%s"}\n' \
+        "$seq_no" "$ref" "$actual" > "$state_file" )
+  fi
+fi
+
 printf '\n%s\n' \
   "Installed TIHULU Flight Radar $actual from exact GitHub commit $ref." \
   "Use: bash popos-version-switch.sh legacy   (to restore original 0.3.1)" \
